@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/zsoftly/zcp-cli/internal/config"
@@ -26,7 +27,11 @@ func TestLoadEmpty(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", dir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
 
 	cfg := &config.Config{
 		ActiveProfile: "default",
@@ -44,13 +49,13 @@ func TestSaveAndLoad(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	// Verify file was created with restricted permissions
+	// Verify file was created with restricted permissions (Unix only; Windows has no chmod)
 	path, _ := config.ConfigFilePath()
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("config file not created: %v", err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("config file permissions = %o, want 0600", info.Mode().Perm())
 	}
 
@@ -172,7 +177,12 @@ func TestActiveAPIURL(t *testing.T) {
 
 func TestConfigFilePath(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	// ConfigFilePath uses APPDATA on Windows, XDG_CONFIG_HOME on Unix
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", dir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
 
 	path, err := config.ConfigFilePath()
 	if err != nil {
