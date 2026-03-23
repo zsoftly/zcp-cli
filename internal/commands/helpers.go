@@ -24,6 +24,7 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.GlobalFlags, *httpclient
 	timeoutSec, _ := cmd.Root().PersistentFlags().GetInt("timeout")
 	debugFlag, _ := cmd.Root().PersistentFlags().GetBool("debug")
 	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
+	pager, _ := cmd.Root().PersistentFlags().GetBool("pager")
 
 	flags := &config.GlobalFlags{
 		Profile: profileName,
@@ -56,6 +57,7 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.GlobalFlags, *httpclient
 
 	client := httpclient.New(opts)
 	printer := output.NewPrinter(os.Stdout, output.ParseFormat(outputFmt), noColor)
+	printer.SetPager(pager)
 
 	return flags, client, printer, nil
 }

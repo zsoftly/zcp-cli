@@ -2,12 +2,16 @@
 package output
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/olekukonko/tablewriter"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,9 +38,16 @@ func ParseFormat(s string) Format {
 
 // Printer renders CLI output in the specified format.
 type Printer struct {
-	w       io.Writer
-	format  Format
-	noColor bool
+	w        io.Writer
+	format   Format
+	noColor  bool
+	usePager bool
+}
+
+// SetPager enables optional paging for table output when writing to a terminal.
+// When enabled, table output is piped through $PAGER (defaults to "less -FRX").
+func (p *Printer) SetPager(enabled bool) {
+	p.usePager = enabled
 }
 
 // NewPrinter creates a new Printer writing to w.
@@ -54,8 +65,47 @@ func (p *Printer) PrintTable(headers []string, rows [][]string) error {
 	case FormatYAML:
 		return p.printTableAsYAML(headers, rows)
 	default:
+		if p.usePager {
+			if f, ok := p.w.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+				return p.printTableWithPager(headers, rows)
+			}
+		}
 		return p.printTableAsText(headers, rows)
 	}
+}
+
+// printTableWithPager buffers the table output and pipes it through $PAGER
+// (defaulting to "less -FRX"). Falls back to direct output if the pager is unavailable.
+func (p *Printer) printTableWithPager(headers []string, rows [][]string) error {
+	pagerCmd := os.Getenv("PAGER")
+	if pagerCmd == "" {
+		pagerCmd = "less"
+	}
+
+	pagerPath, err := exec.LookPath(pagerCmd)
+	if err != nil {
+		// Pager not found — fall back to direct output
+		return p.printTableAsText(headers, rows)
+	}
+
+	var buf bytes.Buffer
+	orig := p.w
+	p.w = &buf
+	if err := p.printTableAsText(headers, rows); err != nil {
+		p.w = orig
+		return err
+	}
+	p.w = orig
+
+	pager := exec.Command(pagerPath, "-FRX")
+	pager.Stdin = &buf
+	pager.Stdout = orig
+	pager.Stderr = os.Stderr
+	if err := pager.Run(); err != nil {
+		// If pager exits with an error (e.g. user pressed q), ignore it
+		_ = err
+	}
+	return nil
 }
 
 func (p *Printer) printTableAsText(headers []string, rows [][]string) error {

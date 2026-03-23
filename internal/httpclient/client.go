@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,12 @@ type Options struct {
 	Debug     bool
 	// DebugOut is where debug output is written (defaults to os.Stderr in New).
 	DebugOut io.Writer
+	// MaxRetries is the number of times to retry GET requests on transient failures.
+	// Default is 3. Set to 0 to disable retries.
+	MaxRetries int
+	// RetryGETs controls whether GET requests are retried on transient failures.
+	// Default is true.
+	RetryGETs bool
 }
 
 // Client is a ZCP API HTTP client that injects auth headers and handles errors.
@@ -43,6 +50,11 @@ func New(opts Options) *Client {
 		// lazy import to avoid circular; we use a standard writer
 		opts.DebugOut = io.Discard
 	}
+	if opts.MaxRetries == 0 {
+		opts.MaxRetries = 3
+	}
+	// RetryGETs defaults to true; zero value (false) means "not set, use default".
+	opts.RetryGETs = true
 	return &Client{
 		opts: opts,
 		httpClient: &http.Client{
@@ -78,7 +90,62 @@ func (c *Client) Put(ctx context.Context, path string, query url.Values, body in
 	return c.do(ctx, http.MethodPut, path, query, body, result)
 }
 
+// isRetryable reports whether a response status code or network error warrants a retry.
+func isRetryable(statusCode int, err error) bool {
+	if err != nil {
+		// Network errors (connection refused, timeout, etc.) are retryable.
+		return true
+	}
+	// 429 Too Many Requests and 5xx server errors are retryable.
+	return statusCode == 429 || (statusCode >= 500 && statusCode <= 599)
+}
+
+// do executes the HTTP request, retrying GET requests on transient failures.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body interface{}, result interface{}) error {
+	maxAttempts := 1
+	if method == http.MethodGet && c.opts.RetryGETs && c.opts.MaxRetries > 0 {
+		maxAttempts = c.opts.MaxRetries + 1
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s (capped at 4s).
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			if backoff > 4*time.Second {
+				backoff = 4 * time.Second
+			}
+			if c.opts.Debug {
+				fmt.Fprintf(c.opts.DebugOut, "[DEBUG] retry %d/%d for %s %s after %s (last error: %v)\n",
+					attempt, c.opts.MaxRetries, method, path, backoff, lastErr)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+		}
+
+		err := c.doOnce(ctx, method, path, query, body, result)
+		if err == nil {
+			return nil
+		}
+
+		// Determine whether this error is retryable.
+		var apiErr *apierrors.APIError
+		if errors.As(err, &apiErr) {
+			if !isRetryable(apiErr.StatusCode, nil) {
+				return err
+			}
+		}
+		// Network/other errors are treated as retryable.
+		lastErr = err
+	}
+	return lastErr
+}
+
+// doOnce performs a single HTTP request without any retry logic.
+func (c *Client) doOnce(ctx context.Context, method, path string, query url.Values, body interface{}, result interface{}) error {
 	// Build URL
 	base := strings.TrimRight(c.opts.BaseURL, "/")
 	if !strings.HasPrefix(path, "/") {

@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
@@ -225,6 +227,33 @@ func (s *Service) GetStatus(ctx context.Context, uuid string) (*Status, error) {
 		return nil, fmt.Errorf("getting status for instance %s: %w", uuid, err)
 	}
 	return &Status{UUID: resp.UUID, Status: resp.Status}, nil
+}
+
+// WaitForState polls the instance status until it reaches one of the target states or the context is cancelled.
+// targetStates should be the expected terminal state(s), e.g. "Running", "Stopped", "Destroyed".
+// pollInterval controls how often to poll; pass 0 for the default (3s).
+func (s *Service) WaitForState(ctx context.Context, uuid string, targetStates []string, pollInterval time.Duration) (*Status, error) {
+	if pollInterval == 0 {
+		pollInterval = 3 * time.Second
+	}
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			status, err := s.GetStatus(ctx, uuid)
+			if err != nil {
+				return nil, err
+			}
+			for _, target := range targetStates {
+				if strings.EqualFold(status.Status, target) {
+					return status, nil
+				}
+			}
+		}
+	}
 }
 
 // ListNetworks returns the networks attached to an instance.

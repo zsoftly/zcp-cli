@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ func NewInstanceCmd() *cobra.Command {
 	cmd.AddCommand(newInstanceStatusCmd())
 	cmd.AddCommand(newInstanceRecoverCmd())
 	cmd.AddCommand(newInstanceRenameCmd())
+	cmd.AddCommand(newInstanceSSHCmd())
 	return cmd
 }
 
@@ -158,6 +160,7 @@ func newInstanceCreateCmd() *cobra.Command {
 		rootDiskSize        int
 		sshKeyName          string
 		securityGroup       string
+		wait                bool
 	)
 
 	cmd := &cobra.Command{
@@ -192,7 +195,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				RootDiskSize:        rootDiskSize,
 				SSHKeyName:          sshKeyName,
 				SecurityGroupName:   securityGroup,
-			})
+			}, wait)
 		},
 	}
 	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
@@ -205,10 +208,11 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&rootDiskSize, "root-disk-size", 0, "Root disk size in GB (optional)")
 	cmd.Flags().StringVar(&sshKeyName, "ssh-key", "", "SSH key name (optional)")
 	cmd.Flags().StringVar(&securityGroup, "security-group", "", "Security group name (optional)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	return cmd
 }
 
-func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest) error {
+func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest, wait bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -223,6 +227,17 @@ func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest) error {
 		return fmt.Errorf("instance create: %w", err)
 	}
 
+	if wait {
+		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Running...\n", inst.UUID)
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd)+300)*time.Second)
+		defer waitCancel()
+		status, err := svc.WaitForState(waitCtx, inst.UUID, []string{"Running"}, 0)
+		if err != nil {
+			return fmt.Errorf("waiting for instance create: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", inst.UUID, status.Status)
+	}
+
 	headers := []string{"UUID", "NAME", "STATE", "PRIVATE IP", "MEMORY", "TEMPLATE", "ZONE"}
 	rows := [][]string{
 		{inst.UUID, inst.Name, inst.State, inst.PrivateIP, inst.Memory, inst.TemplateName, inst.ZoneUUID},
@@ -231,19 +246,22 @@ func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest) error {
 }
 
 func newInstanceStartCmd() *cobra.Command {
+	var wait bool
+
 	cmd := &cobra.Command{
 		Use:     "start <uuid>",
 		Short:   "Start a stopped instance",
 		Args:    cobra.ExactArgs(1),
 		Example: `  zcp instance start <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstanceStart(cmd, args[0])
+			return runInstanceStart(cmd, args[0], wait)
 		},
 	}
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	return cmd
 }
 
-func runInstanceStart(cmd *cobra.Command, uuid string) error {
+func runInstanceStart(cmd *cobra.Command, uuid string, wait bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -258,13 +276,24 @@ func runInstanceStart(cmd *cobra.Command, uuid string) error {
 		return fmt.Errorf("instance start: %w", err)
 	}
 
+	if wait {
+		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Running...\n", uuid)
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd)+300)*time.Second)
+		defer waitCancel()
+		status, err := svc.WaitForState(waitCtx, uuid, []string{"Running"}, 0)
+		if err != nil {
+			return fmt.Errorf("waiting for instance start: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", uuid, status.Status)
+	}
+
 	headers := []string{"UUID", "NAME", "STATE"}
 	rows := [][]string{{inst.UUID, inst.Name, inst.State}}
 	return printer.PrintTable(headers, rows)
 }
 
 func newInstanceStopCmd() *cobra.Command {
-	var force bool
+	var force, wait bool
 
 	cmd := &cobra.Command{
 		Use:   "stop <uuid>",
@@ -273,14 +302,15 @@ func newInstanceStopCmd() *cobra.Command {
 		Example: `  zcp instance stop <uuid>
   zcp instance stop <uuid> --force`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstanceStop(cmd, args[0], force)
+			return runInstanceStop(cmd, args[0], force, wait)
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Force stop (bypass graceful shutdown)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Stopped state")
 	return cmd
 }
 
-func runInstanceStop(cmd *cobra.Command, uuid string, force bool) error {
+func runInstanceStop(cmd *cobra.Command, uuid string, force bool, wait bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -293,6 +323,17 @@ func runInstanceStop(cmd *cobra.Command, uuid string, force bool) error {
 	inst, err := svc.Stop(ctx, uuid, force)
 	if err != nil {
 		return fmt.Errorf("instance stop: %w", err)
+	}
+
+	if wait {
+		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Stopped...\n", uuid)
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd)+300)*time.Second)
+		defer waitCancel()
+		status, err := svc.WaitForState(waitCtx, uuid, []string{"Stopped"}, 0)
+		if err != nil {
+			return fmt.Errorf("waiting for instance stop: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", uuid, status.Status)
 	}
 
 	headers := []string{"UUID", "NAME", "STATE"}
@@ -630,4 +671,87 @@ func runInstanceRename(cmd *cobra.Command, uuid, displayName string) error {
 	headers := []string{"UUID", "NAME", "DISPLAY NAME", "STATE"}
 	rows := [][]string{{inst.UUID, inst.Name, inst.DisplayName, inst.State}}
 	return printer.PrintTable(headers, rows)
+}
+
+func newInstanceSSHCmd() *cobra.Command {
+	var user, identityFile string
+	var port int
+
+	cmd := &cobra.Command{
+		Use:   "ssh <uuid>",
+		Short: "Open an SSH session to an instance",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp instance ssh <uuid>
+  zcp instance ssh <uuid> --user ubuntu
+  zcp instance ssh <uuid> --user root --identity-file ~/.ssh/my-key.pem`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runInstanceSSH(cmd, args[0], user, identityFile, port)
+		},
+	}
+	cmd.Flags().StringVar(&user, "user", "root", "SSH username")
+	cmd.Flags().StringVarP(&identityFile, "identity-file", "i", "", "Path to SSH private key file")
+	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
+	return cmd
+}
+
+func runInstanceSSH(cmd *cobra.Command, uuid, user, identityFile string, port int) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := instance.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	networks, err := svc.ListNetworks(ctx, uuid)
+	if err != nil {
+		return fmt.Errorf("resolving instance network: %w", err)
+	}
+	if len(networks) == 0 {
+		return fmt.Errorf("instance %s has no attached networks", uuid)
+	}
+
+	// Prefer private IP; fall back to public IP
+	ip := ""
+	for _, n := range networks {
+		if n.PrivateIP != "" {
+			ip = n.PrivateIP
+			break
+		}
+	}
+	if ip == "" {
+		for _, n := range networks {
+			if n.PublicIP != "" {
+				ip = n.PublicIP
+				break
+			}
+		}
+	}
+	if ip == "" {
+		return fmt.Errorf("instance %s has no usable IP address", uuid)
+	}
+
+	// Build SSH command
+	sshArgs := []string{}
+	if identityFile != "" {
+		sshArgs = append(sshArgs, "-i", identityFile)
+	}
+	if port != 22 {
+		sshArgs = append(sshArgs, "-p", strconv.Itoa(port))
+	}
+	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", user, ip))
+
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		return fmt.Errorf("ssh not found in PATH: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Connecting to %s@%s...\n", user, ip)
+
+	sshCmd := exec.CommandContext(context.Background(), sshPath, sshArgs...)
+	sshCmd.Stdin = os.Stdin
+	sshCmd.Stdout = os.Stdout
+	sshCmd.Stderr = os.Stderr
+	return sshCmd.Run()
 }

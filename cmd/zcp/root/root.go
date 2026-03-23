@@ -17,6 +17,7 @@ var (
 	timeoutFlag int
 	debugFlag   bool
 	noColorFlag bool
+	pagerFlag   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -54,6 +55,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&timeoutFlag, "timeout", 30, "Request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Enable debug output (written to stderr)")
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "Disable color output")
+	rootCmd.PersistentFlags().BoolVar(&pagerFlag, "pager", false, "Pipe table output through a pager (less)")
 
 	// Version subcommand
 	rootCmd.AddCommand(newVersionCmd())
@@ -92,6 +94,23 @@ func init() {
 	rootCmd.AddCommand(commands.NewUsageCmd())
 	rootCmd.AddCommand(commands.NewCostCmd())
 	rootCmd.AddCommand(commands.NewAdminCmd())
+
+	// Flag completions — static values, no network calls
+	rootCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"table", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	rootCmd.RegisterFlagCompletionFunc("profile", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, err := config.Load()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names := make([]string, 0, len(cfg.Profiles))
+		for name := range cfg.Profiles {
+			names = append(names, name)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 func newVersionCmd() *cobra.Command {

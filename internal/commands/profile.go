@@ -27,6 +27,8 @@ One profile can be set as the active (default) profile.`,
 	cmd.AddCommand(newProfileUseCmd())
 	cmd.AddCommand(newProfileDeleteCmd())
 	cmd.AddCommand(newProfileShowCmd())
+	cmd.AddCommand(newProfileUpdateCmd())
+	cmd.AddCommand(newProfileRenameCmd())
 	return cmd
 }
 
@@ -135,9 +137,10 @@ func newProfileListCmd() *cobra.Command {
 
 func newProfileUseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "use <name>",
-		Short: "Set the active profile",
-		Args:  cobra.ExactArgs(1),
+		Use:               "use <name>",
+		Short:             "Set the active profile",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			cfg, err := config.Load()
@@ -160,9 +163,10 @@ func newProfileUseCmd() *cobra.Command {
 func newProfileDeleteCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "delete <name>",
-		Short: "Delete a profile",
-		Args:  cobra.ExactArgs(1),
+		Use:               "delete <name>",
+		Short:             "Delete a profile",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			cfg, err := config.Load()
@@ -196,9 +200,10 @@ func newProfileDeleteCmd() *cobra.Command {
 
 func newProfileShowCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show [name]",
-		Short: "Show profile details (credentials are masked)",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "show [name]",
+		Short:             "Show profile details (credentials are masked)",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -226,6 +231,93 @@ func newProfileShowCmd() *cobra.Command {
 			if name == cfg.ActiveProfile {
 				fmt.Fprintln(os.Stdout, "Status: active")
 			}
+			// Credential completeness hint
+			if p.APIKey == "" || p.SecretKey == "" {
+				fmt.Fprintln(os.Stdout, "Warning: profile is missing credentials — run: zcp profile update "+name)
+			}
+			return nil
+		},
+	}
+}
+
+func newProfileUpdateCmd() *cobra.Command {
+	var apiKey, secretKey, apiURL string
+
+	cmd := &cobra.Command{
+		Use:   "update <name>",
+		Short: "Update fields of an existing profile",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp profile update prod --api-key <new-key>
+  zcp profile update prod --api-url-override https://new.api.url
+  zcp profile update prod --secret-key <new-secret>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			p, ok := cfg.Profiles[name]
+			if !ok {
+				return fmt.Errorf("profile %q not found — run: zcp profile list", name)
+			}
+			changed := false
+			if apiKey != "" {
+				p.APIKey = apiKey
+				changed = true
+			}
+			if secretKey != "" {
+				p.SecretKey = secretKey
+				changed = true
+			}
+			if cmd.Flags().Changed("api-url-override") {
+				p.APIURL = apiURL
+				changed = true
+			}
+			if !changed {
+				return fmt.Errorf("no fields to update — use --api-key, --secret-key, or --api-url-override")
+			}
+			cfg.Profiles[name] = p
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "Profile %q updated.\n", name)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "New API key")
+	cmd.Flags().StringVar(&secretKey, "secret-key", "", "New secret key")
+	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "New custom API URL (set to empty string to clear)")
+	return cmd
+}
+
+func newProfileRenameCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rename <old-name> <new-name>",
+		Short: "Rename a profile",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			oldName, newName := args[0], args[1]
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			p, ok := cfg.Profiles[oldName]
+			if !ok {
+				return fmt.Errorf("profile %q not found", oldName)
+			}
+			if _, exists := cfg.Profiles[newName]; exists {
+				return fmt.Errorf("profile %q already exists", newName)
+			}
+			p.Name = newName
+			cfg.Profiles[newName] = p
+			delete(cfg.Profiles, oldName)
+			if cfg.ActiveProfile == oldName {
+				cfg.ActiveProfile = newName
+			}
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "Profile %q renamed to %q.\n", oldName, newName)
 			return nil
 		},
 	}
