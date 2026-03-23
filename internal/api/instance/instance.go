@@ -251,14 +251,10 @@ func (s *Service) ListPasswords(ctx context.Context, zoneUUID, vmUUID string) ([
 }
 
 // Rename updates an instance's display name.
-// Note: the API spec defines this as PUT /restapi/instance/updateInstanceName.
-// We use Post here since the httpclient does not expose a Put method, and both
-// methods send a JSON body. If the server enforces the HTTP verb, a Put method
-// would need to be added to httpclient.
 func (s *Service) Rename(ctx context.Context, uuid, displayName string) (*Instance, error) {
 	body := map[string]string{"uuid": uuid, "displayName": displayName}
 	var resp listInstanceResponse
-	if err := s.client.Post(ctx, "/restapi/instance/updateInstanceName", body, &resp); err != nil {
+	if err := s.client.Put(ctx, "/restapi/instance/updateInstanceName", nil, body, &resp); err != nil {
 		return nil, fmt.Errorf("renaming instance %s: %w", uuid, err)
 	}
 	if len(resp.ListInstanceResponse) == 0 {

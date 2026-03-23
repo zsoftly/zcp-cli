@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/vmsnapshot"
+	"github.com/zsoftly/zcp-cli/internal/api/waiters"
 )
 
 // NewVMSnapshotCmd returns the 'vm-snapshot' cobra command.
@@ -71,6 +72,7 @@ func newVMSnapshotListCmd() *cobra.Command {
 func newVMSnapshotCreateCmd() *cobra.Command {
 	var zoneUUID, name, instanceUUID, description string
 	var memory bool
+	var wait bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -107,6 +109,14 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 				return fmt.Errorf("vm-snapshot create: %w", err)
 			}
 
+			if wait && snap.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", snap.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, snap.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "CURRENT", "ZONE", "JOB ID", "CREATED"}
 			rows := [][]string{{
 				snap.UUID,
@@ -125,6 +135,7 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "VM instance UUID (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Optional description")
 	cmd.Flags().BoolVar(&memory, "memory", false, "Include memory state in snapshot")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }
 
@@ -171,6 +182,7 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 
 func newVMSnapshotRevertCmd() *cobra.Command {
 	var yes bool
+	var wait bool
 
 	cmd := &cobra.Command{
 		Use:   "revert <uuid>",
@@ -202,6 +214,14 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 				return fmt.Errorf("vm-snapshot revert: %w", err)
 			}
 
+			if wait && snap.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", snap.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, snap.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "CURRENT", "ZONE", "JOB ID"}
 			rows := [][]string{{
 				snap.UUID,
@@ -215,5 +235,6 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }

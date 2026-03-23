@@ -71,6 +71,13 @@ func (c *Client) Delete(ctx context.Context, path string, query url.Values) erro
 	return c.do(ctx, http.MethodDelete, path, query, nil, nil)
 }
 
+// Put performs a PUT request. query params are optional (pass nil if not needed).
+// body is optional (pass nil for query-only PUTs like start/stop operations).
+// result is optional (pass nil to discard response body).
+func (c *Client) Put(ctx context.Context, path string, query url.Values, body interface{}, result interface{}) error {
+	return c.do(ctx, http.MethodPut, path, query, body, result)
+}
+
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body interface{}, result interface{}) error {
 	// Build URL
 	base := strings.TrimRight(c.opts.BaseURL, "/")

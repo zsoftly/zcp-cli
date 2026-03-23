@@ -80,6 +80,18 @@ func init() {
 	rootCmd.AddCommand(commands.NewEgressCmd())
 	rootCmd.AddCommand(commands.NewPortForwardCmd())
 	rootCmd.AddCommand(commands.NewTagCmd())
+	// Phase 3: advanced networking, security, kubernetes, billing/admin
+	rootCmd.AddCommand(commands.NewVPCCmd())
+	rootCmd.AddCommand(commands.NewACLCmd())
+	rootCmd.AddCommand(commands.NewLoadBalancerCmd())
+	rootCmd.AddCommand(commands.NewInternalLBCmd())
+	rootCmd.AddCommand(commands.NewVPNCmd())
+	rootCmd.AddCommand(commands.NewSSHKeyCmd())
+	rootCmd.AddCommand(commands.NewSecurityGroupCmd())
+	rootCmd.AddCommand(commands.NewKubernetesCmd())
+	rootCmd.AddCommand(commands.NewUsageCmd())
+	rootCmd.AddCommand(commands.NewCostCmd())
+	rootCmd.AddCommand(commands.NewAdminCmd())
 }
 
 func newVersionCmd() *cobra.Command {

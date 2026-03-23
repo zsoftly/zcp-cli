@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/volume"
+	"github.com/zsoftly/zcp-cli/internal/api/waiters"
 )
 
 // NewVolumeCmd returns the 'volume' cobra command.
@@ -77,6 +78,7 @@ func newVolumeListCmd() *cobra.Command {
 func newVolumeCreateCmd() *cobra.Command {
 	var zoneUUID, name, storageOfferingUUID string
 	var diskSize int
+	var wait bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -112,6 +114,14 @@ func newVolumeCreateCmd() *cobra.Command {
 				return fmt.Errorf("volume create: %w", err)
 			}
 
+			if wait && vol.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", vol.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, vol.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "SIZE", "TYPE", "ZONE", "JOB ID"}
 			rows := [][]string{{
 				vol.UUID,
@@ -129,11 +139,13 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Volume name (required)")
 	cmd.Flags().StringVar(&storageOfferingUUID, "storage-offering", "", "Storage offering UUID (required)")
 	cmd.Flags().IntVar(&diskSize, "disk-size", 0, "Custom disk size in GB (for custom offerings)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }
 
 func newVolumeAttachCmd() *cobra.Command {
 	var instanceUUID string
+	var wait bool
 
 	cmd := &cobra.Command{
 		Use:     "attach <volume-uuid>",
@@ -158,6 +170,14 @@ func newVolumeAttachCmd() *cobra.Command {
 				return fmt.Errorf("volume attach: %w", err)
 			}
 
+			if wait && vol.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", vol.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, vol.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "INSTANCE", "ZONE"}
 			rows := [][]string{{
 				vol.UUID,
@@ -170,10 +190,13 @@ func newVolumeAttachCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "Instance UUID to attach to (required)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }
 
 func newVolumeDetachCmd() *cobra.Command {
+	var wait bool
+
 	cmd := &cobra.Command{
 		Use:     "detach <volume-uuid>",
 		Short:   "Detach a volume from its instance",
@@ -194,6 +217,14 @@ func newVolumeDetachCmd() *cobra.Command {
 				return fmt.Errorf("volume detach: %w", err)
 			}
 
+			if wait && vol.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", vol.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, vol.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "ZONE"}
 			rows := [][]string{{
 				vol.UUID,
@@ -204,6 +235,7 @@ func newVolumeDetachCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }
 
@@ -252,6 +284,7 @@ func newVolumeResizeCmd() *cobra.Command {
 	var storageOfferingUUID string
 	var diskSize int
 	var shrink bool
+	var wait bool
 
 	cmd := &cobra.Command{
 		Use:   "resize <uuid>",
@@ -278,6 +311,14 @@ func newVolumeResizeCmd() *cobra.Command {
 				return fmt.Errorf("volume resize: %w", err)
 			}
 
+			if wait && vol.JobID != "" {
+				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", vol.JobID)
+				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
+				if _, err := waiter.Wait(ctx, vol.JobID); err != nil {
+					return fmt.Errorf("wait failed: %w", err)
+				}
+			}
+
 			headers := []string{"UUID", "NAME", "STATUS", "SIZE", "OFFERING", "ZONE", "JOB ID"}
 			rows := [][]string{{
 				vol.UUID,
@@ -294,5 +335,6 @@ func newVolumeResizeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&storageOfferingUUID, "storage-offering", "", "Storage offering UUID (required)")
 	cmd.Flags().IntVar(&diskSize, "disk-size", 0, "New disk size in GB")
 	cmd.Flags().BoolVar(&shrink, "shrink", false, "Allow shrinking the volume (use with caution)")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }
