@@ -38,6 +38,8 @@ docs/_build/
 .aws-credentials
 credentials
 config
+# Do not ignore Go source packages named 'config'
+!internal/config/
 
 # MacOS specific
 .DS_Store
