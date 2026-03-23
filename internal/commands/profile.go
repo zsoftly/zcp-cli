@@ -1,0 +1,258 @@
+package commands
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+	"syscall"
+
+	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/config"
+	"golang.org/x/term"
+)
+
+// NewProfileCmd returns the 'profile' cobra command.
+func NewProfileCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "profile",
+		Short: "Manage configuration profiles",
+		Long: `Profiles store named credential sets for different ZCP environments or accounts.
+
+Each profile contains an API key, secret key, and optionally a custom API URL.
+One profile can be set as the active (default) profile.`,
+	}
+	cmd.AddCommand(newProfileAddCmd())
+	cmd.AddCommand(newProfileListCmd())
+	cmd.AddCommand(newProfileUseCmd())
+	cmd.AddCommand(newProfileDeleteCmd())
+	cmd.AddCommand(newProfileShowCmd())
+	return cmd
+}
+
+func newProfileAddCmd() *cobra.Command {
+	var apiKey, secretKey, apiURL string
+	var nonInteractive bool
+
+	cmd := &cobra.Command{
+		Use:   "add <name>",
+		Short: "Add or update a profile",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp profile add default
+  zcp profile add prod --api-key <key> --secret-key <secret>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			// If flags not provided, prompt interactively
+			if !nonInteractive {
+				if apiKey == "" {
+					apiKey, err = prompt("API Key: ", false)
+					if err != nil {
+						return err
+					}
+				}
+				if secretKey == "" {
+					secretKey, err = prompt("Secret Key: ", true)
+					if err != nil {
+						return err
+					}
+				}
+			}
+
+			if apiKey == "" || secretKey == "" {
+				return fmt.Errorf("apikey and secretkey are required")
+			}
+
+			if cfg.Profiles == nil {
+				cfg.Profiles = make(map[string]config.Profile)
+			}
+
+			cfg.Profiles[name] = config.Profile{
+				Name:      name,
+				APIKey:    apiKey,
+				SecretKey: secretKey,
+				APIURL:    apiURL,
+			}
+
+			// Set as active if it's the first or only profile
+			if cfg.ActiveProfile == "" {
+				cfg.ActiveProfile = name
+			}
+
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stdout, "Profile %q saved.\n", name)
+			if cfg.ActiveProfile == name {
+				fmt.Fprintln(os.Stdout, "Set as active profile.")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key (prompted if not provided)")
+	cmd.Flags().StringVar(&secretKey, "secret-key", "", "Secret key (prompted if not provided)")
+	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "Custom API URL (optional)")
+	cmd.Flags().BoolVar(&nonInteractive, "no-input", false, "Fail if credentials not provided via flags")
+	return cmd
+}
+
+func newProfileListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List configured profiles",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if len(cfg.Profiles) == 0 {
+				fmt.Fprintln(os.Stdout, "No profiles configured. Run: zcp profile add")
+				return nil
+			}
+			fmt.Fprintf(os.Stdout, "%-20s %-10s %s\n", "NAME", "ACTIVE", "API URL")
+			fmt.Fprintf(os.Stdout, "%s\n", strings.Repeat("-", 60))
+			for name, p := range cfg.Profiles {
+				active := ""
+				if name == cfg.ActiveProfile {
+					active = "*"
+				}
+				apiURL := p.APIURL
+				if apiURL == "" {
+					apiURL = config.DefaultAPIURL
+				}
+				fmt.Fprintf(os.Stdout, "%-20s %-10s %s\n", name, active, apiURL)
+			}
+			return nil
+		},
+	}
+}
+
+func newProfileUseCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "use <name>",
+		Short: "Set the active profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if _, ok := cfg.Profiles[name]; !ok {
+				return fmt.Errorf("profile %q not found", name)
+			}
+			cfg.ActiveProfile = name
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "Active profile set to %q\n", name)
+			return nil
+		},
+	}
+}
+
+func newProfileDeleteCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if _, ok := cfg.Profiles[name]; !ok {
+				return fmt.Errorf("profile %q not found", name)
+			}
+			if !force {
+				answer, _ := prompt(fmt.Sprintf("Delete profile %q? [y/N]: ", name), false)
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stdout, "Aborted.")
+					return nil
+				}
+			}
+			delete(cfg.Profiles, name)
+			if cfg.ActiveProfile == name {
+				cfg.ActiveProfile = ""
+			}
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stdout, "Profile %q deleted.\n", name)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVarP(&force, "yes", "y", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func newProfileShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show [name]",
+		Short: "Show profile details (credentials are masked)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			name := cfg.ActiveProfile
+			if len(args) == 1 {
+				name = args[0]
+			}
+			if name == "" {
+				return fmt.Errorf("no active profile — run: zcp profile add")
+			}
+			p, ok := cfg.Profiles[name]
+			if !ok {
+				return fmt.Errorf("profile %q not found", name)
+			}
+			apiURL := p.APIURL
+			if apiURL == "" {
+				apiURL = config.DefaultAPIURL
+			}
+			fmt.Fprintf(os.Stdout, "Profile: %s\n", name)
+			fmt.Fprintf(os.Stdout, "API URL: %s\n", apiURL)
+			fmt.Fprintf(os.Stdout, "API Key: %s\n", maskSecret(p.APIKey))
+			fmt.Fprintf(os.Stdout, "Secret Key: %s\n", maskSecret(p.SecretKey))
+			if name == cfg.ActiveProfile {
+				fmt.Fprintln(os.Stdout, "Status: active")
+			}
+			return nil
+		},
+	}
+}
+
+// prompt reads a line from stdin. If secret is true, it uses terminal echo suppression.
+func prompt(label string, secret bool) (string, error) {
+	fmt.Fprint(os.Stdout, label)
+	if secret && term.IsTerminal(int(syscall.Stdin)) {
+		b, err := term.ReadPassword(int(syscall.Stdin))
+		fmt.Fprintln(os.Stdout)
+		if err != nil {
+			return "", fmt.Errorf("reading password: %w", err)
+		}
+		return string(b), nil
+	}
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		return scanner.Text(), nil
+	}
+	return "", scanner.Err()
+}
+
+// maskSecret shows first 4 chars then asterisks, or all asterisks if short.
+func maskSecret(s string) string {
+	if len(s) <= 4 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:4] + strings.Repeat("*", len(s)-4)
+}
