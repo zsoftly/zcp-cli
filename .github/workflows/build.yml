@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   changes:
@@ -84,7 +84,10 @@ jobs:
         run: |
           Write-Output "Checking PowerShell scripts with PSScriptAnalyzer..."
           Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-          $results = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Error,Warning
+          # PSAvoidUsingWriteHost is excluded: install.ps1 intentionally uses
+          # Write-Host for colored console output, which is correct for an installer.
+          $results = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Error,Warning `
+            -ExcludeRule PSAvoidUsingWriteHost
           if ($results) {
             $results | Format-Table -AutoSize
             throw "PSScriptAnalyzer found issues"

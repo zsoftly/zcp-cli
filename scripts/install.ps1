@@ -6,8 +6,6 @@
 .PARAMETER InstallDir
     Directory to install zcp.exe (default: $env:LOCALAPPDATA\Programs\zcp)
 #>
-# Write-Host is intentional: this is an interactive installer that writes to the console.
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Scope = 'Function', Target = '*')]
 param(
     [string]$InstallDir = "$env:LOCALAPPDATA\Programs\zcp"
 )
