@@ -29,7 +29,7 @@ It provides a scriptable, cross-platform way to manage cloud resources including
 instances, volumes, networks, VPCs, Kubernetes clusters, and more.
 
 Get started:
-  zcp profile add          Configure your API credentials
+  zcp profile add default  Configure your API credentials
   zcp auth validate        Verify your credentials work
   zcp zone list            List available zones
   zcp instance list        List your instances
@@ -55,7 +55,7 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&timeoutFlag, "timeout", 30, "Request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Enable debug output (written to stderr)")
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "Disable color output")
-	rootCmd.PersistentFlags().BoolVar(&pagerFlag, "pager", false, "Pipe table output through a pager (less)")
+	rootCmd.PersistentFlags().BoolVar(&pagerFlag, "pager", false, "Pipe table output through less (requires less in PATH)")
 
 	// Version subcommand
 	rootCmd.AddCommand(newVersionCmd())
@@ -135,8 +135,10 @@ Bash:
   $ source <(zcp completion bash)
 
 Zsh:
-  # Add to ~/.zshrc:
+  # Add to ~/.zshrc (takes effect in new shells):
   $ echo 'source <(zcp completion zsh)' >> ~/.zshrc
+  # Or load immediately in the current shell:
+  $ source <(zcp completion zsh)
 
 Fish:
   $ zcp completion fish | source

@@ -137,11 +137,11 @@ func newIPReleaseCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "release <uuid>",
+		Use:   "release <ip-uuid>",
 		Short: "Release a public IP address",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp ip release <uuid>
-  zcp ip release <uuid> --yes`,
+		Example: `  zcp ip release <ip-uuid>
+  zcp ip release <ip-uuid> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPRelease(cmd, args[0], yes)
 		},

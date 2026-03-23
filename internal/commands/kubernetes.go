@@ -17,7 +17,7 @@ func NewKubernetesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "kubernetes",
 		Aliases: []string{"k8s"},
-		Short:   "Manage Kubernetes clusters",
+		Short:   "Manage Kubernetes clusters (alias: k8s)",
 	}
 	cmd.AddCommand(newK8sVersionListCmd())
 	cmd.AddCommand(newK8sClusterListCmd())

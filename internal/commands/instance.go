@@ -208,7 +208,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&rootDiskSize, "root-disk-size", 0, "Root disk size in GB (optional)")
 	cmd.Flags().StringVar(&sshKeyName, "ssh-key", "", "SSH key name (optional)")
 	cmd.Flags().StringVar(&securityGroup, "security-group", "", "Security group name (optional)")
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state (polls until Running or timeout)")
 	return cmd
 }
 
@@ -257,7 +257,7 @@ func newInstanceStartCmd() *cobra.Command {
 			return runInstanceStart(cmd, args[0], wait)
 		},
 	}
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state (polls until Running or timeout)")
 	return cmd
 }
 
@@ -306,7 +306,7 @@ func newInstanceStopCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Force stop (bypass graceful shutdown)")
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Stopped state")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Stopped state (polls until Stopped or timeout)")
 	return cmd
 }
 
@@ -680,7 +680,16 @@ func newInstanceSSHCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ssh <uuid>",
 		Short: "Open an SSH session to an instance",
-		Args:  cobra.ExactArgs(1),
+		Long: `Open an SSH session to an instance by resolving its IP address via the API.
+
+The CLI looks up the instance's attached networks and connects to the first
+available private IP address. If no private IP is found, it falls back to a
+public IP. The default SSH user is "root"; use --user to override.
+
+Requirements:
+  - ssh must be installed and available in your PATH
+  - The instance must be reachable from your local machine (VPN or public IP)`,
+		Args: cobra.ExactArgs(1),
 		Example: `  zcp instance ssh <uuid>
   zcp instance ssh <uuid> --user ubuntu
   zcp instance ssh <uuid> --user root --identity-file ~/.ssh/my-key.pem`,

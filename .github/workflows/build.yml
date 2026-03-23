@@ -1,5 +1,12 @@
 name: CI/CD Pipeline
 
+# Efficient path-based triggering:
+# - Go code changes    → test + security jobs
+# - Script changes     → lint-scripts job
+# - Workflow changes   → lint-scripts + test jobs
+# - Docs/config only  → no CI (skipped)
+# - Tags              → build + release jobs only
+
 on:
   push:
     branches: [main, 'feature/*', 'feat/*', 'fix/*', 'release/*']
@@ -10,12 +17,13 @@ on:
 
 jobs:
   changes:
-    name: Detect Changes
+    name: 1. Detect Changes
     runs-on: ubuntu-latest
     if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
     outputs:
       go: ${{ steps.filter.outputs.go }}
       scripts: ${{ steps.filter.outputs.scripts }}
+      workflow: ${{ steps.filter.outputs.workflow }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -30,51 +38,153 @@ jobs:
               - 'Makefile'
             scripts:
               - 'scripts/**'
+            workflow:
+              - '.github/workflows/**'
 
   lint-scripts:
-    name: Lint Scripts
+    name: 2a. Lint Scripts
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.scripts == 'true'
+    if: needs.changes.outputs.scripts == 'true' || needs.changes.outputs.workflow == 'true'
     steps:
-      - uses: actions/checkout@v4
-      - name: shellcheck
-        run: sudo apt-get install -y shellcheck && shellcheck scripts/*.sh
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts (shellcheck)
+        run: |
+          echo "Checking shell scripts with shellcheck..."
+          shellcheck -x scripts/*.sh
+          echo "Shell scripts passed shellcheck"
+
+      - name: Validate shell script syntax
+        run: |
+          echo "Validating shell script syntax..."
+          for script in scripts/*.sh; do
+            bash -n "$script" || exit 1
+          done
+          echo "Shell script syntax is valid"
+
+      - name: Lint PowerShell scripts (PSScriptAnalyzer)
+        shell: pwsh
+        run: |
+          echo "Checking PowerShell scripts with PSScriptAnalyzer..."
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Error,Warning
+          if ($results) {
+            $results | Format-Table -AutoSize
+            throw "PSScriptAnalyzer found issues"
+          }
+          echo "PowerShell scripts passed PSScriptAnalyzer"
+
+      - name: Validate PowerShell script syntax
+        shell: pwsh
+        run: |
+          echo "Validating PowerShell script syntax..."
+          foreach ($script in Get-ChildItem scripts/*.ps1) {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$errors)
+            if ($errors) {
+              Write-Error "Syntax errors in $($script.Name):"
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }
+          echo "PowerShell script syntax is valid"
 
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: 2b. Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     needs: changes
-    if: needs.changes.outputs.go == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflow == 'true' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.26.1'
           cache: true
-      - run: go mod download
-      - run: go vet ./...
-      - run: go test -v ./...
-      - run: go test -race ./...
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run tests (race detector)
+        run: go test -race ./...
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            git config core.autocrlf false
+            git checkout HEAD -- .
+          fi
+
+          UNFORMATTED=$(gofmt -s -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not formatted correctly:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Please run 'gofmt -s -w .' to fix formatting issues."
+            exit 1
+          fi
+          echo "All Go files are properly formatted."
+
+      - name: Test build
+        run: go build -o zcp${{ matrix.os == 'windows-latest' && '.exe' || '' }} ./cmd/zcp
+
+      - name: Test CLI commands
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            ZCP_EXE="./zcp.exe"
+          else
+            ZCP_EXE="./zcp"
+          fi
+
+          $ZCP_EXE --help
+          $ZCP_EXE version
 
   security:
-    name: Security Scan
+    name: 3. Security Analysis
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.go == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [changes, test]
+    if: |
+      github.event_name == 'pull_request' &&
+      github.base_ref == 'main' &&
+      (needs.changes.outputs.go == 'true' || needs.changes.outputs.workflow == 'true')
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.26.1'
           cache: true
-      - name: govulncheck
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run Go vulnerability check
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
   build:
-    name: Build (${{ matrix.os }}/${{ matrix.arch }})
+    name: 4. Build (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     strategy:
@@ -93,15 +203,21 @@ jobs:
           - os: windows
             arch: arm64
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
           go-version: '1.26.1'
           cache: true
-      - run: go mod download
-      - name: Build
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build binary
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
@@ -111,38 +227,74 @@ jobs:
           EXT=""
           if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
           BINARY="bin/zcp-${{ matrix.os }}-${{ matrix.arch }}${EXT}"
-          go build -ldflags "-s -w -X github.com/zsoftly/zcp-cli/internal/version.Version=${VERSION}" -o "${BINARY}" ./cmd/zcp
-      - uses: actions/upload-artifact@v4
+
+          echo "Building version: ${VERSION}"
+
+          go build \
+            -ldflags "-s -w -X github.com/zsoftly/zcp-cli/internal/version.Version=${VERSION}" \
+            -o "${BINARY}" \
+            ./cmd/zcp
+
+      - name: Verify binary (linux/amd64 only)
+        if: matrix.os == 'linux' && matrix.arch == 'amd64'
+        run: ./bin/zcp-linux-amd64 version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: zcp-${{ matrix.os }}-${{ matrix.arch }}
           path: bin/zcp-${{ matrix.os }}-${{ matrix.arch }}*
+          retention-days: 30
 
   release:
-    name: Release
+    name: 5. GitHub Release
     runs-on: ubuntu-latest
     needs: build
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: bin/
-          merge-multiple: true
-      - name: Checksums
+          path: artifacts/
+
+      - name: Package release artifacts
         run: |
-          cd bin
-          sha256sum zcp-* > checksums.txt
+          mkdir -p release/
+
+          for dir in artifacts/*/; do
+            platform=$(basename "$dir")
+            if [[ "$platform" == *"windows"* ]]; then
+              (cd "$dir" && zip "../../release/${platform}.zip" *)
+            else
+              tar -czf "release/${platform}.tar.gz" -C "$dir" *
+            fi
+            # Also include raw binaries for direct download
+            cp "$dir"* release/
+          done
+
+          cp scripts/install.sh release/
+          cp scripts/install.ps1 release/
+
+          echo "Release artifacts:"
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
           cat checksums.txt
-      - name: Create Release
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            bin/zcp-*
-            bin/checksums.txt
-            scripts/install.sh
-            scripts/install.ps1
+          files: release/*
           generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

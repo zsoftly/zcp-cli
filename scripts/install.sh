@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+#
+# One-liner installer for zcp on macOS, Linux, WSL.
+#
+# Usage:
+#   curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.sh | bash
+#
+
 set -euo pipefail
 
 REPO="zsoftly/zcp-cli"
@@ -27,7 +34,7 @@ esac
 case "$ARCH" in
   x86_64|amd64) ARCH="amd64" ;;
   aarch64|arm64) ARCH="arm64" ;;
-  *) err "Unsupported arch: $ARCH" ;;
+  *) err "Unsupported architecture: $ARCH" ;;
 esac
 
 ASSET_NAME="${BINARY_NAME}-${OS}-${ARCH}"
@@ -47,14 +54,34 @@ fi
 
 chmod +x "$TMP_FILE"
 
-if [ ! -w "$INSTALL_DIR" ]; then
-  info "Installing to $INSTALL_DIR (requires sudo)..."
-  sudo mv "$TMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
+DEST_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+info "Installing to ${DEST_PATH}..."
+
+if [[ -w "$INSTALL_DIR" ]]; then
+  mv "$TMP_FILE" "$DEST_PATH"
 else
-  mv "$TMP_FILE" "${INSTALL_DIR}/${BINARY_NAME}"
+  sudo mv "$TMP_FILE" "$DEST_PATH"
+  sudo chmod +x "$DEST_PATH"
 fi
 
-ok "Installed ${BINARY_NAME} to ${INSTALL_DIR}/${BINARY_NAME}"
+# Verify
+if command -v zcp &>/dev/null; then
+  VERSION=$(zcp version 2>&1 || echo "zcp (version unavailable)")
+  echo ""
+  ok "Installed successfully!"
+  echo "  $VERSION"
+else
+  echo ""
+  ok "Installed to $DEST_PATH"
+  if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo ""
+    echo "  Add to PATH:"
+    echo "    export PATH=\"\$PATH:$INSTALL_DIR\""
+  fi
+fi
+
 echo ""
-info "Run: ${BINARY_NAME} version"
+echo "  Usage:"
+echo "    zcp profile add default"
+echo "    zcp --help"
 echo ""
