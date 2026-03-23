@@ -15,6 +15,9 @@ on:
     branches: [main, 'release/*']
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   changes:
     name: 1. Detect Changes
@@ -70,14 +73,16 @@ jobs:
       - name: Lint PowerShell scripts (PSScriptAnalyzer)
         shell: pwsh
         run: |
-          echo "Checking PowerShell scripts with PSScriptAnalyzer..."
+          Write-Output "Checking PowerShell scripts with PSScriptAnalyzer..."
+          $null = Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
           $results = Invoke-ScriptAnalyzer -Path scripts/*.ps1 -Severity Error,Warning
           if ($results) {
             $results | Format-Table -AutoSize
             throw "PSScriptAnalyzer found issues"
           }
-          echo "PowerShell scripts passed PSScriptAnalyzer"
+          Write-Output "PowerShell scripts passed PSScriptAnalyzer"
 
       - name: Validate PowerShell script syntax
         shell: pwsh
