@@ -45,20 +45,21 @@ func newInstanceListCmd() *cobra.Command {
 		Example: `  zcp instance list --zone <uuid>
   zcp instance list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runInstanceList(cmd, zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runInstanceList(cmd *cobra.Command, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := instance.NewService(client)
@@ -96,20 +97,21 @@ func newInstanceGetCmd() *cobra.Command {
 		Example: `  zcp instance get <uuid> --zone <zone-uuid>
   zcp instance get <uuid> --zone <zone-uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runInstanceGet(cmd, args[0], zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runInstanceGet(cmd *cobra.Command, vmUUID, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := instance.NewService(client)
@@ -169,9 +171,6 @@ func newInstanceCreateCmd() *cobra.Command {
 		Example: `  zcp instance create --zone <uuid> --name my-vm --template <uuid> --compute-offering <uuid> --network <uuid>
   zcp instance create --zone <uuid> --name my-vm --template <uuid> --compute-offering <uuid> --network <uuid> --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
@@ -198,7 +197,7 @@ func newInstanceCreateCmd() *cobra.Command {
 			}, wait)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Instance name (required)")
 	cmd.Flags().StringVar(&templateUUID, "template", "", "Template UUID (required)")
 	cmd.Flags().StringVar(&computeOfferingUUID, "compute-offering", "", "Compute offering UUID (required)")
@@ -213,9 +212,13 @@ func newInstanceCreateCmd() *cobra.Command {
 }
 
 func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest, wait bool) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
+	if req.ZoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := instance.NewService(client)
@@ -529,21 +532,22 @@ func newInstancePasswordListCmd() *cobra.Command {
 		Example: `  zcp instance password-list --zone <uuid>
   zcp instance password-list --zone <uuid> --instance <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runInstancePasswordList(cmd, zoneUUID, instanceUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "Filter by instance UUID (optional)")
 	return cmd
 }
 
 func runInstancePasswordList(cmd *cobra.Command, zoneUUID, instanceUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := instance.NewService(client)

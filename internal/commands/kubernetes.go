@@ -39,20 +39,21 @@ func newK8sVersionListCmd() *cobra.Command {
 		Example: `  zcp kubernetes version list --zone <uuid>
   zcp k8s version list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runK8sVersionList(cmd, zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runK8sVersionList(cmd *cobra.Command, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := kubernetes.NewService(client)
@@ -148,9 +149,6 @@ func newK8sClusterCreateCmd() *cobra.Command {
 		Example: `  zcp kubernetes create --zone <uuid> --name my-cluster --version <uuid> --compute-offering <uuid> --network <uuid> --workers 3 --ssh-key mykey
   zcp kubernetes create --zone <uuid> --name ha-cluster --version <uuid> --compute-offering <uuid> --network <uuid> --workers 3 --ssh-key mykey --ha --control-nodes 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
@@ -188,7 +186,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Cluster name (required)")
 	cmd.Flags().StringVar(&versionUUID, "version", "", "Kubernetes version UUID (required)")
 	cmd.Flags().StringVar(&computeOfferingUUID, "compute-offering", "", "Compute offering UUID (required)")
@@ -204,9 +202,13 @@ func newK8sClusterCreateCmd() *cobra.Command {
 }
 
 func runK8sClusterCreate(cmd *cobra.Command, req kubernetes.CreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
+	if req.ZoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := kubernetes.NewService(client)

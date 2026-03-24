@@ -49,21 +49,22 @@ func newVPNGatewayListCmd() *cobra.Command {
 		Example: `  zcp vpn gateway list --zone <uuid>
   zcp vpn gateway list --zone <uuid> --vpc <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runVPNGatewayList(cmd, zoneUUID, vpcUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
 	return cmd
 }
 
 func runVPNGatewayList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := vpn.NewGatewayService(client)
@@ -477,21 +478,22 @@ func newVPNConnListCmd() *cobra.Command {
 		Example: `  zcp vpn connection list --zone <uuid>
   zcp vpn connection list --zone <uuid> --vpc <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runVPNConnList(cmd, zoneUUID, vpcUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
 	return cmd
 }
 
 func runVPNConnList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := vpn.NewConnectionService(client)

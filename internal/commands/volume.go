@@ -37,12 +37,13 @@ func newVolumeListCmd() *cobra.Command {
   zcp volume list --zone <uuid> --instance <uuid>
   zcp volume list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := volume.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -69,7 +70,7 @@ func newVolumeListCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "Filter by instance UUID")
 	cmd.Flags().StringVar(&volumeUUID, "uuid", "", "Filter by volume UUID")
 	return cmd
@@ -86,18 +87,19 @@ func newVolumeCreateCmd() *cobra.Command {
 		Example: `  zcp volume create --zone <uuid> --name my-disk --storage-offering <uuid>
   zcp volume create --zone <uuid> --name my-disk --storage-offering <uuid> --disk-size 100`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
 			if storageOfferingUUID == "" {
 				return fmt.Errorf("--storage-offering is required")
 			}
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := volume.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -135,7 +137,7 @@ func newVolumeCreateCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Volume name (required)")
 	cmd.Flags().StringVar(&storageOfferingUUID, "storage-offering", "", "Storage offering UUID (required)")
 	cmd.Flags().IntVar(&diskSize, "disk-size", 0, "Custom disk size in GB (for custom offerings)")

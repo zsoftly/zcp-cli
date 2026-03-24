@@ -16,7 +16,8 @@ import (
 // 1. Load config and resolve the active profile
 // 2. Build an httpclient using profile credentials
 // 3. Build an output.Printer using the --output flag
-func buildClientAndPrinter(cmd *cobra.Command) (*config.GlobalFlags, *httpclient.Client, *output.Printer, error) {
+// Returns the resolved Profile so callers can read profile defaults (e.g. DefaultZone).
+func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Client, *output.Printer, error) {
 	// Read global persistent flags from root
 	profileName, _ := cmd.Root().PersistentFlags().GetString("profile")
 	outputFmt, _ := cmd.Root().PersistentFlags().GetString("output")
@@ -26,23 +27,14 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.GlobalFlags, *httpclient
 	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 	pager, _ := cmd.Root().PersistentFlags().GetBool("pager")
 
-	flags := &config.GlobalFlags{
-		Profile: profileName,
-		Output:  outputFmt,
-		APIURL:  apiURL,
-		Timeout: timeoutSec,
-		Debug:   debugFlag,
-		NoColor: noColor,
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
-		return flags, nil, nil, fmt.Errorf("loading config: %w", err)
+		return nil, nil, nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	profile, err := config.ResolveProfile(cfg, profileName)
 	if err != nil {
-		return flags, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	baseURL := config.ActiveAPIURL(profile, apiURL)
@@ -59,7 +51,24 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.GlobalFlags, *httpclient
 	printer := output.NewPrinter(os.Stdout, output.ParseFormat(outputFmt), noColor)
 	printer.SetPager(pager)
 
-	return flags, client, printer, nil
+	return profile, client, printer, nil
+}
+
+// resolveZone returns flagZone if set, otherwise the profile's default zone.
+// If neither is set it returns "" and the caller is responsible for the error.
+func resolveZone(profile *config.Profile, flagZone string) string {
+	if flagZone != "" {
+		return flagZone
+	}
+	if profile != nil {
+		return profile.DefaultZone
+	}
+	return ""
+}
+
+// errNoZone is the standard error shown when --zone is missing and no default is set.
+func errNoZone() error {
+	return fmt.Errorf("--zone is required (or set a default: zcp zone use <uuid>)")
 }
 
 // getTimeout reads the --timeout persistent flag value from the command's root.

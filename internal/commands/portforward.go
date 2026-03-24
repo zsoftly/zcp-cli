@@ -55,22 +55,23 @@ func newPortForwardListCmd() *cobra.Command {
   zcp portforward list --zone <uuid> --ip <uuid>
   zcp portforward list --zone <uuid> --instance <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runPortForwardList(cmd, zoneUUID, ipUUID, instanceUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&ipUUID, "ip", "", "Filter by IP address UUID")
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "Filter by VM UUID")
 	return cmd
 }
 
 func runPortForwardList(cmd *cobra.Command, zoneUUID, ipUUID, instanceUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := portforward.NewService(client)

@@ -80,18 +80,19 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 		Example: `  zcp vm-snapshot create --zone <uuid> --name my-snap --instance <uuid>
   zcp vm-snapshot create --zone <uuid> --name my-snap --instance <uuid> --description "pre-upgrade" --memory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
 			if instanceUUID == "" {
 				return fmt.Errorf("--instance is required")
 			}
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := vmsnapshot.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -130,7 +131,7 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Snapshot name (required)")
 	cmd.Flags().StringVar(&instanceUUID, "instance", "", "VM instance UUID (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Optional description")

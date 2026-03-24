@@ -39,21 +39,22 @@ func newIPListCmd() *cobra.Command {
 		Example: `  zcp ip list --zone <uuid>
   zcp ip list --zone <uuid> --network <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runIPList(cmd, zoneUUID, networkUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&networkUUID, "network", "", "Filter by network UUID")
 	return cmd
 }
 
 func runIPList(cmd *cobra.Command, zoneUUID, networkUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := ipaddress.NewService(client)

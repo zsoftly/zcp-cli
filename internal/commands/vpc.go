@@ -36,20 +36,21 @@ func newVPCListCmd() *cobra.Command {
 		Example: `  zcp vpc list --zone <uuid>
   zcp vpc list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runVPCList(cmd, zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runVPCList(cmd *cobra.Command, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := vpc.NewService(client)
@@ -126,9 +127,6 @@ func newVPCCreateCmd() *cobra.Command {
 		Example: `  zcp vpc create --zone <uuid> --name my-vpc --offering <uuid> --cidr 10.0.0.0/8
   zcp vpc create --zone <uuid> --name my-vpc --offering <uuid> --cidr 10.0.0.0/8 --description "Production VPC"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
@@ -152,7 +150,7 @@ func newVPCCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "VPC name (required)")
 	cmd.Flags().StringVar(&offeringUUID, "offering", "", "VPC offering UUID (required)")
 	cmd.Flags().StringVar(&cidr, "cidr", "", "CIDR block (required, e.g. 10.0.0.0/8)")
@@ -163,9 +161,13 @@ func newVPCCreateCmd() *cobra.Command {
 }
 
 func runVPCCreate(cmd *cobra.Command, req vpc.CreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
+	if req.ZoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := vpc.NewService(client)

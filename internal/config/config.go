@@ -18,23 +18,13 @@ const (
 	DefaultTimeout = 30
 )
 
-// GlobalFlags holds values parsed from Cobra persistent flags.
-// Defined here so both root and commands can reference the same type.
-type GlobalFlags struct {
-	Profile string
-	Output  string
-	APIURL  string
-	Timeout int
-	Debug   bool
-	NoColor bool
-}
-
 // Profile holds credentials and settings for a named profile.
 type Profile struct {
-	Name      string `yaml:"name"`
-	APIKey    string `yaml:"apikey"`
-	SecretKey string `yaml:"secretkey"`
-	APIURL    string `yaml:"api_url,omitempty"`
+	Name        string `yaml:"name"`
+	APIKey      string `yaml:"apikey"`
+	SecretKey   string `yaml:"secretkey"`
+	APIURL      string `yaml:"api_url,omitempty"`
+	DefaultZone string `yaml:"default_zone,omitempty"`
 }
 
 // Config is the top-level config structure stored on disk.

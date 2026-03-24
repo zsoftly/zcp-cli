@@ -77,15 +77,16 @@ func newSnapshotCreateCmd() *cobra.Command {
 			if volumeUUID == "" {
 				return fmt.Errorf("--volume is required")
 			}
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := snapshot.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -114,7 +115,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&volumeUUID, "volume", "", "Volume UUID to snapshot (required)")
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Snapshot name (required)")
 	return cmd
 }

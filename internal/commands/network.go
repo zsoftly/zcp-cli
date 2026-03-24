@@ -35,20 +35,21 @@ func newNetworkListCmd() *cobra.Command {
 		Example: `  zcp network list --zone <uuid>
   zcp network list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runNetworkList(cmd, zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runNetworkList(cmd *cobra.Command, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := network.NewService(client)
@@ -84,20 +85,21 @@ func newNetworkGetCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		Example: `  zcp network get <uuid> --zone <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runNetworkGet(cmd, args[0], zoneUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
 func runNetworkGet(cmd *cobra.Command, uuid, zoneUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := network.NewService(client)
@@ -134,9 +136,6 @@ func newNetworkCreateCmd() *cobra.Command {
 		Short:   "Create a new network",
 		Example: `  zcp network create --zone <uuid> --name my-net --offering <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
@@ -152,7 +151,7 @@ func newNetworkCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Network name (required)")
 	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
 	cmd.Flags().StringVar(&vmUUID, "instance", "", "Virtual machine UUID to attach on creation")
@@ -161,9 +160,13 @@ func newNetworkCreateCmd() *cobra.Command {
 }
 
 func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
+	if req.ZoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := network.NewService(client)

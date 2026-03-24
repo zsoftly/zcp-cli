@@ -165,16 +165,3 @@ PowerShell:
 	}
 	return cmd
 }
-
-// GlobalFlags returns the current global flag values for use in subcommand constructors.
-// Note: this is called from PersistentPreRunE hooks in subcommands if needed.
-func GlobalFlags() config.GlobalFlags {
-	return config.GlobalFlags{
-		Profile: profileFlag,
-		Output:  outputFlag,
-		APIURL:  apiURLFlag,
-		Timeout: timeoutFlag,
-		Debug:   debugFlag,
-		NoColor: noColorFlag,
-	}
-}

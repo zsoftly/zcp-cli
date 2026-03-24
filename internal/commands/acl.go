@@ -34,21 +34,22 @@ func newACLListCmd() *cobra.Command {
 		Example: `  zcp acl list --zone <uuid>
   zcp acl list --zone <uuid> --vpc <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			return runACLList(cmd, zoneUUID, vpcUUID)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
 	return cmd
 }
 
 func runACLList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := acl.NewService(client)

@@ -79,9 +79,6 @@ func newTagCreateCmd() *cobra.Command {
 		Short:   "Create a resource tag",
 		Example: `  zcp tag create --zone <uuid> --resource <uuid> --type VirtualMachine --key env --value prod`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if zoneUUID == "" {
-				return fmt.Errorf("--zone is required")
-			}
 			if resourceUUID == "" {
 				return fmt.Errorf("--resource is required")
 			}
@@ -101,7 +98,7 @@ func newTagCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (required)")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&resourceUUID, "resource", "", "Resource UUID to tag (required)")
 	cmd.Flags().StringVar(&resourceType, "type", "", "Resource type (e.g. VirtualMachine) (required)")
 	cmd.Flags().StringVar(&key, "key", "", "Tag key (required)")
@@ -110,9 +107,13 @@ func newTagCreateCmd() *cobra.Command {
 }
 
 func runTagCreate(cmd *cobra.Command, zoneUUID, resourceType string, req tags.CreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	profile, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
+	}
+	zoneUUID = resolveZone(profile, zoneUUID)
+	if zoneUUID == "" {
+		return errNoZone()
 	}
 
 	svc := tags.NewService(client)
