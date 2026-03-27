@@ -11,6 +11,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **`host list` command**: Lists hypervisor hosts with CPU cores, VM count, and status
 - **`resource quota` subcommand**: Shows resource quota limits with unit/used/available/maximum
+- **`vpc create-network`**: Create VPC tier networks via `/restapi/vpc/createVpcNetwork`
+- **`vpc update-network`**: Update VPC tier networks via `/restapi/vpc/updateVpcNetwork`
 - **Network VPC tier flags**: `--vpc`, `--gateway`, `--netmask`, `--acl` on `network create`
 - **Integration test suite**: Full lifecycle tests (SSH key, security group, instance,
   volume, snapshot, stop/start/destroy) plus parallel smoke tests across 10 resource types

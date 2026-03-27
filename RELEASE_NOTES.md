@@ -20,14 +20,19 @@ zcp host list
 
 Lists all hypervisor hosts with CPU cores, VM count, and status.
 
-### Network create supports VPC tiers
+### VPC tier network commands
+
+Create and update networks inside a VPC using the dedicated VPC endpoint:
 
 ```bash
-zcp network create --name my-tier --offering <uuid> --vpc <uuid> \
-  --gateway 10.1.1.1 --netmask 255.255.255.0
+zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> \
+  --gateway 10.1.1.1 --netmask 255.255.255.0 --acl <uuid>
+
+zcp vpc update-network <network-uuid> --offering <uuid> --name new-name
 ```
 
-New flags: `--vpc`, `--gateway`, `--netmask`, `--acl`
+`network create` also supports `--vpc`, `--gateway`, `--netmask`, `--acl` flags for
+isolated network creation.
 
 ### Resource quota subcommand
 

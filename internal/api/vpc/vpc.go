@@ -33,6 +33,37 @@ type CreateRequest struct {
 	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider"`
 }
 
+// CreateNetworkRequest holds parameters for creating a VPC tier network.
+type CreateNetworkRequest struct {
+	Name                string `json:"name"`
+	ZoneUUID            string `json:"zoneUuid"`
+	NetworkOfferingUUID string `json:"networkOfferingUuid"`
+	VPCUUID             string `json:"vpcUuid"`
+	Gateway             string `json:"gateway"`
+	Netmask             string `json:"netmask"`
+	ACLUUID             string `json:"aclUuid,omitempty"`
+}
+
+// VPCNetwork represents a network tier inside a VPC.
+type VPCNetwork struct {
+	UUID                string `json:"uuid"`
+	Name                string `json:"name"`
+	IsActive            bool   `json:"isActive"`
+	DomainName          string `json:"domainName"`
+	CIDR                string `json:"cIDR"`
+	Gateway             string `json:"gateway"`
+	NetworkType         string `json:"networkType"`
+	NetworkOfferingUUID string `json:"networkOfferingUuid"`
+	ZoneUUID            string `json:"zoneUuid"`
+	NetworkDomain       string `json:"networkDomain"`
+	Status              string `json:"status"`
+}
+
+type listVpcNetworkResponse struct {
+	Count               int          `json:"count"`
+	ListNetworkResponse []VPCNetwork `json:"listNetworkResponse"`
+}
+
 // UpdateRequest holds parameters for updating a VPC.
 type UpdateRequest struct {
 	UUID        string `json:"uuid"`
@@ -91,6 +122,39 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*VPC, error) {
 		return nil, fmt.Errorf("create VPC returned empty response")
 	}
 	return &resp.ListVpcResponse[0], nil
+}
+
+// CreateNetwork creates a VPC tier network using the dedicated VPC endpoint.
+func (s *Service) CreateNetwork(ctx context.Context, req CreateNetworkRequest) (*VPCNetwork, error) {
+	var resp listVpcNetworkResponse
+	if err := s.client.Post(ctx, "/restapi/vpc/createVpcNetwork", req, &resp); err != nil {
+		return nil, fmt.Errorf("creating VPC network: %w", err)
+	}
+	if len(resp.ListNetworkResponse) == 0 {
+		return nil, fmt.Errorf("create VPC network returned empty response")
+	}
+	return &resp.ListNetworkResponse[0], nil
+}
+
+// UpdateNetworkRequest holds parameters for updating a VPC tier network.
+type UpdateNetworkRequest struct {
+	UUID                string `json:"uuid"`
+	Name                string `json:"name,omitempty"`
+	Description         string `json:"description,omitempty"`
+	NetworkOfferingUUID string `json:"networkOfferingUuid"`
+	NetworkDomain       string `json:"networkDomain,omitempty"`
+}
+
+// UpdateNetwork modifies a VPC tier network.
+func (s *Service) UpdateNetwork(ctx context.Context, req UpdateNetworkRequest) (*VPCNetwork, error) {
+	var resp listVpcNetworkResponse
+	if err := s.client.Put(ctx, "/restapi/vpc/updateVpcNetwork", nil, req, &resp); err != nil {
+		return nil, fmt.Errorf("updating VPC network: %w", err)
+	}
+	if len(resp.ListNetworkResponse) == 0 {
+		return nil, fmt.Errorf("update VPC network returned empty response")
+	}
+	return &resp.ListNetworkResponse[0], nil
 }
 
 // Update modifies a VPC's mutable attributes.

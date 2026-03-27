@@ -24,6 +24,8 @@ func NewVPCCmd() *cobra.Command {
 	cmd.AddCommand(newVPCUpdateCmd())
 	cmd.AddCommand(newVPCDeleteCmd())
 	cmd.AddCommand(newVPCRestartCmd())
+	cmd.AddCommand(newVPCCreateNetworkCmd())
+	cmd.AddCommand(newVPCUpdateNetworkCmd())
 	return cmd
 }
 
@@ -300,6 +302,129 @@ func newVPCRestartCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&cleanUp, "cleanup", false, "Clean up stale resources during restart")
 	cmd.Flags().BoolVar(&redundant, "redundant", false, "Enable redundant VPC router")
+	return cmd
+}
+
+func newVPCCreateNetworkCmd() *cobra.Command {
+	var zoneUUID, name, offeringUUID, vpcUUID, gateway, netmask, aclUUID string
+
+	cmd := &cobra.Command{
+		Use:   "create-network",
+		Short: "Create a VPC tier network",
+		Example: `  zcp vpc create-network --zone <uuid> --vpc <uuid> --name my-tier --offering <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0
+  zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0 --acl <uuid>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if name == "" {
+				return fmt.Errorf("--name is required")
+			}
+			if offeringUUID == "" {
+				return fmt.Errorf("--offering is required")
+			}
+			if vpcUUID == "" {
+				return fmt.Errorf("--vpc is required")
+			}
+			if gateway == "" {
+				return fmt.Errorf("--gateway is required")
+			}
+			if netmask == "" {
+				return fmt.Errorf("--netmask is required")
+			}
+
+			profile, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
+			}
+
+			svc := vpc.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			net, err := svc.CreateNetwork(ctx, vpc.CreateNetworkRequest{
+				Name:                name,
+				ZoneUUID:            zoneUUID,
+				NetworkOfferingUUID: offeringUUID,
+				VPCUUID:             vpcUUID,
+				Gateway:             gateway,
+				Netmask:             netmask,
+				ACLUUID:             aclUUID,
+			})
+			if err != nil {
+				return fmt.Errorf("vpc create-network: %w", err)
+			}
+
+			headers := []string{"FIELD", "VALUE"}
+			rows := [][]string{
+				{"UUID", net.UUID},
+				{"Name", net.Name},
+				{"CIDR", net.CIDR},
+				{"Gateway", net.Gateway},
+				{"Status", net.Status},
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
+	cmd.Flags().StringVar(&name, "name", "", "Network name (required)")
+	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
+	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (required)")
+	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required, e.g. 10.1.1.1)")
+	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (required, e.g. 255.255.255.0)")
+	cmd.Flags().StringVar(&aclUUID, "acl", "", "Network ACL UUID")
+	return cmd
+}
+
+func newVPCUpdateNetworkCmd() *cobra.Command {
+	var name, description, offeringUUID, networkDomain string
+
+	cmd := &cobra.Command{
+		Use:   "update-network <uuid>",
+		Short: "Update a VPC tier network",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp vpc update-network <uuid> --offering <uuid> --name new-name
+  zcp vpc update-network <uuid> --offering <uuid> --description "Updated tier"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if offeringUUID == "" {
+				return fmt.Errorf("--offering is required")
+			}
+
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+
+			svc := vpc.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			net, err := svc.UpdateNetwork(ctx, vpc.UpdateNetworkRequest{
+				UUID:                args[0],
+				Name:                name,
+				Description:         description,
+				NetworkOfferingUUID: offeringUUID,
+				NetworkDomain:       networkDomain,
+			})
+			if err != nil {
+				return fmt.Errorf("vpc update-network: %w", err)
+			}
+
+			headers := []string{"FIELD", "VALUE"}
+			rows := [][]string{
+				{"UUID", net.UUID},
+				{"Name", net.Name},
+				{"CIDR", net.CIDR},
+				{"Status", net.Status},
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "New network name")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
+	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
+	cmd.Flags().StringVar(&networkDomain, "network-domain", "", "Network domain")
 	return cmd
 }
 
