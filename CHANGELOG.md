@@ -5,6 +5,30 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2026-03-27
+
+### Added
+
+- **`host list` command**: Lists hypervisor hosts with CPU cores, VM count, and status
+- **`resource quota` subcommand**: Shows resource quota limits with unit/used/available/maximum
+- **Network VPC tier flags**: `--vpc`, `--gateway`, `--netmask`, `--acl` on `network create`
+- **Integration test suite**: Full lifecycle tests (SSH key, security group, instance,
+  volume, snapshot, stop/start/destroy) plus parallel smoke tests across 10 resource types
+
+### Fixed
+
+- **JSON unmarshal errors**: `volume.createdTimeStamp` (string to int64),
+  `host.cpuCores`/`vmCount` (int to string), `kubernetes.minMemory`/`minCpuNumber`
+  (string to int)
+- **VPC/network CIDR field**: Corrected from `getcIDR` to `cIDR` (API spec was wrong)
+- **VPC create**: `description` and `publicLoadBalancerProvider` now sent as required fields
+- **`network.IsPublic`**: Moved from JSON body to query parameter per API spec
+- **`snapshot-policy list`**: Now requires `--volume` flag (matches API requirement)
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.2...0.0.3
+
+---
+
 ## [0.0.2] - 2026-03-23
 
 ### Added

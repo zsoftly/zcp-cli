@@ -1,29 +1,53 @@
-# zcp 0.0.2 Release Notes
+# zcp 0.0.3 Release Notes
 
 ## What's New
 
-### Default zone per profile
+### API field type fixes
 
-Stop passing `--zone` on every command. Set it once:
+Fixed JSON unmarshal errors across multiple resources where the live API returns
+different types than the OpenAPI spec documents:
 
-```bash
-zcp zone list                  # find your zone UUID
-zcp zone use <uuid>            # save it to your active profile
-```
+- `volume` — `createdTimeStamp` (string to int64)
+- `host` — `cpuCores`, `vmCount` (int to string)
+- `kubernetes` — `minMemory`, `minCpuNumber` (string to int)
+- `vpc` / `network` — CIDR field name corrected (`getcIDR` to `cIDR`)
 
-Every command that previously required `--zone` now falls back to the profile default
-automatically. You can still override per-command:
-
-```bash
-zcp instance list              # uses default zone
-zcp instance list --zone <uuid>  # overrides for this call
-```
-
-To clear the default:
+### New `host list` command
 
 ```bash
-zcp zone use ""
+zcp host list
 ```
+
+Lists all hypervisor hosts with CPU cores, VM count, and status.
+
+### Network create supports VPC tiers
+
+```bash
+zcp network create --name my-tier --offering <uuid> --vpc <uuid> \
+  --gateway 10.1.1.1 --netmask 255.255.255.0
+```
+
+New flags: `--vpc`, `--gateway`, `--netmask`, `--acl`
+
+### Resource quota subcommand
+
+```bash
+zcp resource quota
+```
+
+### Integration test suite
+
+Full lifecycle tests against the live API:
+
+```bash
+go test -tags integration -v -timeout 30m ./tests/integration/
+```
+
+### Other fixes
+
+- `snapshot-policy list` now requires `--volume` (matches API spec)
+- `network.IsPublic` moved from body to query parameter (matches API spec)
+- VPC `description` and `publicLoadBalancerProvider` now required in create
 
 ---
 
@@ -58,4 +82,4 @@ Download the binary for your platform from the assets below, make it executable,
 | Windows | amd64        | `zcp-windows-amd64.exe` |
 | Windows | arm64        | `zcp-windows-arm64.exe` |
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.1...0.0.2
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.2...0.0.3
