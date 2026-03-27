@@ -1,28 +1,11 @@
-# zcp 0.0.3 Release Notes
+# zcp 0.0.4 Release Notes
 
 ## What's New
 
-### API field type fixes
-
-Fixed JSON unmarshal errors across multiple resources where the live API returns
-different types than the OpenAPI spec documents:
-
-- `volume` — `createdTimeStamp` (string to int64)
-- `host` — `cpuCores`, `vmCount` (int to string)
-- `kubernetes` — `minMemory`, `minCpuNumber` (string to int)
-- `vpc` / `network` — CIDR field name corrected (`getcIDR` to `cIDR`)
-
-### New `host list` command
-
-```bash
-zcp host list
-```
-
-Lists all hypervisor hosts with CPU cores, VM count, and status.
-
 ### VPC tier network commands
 
-Create and update networks inside a VPC using the dedicated VPC endpoint:
+Create and update networks inside a VPC using the dedicated StackBill endpoint
+(`/restapi/vpc/createVpcNetwork`):
 
 ```bash
 zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> \
@@ -31,28 +14,8 @@ zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> \
 zcp vpc update-network <network-uuid> --offering <uuid> --name new-name
 ```
 
-`network create` also supports `--vpc`, `--gateway`, `--netmask`, `--acl` flags for
-isolated network creation.
-
-### Resource quota subcommand
-
-```bash
-zcp resource quota
-```
-
-### Integration test suite
-
-Full lifecycle tests against the live API:
-
-```bash
-go test -tags integration -v -timeout 30m ./tests/integration/
-```
-
-### Other fixes
-
-- `snapshot-policy list` now requires `--volume` (matches API spec)
-- `network.IsPublic` moved from body to query parameter (matches API spec)
-- VPC `description` and `publicLoadBalancerProvider` now required in create
+This resolves the VPC tier creation issue — the previous `network create` endpoint
+(`/restapi/network/createNetwork`) is for isolated networks only.
 
 ---
 
@@ -87,4 +50,4 @@ Download the binary for your platform from the assets below, make it executable,
 | Windows | amd64        | `zcp-windows-amd64.exe` |
 | Windows | arm64        | `zcp-windows-arm64.exe` |
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.2...0.0.3
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.3...0.0.4

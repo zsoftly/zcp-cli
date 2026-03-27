@@ -5,6 +5,17 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.4] - 2026-03-27
+
+### Added
+
+- **`vpc create-network`**: Create VPC tier networks via `/restapi/vpc/createVpcNetwork`
+- **`vpc update-network`**: Update VPC tier networks via `/restapi/vpc/updateVpcNetwork`
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.3...0.0.4
+
+---
+
 ## [0.0.3] - 2026-03-27
 
 ### Added
