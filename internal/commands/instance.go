@@ -144,8 +144,9 @@ func runInstanceGet(cmd *cobra.Command, vmUUID, zoneUUID string) error {
 		{"SSH Key UUID", inst.SSHKeyUUID},
 		{"Owner", inst.OwnerName},
 		{"Root Disk Size", strconv.FormatInt(inst.RootDiskSize, 10)},
-		{"Volume Size", strconv.FormatInt(inst.VolumeSize, 10)},
+		{"Volume Size", inst.VolumeSize},
 		{"Disk Size", strconv.FormatInt(inst.DiskSize, 10)},
+		{"CPU Cores", inst.CPUCore},
 	}
 	return printer.PrintTable(headers, rows)
 }

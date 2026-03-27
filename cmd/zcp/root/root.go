@@ -93,6 +93,7 @@ func init() {
 	rootCmd.AddCommand(commands.NewKubernetesCmd())
 	rootCmd.AddCommand(commands.NewUsageCmd())
 	rootCmd.AddCommand(commands.NewCostCmd())
+	rootCmd.AddCommand(commands.NewHostCmd())
 	rootCmd.AddCommand(commands.NewAdminCmd())
 
 	// Flag completions — static values, no network calls

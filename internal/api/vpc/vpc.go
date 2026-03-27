@@ -16,7 +16,7 @@ type VPC struct {
 	Description string `json:"description"`
 	Status      string `json:"status"`
 	IsActive    bool   `json:"isActive"`
-	CIDR        string `json:"getcIDR"`
+	CIDR        string `json:"cIDR"`
 	ZoneUUID    string `json:"zoneUuid"`
 	ZoneName    string `json:"zoneName"`
 	DomainName  string `json:"domainName"`
@@ -27,10 +27,10 @@ type CreateRequest struct {
 	Name                       string `json:"name"`
 	ZoneUUID                   string `json:"zoneUuid"`
 	VPCOfferingUUID            string `json:"vpcOfferingUuid"`
-	CIDR                       string `json:"getcIDR"`
-	Description                string `json:"description,omitempty"`
+	CIDR                       string `json:"cIDR"`
+	Description                string `json:"description"`
 	NetworkDomain              string `json:"networkDomain,omitempty"`
-	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider,omitempty"`
+	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider"`
 }
 
 // UpdateRequest holds parameters for updating a VPC.

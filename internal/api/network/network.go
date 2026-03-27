@@ -17,7 +17,7 @@ type Network struct {
 	IsActive            bool   `json:"isActive"`
 	NetworkType         string `json:"networkType"`
 	Gateway             string `json:"gateway"`
-	CIDR                string `json:"getcIDR"`
+	CIDR                string `json:"cIDR"`
 	ZoneUUID            string `json:"zoneUuid"`
 	DomainName          string `json:"domainName"`
 	NetworkOfferingUUID string `json:"networkOfferingUuid"`
@@ -32,7 +32,12 @@ type CreateRequest struct {
 	ZoneUUID            string `json:"zoneUuid"`
 	NetworkOfferingUUID string `json:"networkOfferingUuid"`
 	VirtualMachineUUID  string `json:"virtualmachineUuid,omitempty"`
-	IsPublic            bool   `json:"isPublic,omitempty"`
+	VPCUUID             string `json:"vpcUuid,omitempty"`
+	Gateway             string `json:"gateway,omitempty"`
+	Netmask             string `json:"netmask,omitempty"`
+	ACLUUID             string `json:"aclUuid,omitempty"`
+	// IsPublic is sent as a query parameter, not in the JSON body.
+	IsPublic bool `json:"-"`
 }
 
 // UpdateRequest holds parameters for updating a network.
@@ -87,8 +92,12 @@ func (s *Service) Get(ctx context.Context, zoneUUID, uuid string) (*Network, err
 
 // Create provisions a new network.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Network, error) {
+	path := "/restapi/network/createNetwork"
+	if req.IsPublic {
+		path += "?isPublic=true"
+	}
 	var resp listNetworkResponse
-	if err := s.client.Post(ctx, "/restapi/network/createNetwork", req, &resp); err != nil {
+	if err := s.client.Post(ctx, path, req, &resp); err != nil {
 		return nil, fmt.Errorf("creating network: %w", err)
 	}
 	if len(resp.ListNetworkResponse) == 0 {

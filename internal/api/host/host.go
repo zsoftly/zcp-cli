@@ -15,13 +15,13 @@ type Host struct {
 	Name                      string `json:"name"`
 	Hypervisor                string `json:"hypervisor"`
 	PodName                   string `json:"podName"`
-	CPUCores                  int    `json:"cpuCores"`
+	CPUCores                  string `json:"cpuCores"`
 	CPUAllocated              string `json:"cpuAllocated"`
 	CPUUsed                   string `json:"cpuUsed"`
 	MemoryTotal               string `json:"memoryTotal"`
 	MemoryAllocatedPercentage string `json:"memoryAllocatedPercentage"`
 	MemoryUsedPercentage      string `json:"memoryUsedPercentage"`
-	VMCount                   int    `json:"vmCount"`
+	VMCount                   string `json:"vmCount"`
 	IsActive                  bool   `json:"isActive"`
 }
 

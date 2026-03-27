@@ -29,13 +29,16 @@ func newOfferingComputeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compute",
 		Short: "List compute offerings (instance sizes)",
-		Example: `  zcp offering compute
-  zcp offering compute --zone <uuid>
+		Example: `  zcp offering compute --zone <uuid>
   zcp offering compute --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := offering.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -57,7 +60,7 @@ func newOfferingComputeCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
@@ -65,14 +68,17 @@ func newOfferingStorageCmd() *cobra.Command {
 	var zoneUUID string
 
 	cmd := &cobra.Command{
-		Use:   "storage",
-		Short: "List storage offerings",
-		Example: `  zcp offering storage
-  zcp offering storage --zone <uuid>`,
+		Use:     "storage",
+		Short:   "List storage offerings",
+		Example: `  zcp offering storage --zone <uuid>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := offering.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -95,7 +101,7 @@ func newOfferingStorageCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
@@ -106,9 +112,13 @@ func newOfferingNetworkCmd() *cobra.Command {
 		Use:   "network",
 		Short: "List network offerings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := offering.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -130,7 +140,7 @@ func newOfferingNetworkCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
@@ -141,9 +151,13 @@ func newOfferingVPCCmd() *cobra.Command {
 		Use:   "vpc",
 		Short: "List VPC offerings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := offering.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -162,6 +176,6 @@ func newOfferingVPCCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }

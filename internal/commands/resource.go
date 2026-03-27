@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ func NewResourceCmd() *cobra.Command {
 		Short: "View cloud resource limits and availability",
 	}
 	cmd.AddCommand(newResourceAvailableCmd())
+	cmd.AddCommand(newResourceQuotaCmd())
 	return cmd
 }
 
@@ -44,6 +46,43 @@ func newResourceAvailableCmd() *cobra.Command {
 			for _, r := range resources {
 				rows = append(rows, []string{
 					r.ResourceType, r.UsedLimit, r.AvailableLimit, r.MaximumLimit,
+				})
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
+	return cmd
+}
+
+func newResourceQuotaCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "quota",
+		Short: "List resource quota limits for your account",
+		Example: `  zcp resource quota
+  zcp resource quota --output json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := resource.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			quotas, err := svc.ListQuota(ctx, "")
+			if err != nil {
+				return fmt.Errorf("resource quota: %w", err)
+			}
+
+			headers := []string{"QUOTA TYPE", "UNIT", "USED", "AVAILABLE", "MAXIMUM"}
+			rows := make([][]string, 0, len(quotas))
+			for _, q := range quotas {
+				rows = append(rows, []string{
+					q.QuotaType,
+					q.UnitType,
+					strconv.FormatInt(q.UsedLimit, 10),
+					strconv.FormatInt(q.AvailableLimit, 10),
+					strconv.FormatInt(q.MaximumLimit, 10),
 				})
 			}
 			return printer.PrintTable(headers, rows)

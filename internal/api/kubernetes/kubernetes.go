@@ -40,8 +40,8 @@ type Version struct {
 	Name         string `json:"name"`
 	Description  string `json:"description"`
 	IsActive     bool   `json:"isActive"`
-	MinMemory    string `json:"minMemory"`
-	MinCPUNumber string `json:"minCpuNumber"`
+	MinMemory    int    `json:"minMemory"`
+	MinCPUNumber int    `json:"minCpuNumber"`
 }
 
 // CreateRequest holds parameters for creating a Kubernetes cluster.

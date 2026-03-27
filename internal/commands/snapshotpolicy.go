@@ -29,10 +29,12 @@ func newSnapshotPolicyListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List snapshot policies",
-		Example: `  zcp snapshot-policy list
-  zcp snapshot-policy list --volume <uuid>
-  zcp snapshot-policy list --output json`,
+		Example: `  zcp snapshot-policy list --volume <uuid>
+  zcp snapshot-policy list --volume <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if volumeUUID == "" {
+				return fmt.Errorf("--volume is required")
+			}
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err

@@ -128,13 +128,14 @@ func runNetworkGet(cmd *cobra.Command, uuid, zoneUUID string) error {
 }
 
 func newNetworkCreateCmd() *cobra.Command {
-	var zoneUUID, name, offeringUUID, vmUUID string
+	var zoneUUID, name, offeringUUID, vmUUID, vpcUUID, gateway, netmask, aclUUID string
 	var isPublic bool
 
 	cmd := &cobra.Command{
-		Use:     "create",
-		Short:   "Create a new network",
-		Example: `  zcp network create --zone <uuid> --name my-net --offering <uuid>`,
+		Use:   "create",
+		Short: "Create a new network",
+		Example: `  zcp network create --zone <uuid> --name my-net --offering <uuid>
+  zcp network create --zone <uuid> --name my-tier --offering <uuid> --vpc <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -148,6 +149,10 @@ func newNetworkCreateCmd() *cobra.Command {
 				NetworkOfferingUUID: offeringUUID,
 				VirtualMachineUUID:  vmUUID,
 				IsPublic:            isPublic,
+				VPCUUID:             vpcUUID,
+				Gateway:             gateway,
+				Netmask:             netmask,
+				ACLUUID:             aclUUID,
 			})
 		},
 	}
@@ -156,6 +161,10 @@ func newNetworkCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
 	cmd.Flags().StringVar(&vmUUID, "instance", "", "Virtual machine UUID to attach on creation")
 	cmd.Flags().BoolVar(&isPublic, "public", false, "Mark network as public")
+	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (for creating a VPC tier network)")
+	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required for VPC tiers)")
+	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (required for VPC tiers, e.g. 255.255.255.0)")
+	cmd.Flags().StringVar(&aclUUID, "acl", "", "Network ACL UUID (for VPC tiers)")
 	return cmd
 }
 

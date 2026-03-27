@@ -25,7 +25,7 @@ type Volume struct {
 	ZoneUUID            string `json:"zoneUuid"`
 	DomainName          string `json:"domainName"`
 	JobID               string `json:"jobId"`
-	CreatedAt           string `json:"createdTimeStamp"`
+	CreatedAt           int64  `json:"createdTimeStamp"`
 	ErrorMessage        string `json:"errorMessage"`
 	IsShrink            bool   `json:"isShrink"`
 }

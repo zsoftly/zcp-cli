@@ -80,11 +80,11 @@ func runAdminHostList(cmd *cobra.Command, hostUUID string) error {
 			h.Name,
 			h.Hypervisor,
 			h.PodName,
-			strconv.Itoa(h.CPUCores),
+			h.CPUCores,
 			h.CPUUsed,
 			h.MemoryTotal,
 			h.MemoryUsedPercentage,
-			strconv.Itoa(h.VMCount),
+			h.VMCount,
 		})
 	}
 	return printer.PrintTable(headers, rows)

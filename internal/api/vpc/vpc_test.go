@@ -167,8 +167,8 @@ func TestVPCCreate(t *testing.T) {
 	if gotBody["vpcOfferingUuid"] != "offering-1" {
 		t.Errorf("body[vpcOfferingUuid] = %v, want %q", gotBody["vpcOfferingUuid"], "offering-1")
 	}
-	if gotBody["getcIDR"] != "10.0.0.0/8" {
-		t.Errorf("body[getcIDR] = %v, want %q", gotBody["getcIDR"], "10.0.0.0/8")
+	if gotBody["cIDR"] != "10.0.0.0/8" {
+		t.Errorf("body[cIDR] = %v, want %q", gotBody["cIDR"], "10.0.0.0/8")
 	}
 }
 

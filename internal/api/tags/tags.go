@@ -20,6 +20,9 @@ type Tag struct {
 }
 
 // CreateRequest holds parameters for creating a resource tag.
+// NOTE: The createTags endpoint has a known server-side bug where the Kong-to-CloudStack
+// translation layer does not properly map the request body to CloudStack's tags parameter.
+// This request format matches the documented API spec (KongCreateTagsRequest schema).
 type CreateRequest struct {
 	Key          string `json:"key"`
 	Value        string `json:"value"`

@@ -28,8 +28,8 @@ type listHostResponse struct {
 
 func TestHostList(t *testing.T) {
 	expected := []host.Host{
-		{UUID: "host-1", Name: "hypervisor-01", Hypervisor: "KVM", CPUCores: 32, VMCount: 10},
-		{UUID: "host-2", Name: "hypervisor-02", Hypervisor: "KVM", CPUCores: 64, VMCount: 5},
+		{UUID: "host-1", Name: "hypervisor-01", Hypervisor: "KVM", CPUCores: "32", VMCount: "10"},
+		{UUID: "host-2", Name: "hypervisor-02", Hypervisor: "KVM", CPUCores: "64", VMCount: "5"},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +60,7 @@ func TestHostList(t *testing.T) {
 
 func TestHostListWithUUID(t *testing.T) {
 	expected := []host.Host{
-		{UUID: "host-1", Name: "hypervisor-01", Hypervisor: "KVM", CPUCores: 32},
+		{UUID: "host-1", Name: "hypervisor-01", Hypervisor: "KVM", CPUCores: "32"},
 	}
 
 	var gotUUID string

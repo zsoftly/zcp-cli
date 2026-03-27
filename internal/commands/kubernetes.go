@@ -72,8 +72,8 @@ func runK8sVersionList(cmd *cobra.Command, zoneUUID string) error {
 			v.UUID,
 			v.Name,
 			v.Description,
-			v.MinMemory,
-			v.MinCPUNumber,
+			strconv.Itoa(v.MinMemory),
+			strconv.Itoa(v.MinCPUNumber),
 			strconv.FormatBool(v.IsActive),
 		})
 	}

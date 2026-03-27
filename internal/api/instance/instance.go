@@ -31,8 +31,10 @@ type Instance struct {
 	SSHKeyUUID          string `json:"sshUuid"`
 	OwnerName           string `json:"instanceOwnerName"`
 	RootDiskSize        int64  `json:"rootDiskSize"`
-	VolumeSize          int64  `json:"volumeSize"`
+	VolumeSize          string `json:"volumeSize"`
 	DiskSize            int64  `json:"diskSize"`
+	CPUCore             string `json:"cpuCore"`
+	Status              string `json:"status"`
 }
 
 // Network represents an attached network on an instance.

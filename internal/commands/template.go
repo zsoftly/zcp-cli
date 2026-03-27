@@ -25,13 +25,16 @@ func newTemplateListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available templates",
-		Example: `  zcp template list
-  zcp template list --zone <uuid>
-  zcp template list --output json`,
+		Example: `  zcp template list --zone <uuid>
+  zcp template list --zone <uuid> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, printer, err := buildClientAndPrinter(cmd)
+			profile, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
+			}
+			zoneUUID = resolveZone(profile, zoneUUID)
+			if zoneUUID == "" {
+				return errNoZone()
 			}
 			svc := template.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
@@ -52,6 +55,6 @@ func newTemplateListCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
+	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
