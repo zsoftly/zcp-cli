@@ -242,6 +242,17 @@ func runNetworkDelete(cmd *cobra.Command, uuid string, yes bool) error {
 		return fmt.Errorf("network delete: %w", err)
 	}
 
+	// Verify deletion — Kong may return 204 even when delete silently fails
+	time.Sleep(2 * time.Second)
+	profile, _, _, _ := buildClientAndPrinter(cmd)
+	zoneUUID := resolveZone(profile, "")
+	if zoneUUID != "" {
+		if _, err := svc.Get(ctx, zoneUUID, uuid); err == nil {
+			fmt.Fprintln(os.Stderr, "WARNING: network may not have been deleted (e.g. has active VMs).")
+			return fmt.Errorf("network %q still exists after delete — check dependencies", uuid)
+		}
+	}
+
 	printer.Fprintf("Network %q deleted.\n", uuid)
 	return nil
 }

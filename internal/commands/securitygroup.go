@@ -254,6 +254,13 @@ func runSGDelete(cmd *cobra.Command, uuid string, yes bool) error {
 		return fmt.Errorf("security-group delete: %w", err)
 	}
 
+	// Verify deletion — Kong may return 204 even when delete silently fails
+	time.Sleep(2 * time.Second)
+	if _, err := svc.Get(ctx, uuid); err == nil {
+		fmt.Fprintln(os.Stderr, "WARNING: security group may not have been deleted (e.g. in use by an instance).")
+		return fmt.Errorf("security group %q still exists after delete — check dependencies", uuid)
+	}
+
 	printer.Fprintf("Security group %q deleted.\n", uuid)
 	return nil
 }

@@ -283,6 +283,14 @@ func runVPCDelete(cmd *cobra.Command, uuid string, yes bool) error {
 		return fmt.Errorf("vpc delete: %w", err)
 	}
 
+	// Verify deletion — Kong may return 204 even when delete silently fails
+	time.Sleep(2 * time.Second)
+	if _, err := svc.Get(ctx, uuid); err == nil {
+		fmt.Fprintln(os.Stderr, "WARNING: VPC may not have been deleted (e.g. has active network tiers).")
+		fmt.Fprintln(os.Stderr, "         Delete all network tiers first, then retry.")
+		return fmt.Errorf("vpc %q still exists after delete — check dependencies", uuid)
+	}
+
 	printer.Fprintf("VPC %q deleted.\n", uuid)
 	return nil
 }

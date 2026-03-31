@@ -49,9 +49,19 @@ func newVolumeListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			volumes, err := svc.List(ctx, zoneUUID, instanceUUID, volumeUUID)
+			allVolumes, err := svc.List(ctx, zoneUUID, instanceUUID, volumeUUID)
 			if err != nil {
 				return fmt.Errorf("volume list: %w", err)
+			}
+
+			// Deduplicate — Kong API may return duplicate entries
+			seen := make(map[string]bool)
+			var volumes []volume.Volume
+			for _, v := range allVolumes {
+				if !seen[v.UUID] {
+					seen[v.UUID] = true
+					volumes = append(volumes, v)
+				}
 			}
 
 			headers := []string{"UUID", "NAME", "STATUS", "SIZE", "TYPE", "INSTANCE", "ZONE"}
@@ -272,6 +282,18 @@ func newVolumeDeleteCmd() *cobra.Command {
 			resp, err := svc.Delete(ctx, uuid)
 			if err != nil {
 				return fmt.Errorf("volume delete: %w", err)
+			}
+
+			// Verify deletion — Kong may return 204 even when delete silently fails
+			time.Sleep(2 * time.Second)
+			profile, _, _, _ := buildClientAndPrinter(cmd)
+			zoneUUID := resolveZone(profile, "")
+			if zoneUUID != "" {
+				vols, _ := svc.List(ctx, zoneUUID, "", uuid)
+				if len(vols) > 0 {
+					fmt.Fprintln(os.Stderr, "WARNING: volume may not have been deleted (e.g. still attached to a VM).")
+					return fmt.Errorf("volume %q still exists after delete — check dependencies", uuid)
+				}
 			}
 
 			printer.Fprintf("Volume %q deleted (status: %s)\n", resp.UUID, resp.Status)

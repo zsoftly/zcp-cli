@@ -66,7 +66,12 @@ func runFirewallList(cmd *cobra.Command, zoneUUID, ipUUID string) error {
 
 	rules, err := svc.List(ctx, zoneUUID, "", ipUUID)
 	if err != nil {
-		return fmt.Errorf("firewall list: %w", err)
+		// Kong returns error instead of empty list when account has no IPs
+		if strings.Contains(err.Error(), "Invalid IpAddress") {
+			rules = nil
+		} else {
+			return fmt.Errorf("firewall list: %w", err)
+		}
 	}
 
 	headers := []string{"UUID", "PROTOCOL", "PORTS", "CIDR", "IP ADDRESS", "STATUS"}

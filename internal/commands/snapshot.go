@@ -99,6 +99,9 @@ func newSnapshotCreateCmd() *cobra.Command {
 			}
 			snap, err := svc.Create(ctx, req)
 			if err != nil {
+				if strings.Contains(err.Error(), "not in Ready state") {
+					return fmt.Errorf("snapshot create: volume must be attached to a running instance before taking a snapshot")
+				}
 				return fmt.Errorf("snapshot create: %w", err)
 			}
 
