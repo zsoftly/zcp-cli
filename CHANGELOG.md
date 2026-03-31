@@ -5,6 +5,22 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2026-03-31
+
+### Fixed
+
+- **Delete false positives**: `vpc`, `network`, `volume`, and `security-group` delete
+  commands now verify the resource is actually gone after delete; warn if it still exists
+- **Volume list duplicates**: Deduplicate by UUID (Kong API returns duplicate entries)
+- **Snapshot error message**: `snapshot create` on a detached volume now gives a clear
+  message instead of raw CloudStack error
+- **Firewall list on empty accounts**: Returns empty table instead of API error when
+  account has no IP addresses
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.4...0.0.5
+
+---
+
 ## [0.0.4] - 2026-03-27
 
 ### Added

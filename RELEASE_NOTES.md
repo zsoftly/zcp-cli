@@ -1,21 +1,28 @@
-# zcp 0.0.4 Release Notes
+# zcp 0.0.5 Release Notes
 
 ## What's New
 
-### VPC tier network commands
+### Delete verification
 
-Create and update networks inside a VPC using the dedicated StackBill endpoint
-(`/restapi/vpc/createVpcNetwork`):
+Delete commands now verify the resource is actually removed. Previously, the API could
+return success (HTTP 204) while silently failing — the CLI would report "deleted" when
+the resource was still there. Now affected commands check after delete and warn if the
+resource still exists.
 
-```bash
-zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> \
-  --gateway 10.1.1.1 --netmask 255.255.255.0 --acl <uuid>
+Applies to: `vpc delete`, `network delete`, `volume delete`, `security-group delete`
 
-zcp vpc update-network <network-uuid> --offering <uuid> --name new-name
-```
+### Volume list deduplication
 
-This resolves the VPC tier creation issue — the previous `network create` endpoint
-(`/restapi/network/createNetwork`) is for isolated networks only.
+The API sometimes returns duplicate entries for the same volume. The CLI now deduplicates
+by UUID before displaying results.
+
+### Friendlier error messages
+
+- `snapshot create` on a detached volume now says:
+  `volume must be attached to a running instance before taking a snapshot`
+  instead of the raw CloudStack error.
+- `firewall list` on accounts with no IP addresses now returns an empty table
+  instead of `API error 412: Invalid IpAddress Details`.
 
 ---
 
@@ -50,4 +57,4 @@ Download the binary for your platform from the assets below, make it executable,
 | Windows | amd64        | `zcp-windows-amd64.exe` |
 | Windows | arm64        | `zcp-windows-arm64.exe` |
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.3...0.0.4
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.4...0.0.5
