@@ -3,6 +3,7 @@ package network_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,67 +17,56 @@ import (
 
 func newClient(baseURL string) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    "testkey",
-		SecretKey: "testsecret",
-		Timeout:   5 * time.Second,
+		BaseURL:     baseURL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
 }
 
-type listNetworkResponse struct {
-	Count               int               `json:"count"`
-	ListNetworkResponse []network.Network `json:"listNetworkResponse"`
-}
-
-func makeNetwork(uuid, name, networkType string) network.Network {
+func makeNetwork(slug, name string) network.Network {
 	return network.Network{
-		UUID:        uuid,
+		ID:          "1",
+		Slug:        slug,
 		Name:        name,
-		Status:      "Implemented",
-		IsActive:    true,
-		NetworkType: networkType,
+		Status:      "Active",
+		NetworkType: "Isolated",
 		Gateway:     "10.0.0.1",
 		CIDR:        "10.0.0.0/24",
-		ZoneUUID:    "zone-uuid-1",
+		ZoneSlug:    "yow-1",
 	}
 }
 
-// TestNetworkList verifies URL path, required zoneUuid param, and response parsing.
+// TestNetworkList verifies URL path and response parsing.
 func TestNetworkList(t *testing.T) {
 	networks := []network.Network{
-		makeNetwork("net-1", "web-network", "Isolated"),
-		makeNetwork("net-2", "db-network", "Isolated"),
+		makeNetwork("web-network", "web-network"),
+		makeNetwork("db-network", "db-network"),
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/restapi/network/networkList" {
+		if r.URL.Path != "/networks" {
 			http.NotFound(w, r)
 			return
 		}
-		zoneUUID := r.URL.Query().Get("zoneUuid")
-		if zoneUUID == "" {
-			http.Error(w, "zoneUuid required", http.StatusBadRequest)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listNetworkResponse{
-			Count:               len(networks),
-			ListNetworkResponse: networks,
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   networks,
 		})
 	}))
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
 
-	result, err := svc.List(context.Background(), "zone-uuid-1", "")
+	result, err := svc.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 	if len(result) != 2 {
 		t.Fatalf("List() returned %d networks, want 2", len(result))
 	}
-	if result[0].UUID != "net-1" {
-		t.Errorf("result[0].UUID = %q, want %q", result[0].UUID, "net-1")
+	if result[0].Slug != "web-network" {
+		t.Errorf("result[0].Slug = %q, want %q", result[0].Slug, "web-network")
 	}
 	if result[1].Name != "db-network" {
 		t.Errorf("result[1].Name = %q, want %q", result[1].Name, "db-network")
@@ -85,7 +75,7 @@ func TestNetworkList(t *testing.T) {
 
 // TestNetworkCreate verifies POST body and response parsing.
 func TestNetworkCreate(t *testing.T) {
-	created := makeNetwork("new-net-1", "my-network", "Isolated")
+	created := makeNetwork("my-network", "my-network")
 
 	var gotBody map[string]interface{}
 
@@ -94,15 +84,15 @@ func TestNetworkCreate(t *testing.T) {
 			http.Error(w, "expected POST", http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path != "/restapi/network/createNetwork" {
+		if r.URL.Path != "/networks" {
 			http.NotFound(w, r)
 			return
 		}
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listNetworkResponse{
-			Count:               1,
-			ListNetworkResponse: []network.Network{created},
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   created,
 		})
 	}))
 	defer srv.Close()
@@ -110,38 +100,181 @@ func TestNetworkCreate(t *testing.T) {
 	svc := network.NewService(newClient(srv.URL))
 
 	req := network.CreateRequest{
-		Name:                "my-network",
-		ZoneUUID:            "zone-1",
-		NetworkOfferingUUID: "offering-1",
+		Name:         "my-network",
+		CategorySlug: "default-isolated",
 	}
 
 	net, err := svc.Create(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if net.UUID != "new-net-1" {
-		t.Errorf("net.UUID = %q, want %q", net.UUID, "new-net-1")
+	if net.Slug != "my-network" {
+		t.Errorf("net.Slug = %q, want %q", net.Slug, "my-network")
 	}
 	if gotBody["name"] != "my-network" {
 		t.Errorf("body[name] = %v, want %q", gotBody["name"], "my-network")
 	}
-	if gotBody["zoneUuid"] != "zone-1" {
-		t.Errorf("body[zoneUuid] = %v, want %q", gotBody["zoneUuid"], "zone-1")
-	}
-	if gotBody["networkOfferingUuid"] != "offering-1" {
-		t.Errorf("body[networkOfferingUuid] = %v, want %q", gotBody["networkOfferingUuid"], "offering-1")
+	if gotBody["category_slug"] != "default-isolated" {
+		t.Errorf("body[category_slug] = %v, want %q", gotBody["category_slug"], "default-isolated")
 	}
 }
 
-// TestNetworkDelete verifies DELETE path includes uuid.
-func TestNetworkDelete(t *testing.T) {
-	var gotPath string
+// TestNetworkUpdate verifies PUT path and response parsing.
+func TestNetworkUpdate(t *testing.T) {
+	updated := makeNetwork("my-network", "renamed-network")
+	updated.Name = "renamed-network"
+
+	var gotPath, gotMethod string
+	var gotBody map[string]interface{}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			http.Error(w, "expected DELETE", http.StatusMethodNotAllowed)
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   updated,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+
+	net, err := svc.Update(context.Background(), "my-network", network.UpdateRequest{
+		Name: "renamed-network",
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPut)
+	}
+	if gotPath != "/networks/my-network" {
+		t.Errorf("path = %q, want %q", gotPath, "/networks/my-network")
+	}
+	if net.Name != "renamed-network" {
+		t.Errorf("net.Name = %q, want %q", net.Name, "renamed-network")
+	}
+}
+
+// TestListCategories verifies the network categories endpoint.
+func TestListCategories(t *testing.T) {
+	categories := []network.Category{
+		{ID: "1", Slug: "default-isolated", Name: "Default Isolated"},
+		{ID: "2", Slug: "vpc-tier", Name: "VPC Tier"},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/network/categories" {
+			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   categories,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.ListCategories(context.Background())
+	if err != nil {
+		t.Fatalf("ListCategories() error = %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("ListCategories() returned %d, want 2", len(result))
+	}
+	if result[0].Slug != "default-isolated" {
+		t.Errorf("result[0].Slug = %q, want %q", result[0].Slug, "default-isolated")
+	}
+}
+
+// TestListEgressRules verifies the egress rules list endpoint.
+func TestListEgressRules(t *testing.T) {
+	rules := []network.EgressRule{
+		{ID: "1", Protocol: "tcp", StartPort: "80", EndPort: "80", Status: "Active"},
+		{ID: "2", Protocol: "all", Status: "Active"},
+	}
+
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   rules,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.ListEgressRules(context.Background(), "my-network")
+	if err != nil {
+		t.Fatalf("ListEgressRules() error = %v", err)
+	}
+	if gotPath != "/networks/my-network/egress-firewall-rules" {
+		t.Errorf("path = %q, want %q", gotPath, "/networks/my-network/egress-firewall-rules")
+	}
+	if len(result) != 2 {
+		t.Fatalf("ListEgressRules() returned %d, want 2", len(result))
+	}
+	if result[0].Protocol != "tcp" {
+		t.Errorf("result[0].Protocol = %q, want %q", result[0].Protocol, "tcp")
+	}
+}
+
+// TestCreateEgressRule verifies POST body and path for egress rule creation.
+func TestCreateEgressRule(t *testing.T) {
+	created := network.EgressRule{
+		ID: "10", Protocol: "tcp", StartPort: "443", EndPort: "443", Status: "Active",
+	}
+
+	var gotPath, gotMethod string
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   created,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	rule, err := svc.CreateEgressRule(context.Background(), "my-network", network.CreateEgressRuleRequest{
+		Protocol:  "tcp",
+		StartPort: "443",
+		EndPort:   "443",
+	})
+	if err != nil {
+		t.Fatalf("CreateEgressRule() error = %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/networks/my-network/egress-firewall-rules" {
+		t.Errorf("path = %q, want %q", gotPath, "/networks/my-network/egress-firewall-rules")
+	}
+	if rule.ID != "10" {
+		t.Errorf("rule.ID = %q, want %q", rule.ID, "10")
+	}
+	if gotBody["protocol"] != "tcp" {
+		t.Errorf("body[protocol] = %v, want %q", gotBody["protocol"], "tcp")
+	}
+}
+
+// TestDeleteEgressRule verifies DELETE path includes slug and rule ID.
+func TestDeleteEgressRule(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -149,48 +282,15 @@ func TestNetworkDelete(t *testing.T) {
 
 	svc := network.NewService(newClient(srv.URL))
 
-	err := svc.Delete(context.Background(), "net-del-1")
+	err := svc.DeleteEgressRule(context.Background(), "my-network", "42")
 	if err != nil {
-		t.Fatalf("Delete() error = %v", err)
+		t.Fatalf("DeleteEgressRule() error = %v", err)
 	}
-	if gotPath != "/restapi/network/deleteNetwork/net-del-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/restapi/network/deleteNetwork/net-del-1")
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
 	}
-}
-
-// TestNetworkGet verifies uuid param is sent and a single result is returned.
-func TestNetworkGet(t *testing.T) {
-	expected := makeNetwork("net-99", "target-network", "Isolated")
-
-	var gotUUID string
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/restapi/network/networkId" {
-			http.NotFound(w, r)
-			return
-		}
-		gotUUID = r.URL.Query().Get("uuid")
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listNetworkResponse{
-			Count:               1,
-			ListNetworkResponse: []network.Network{expected},
-		})
-	}))
-	defer srv.Close()
-
-	svc := network.NewService(newClient(srv.URL))
-
-	net, err := svc.Get(context.Background(), "zone-1", "net-99")
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-	if gotUUID != "net-99" {
-		t.Errorf("uuid query param = %q, want %q", gotUUID, "net-99")
-	}
-	if net.UUID != "net-99" {
-		t.Errorf("net.UUID = %q, want %q", net.UUID, "net-99")
-	}
-	if net.Name != "target-network" {
-		t.Errorf("net.Name = %q, want %q", net.Name, "target-network")
+	want := fmt.Sprintf("/networks/my-network/egress-firewall-rules/%s", "42")
+	if gotPath != want {
+		t.Errorf("path = %q, want %q", gotPath, want)
 	}
 }

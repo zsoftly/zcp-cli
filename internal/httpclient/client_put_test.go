@@ -12,19 +12,18 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-func TestPutInjectsAuthHeaders(t *testing.T) {
-	var gotMethod, gotAPIKey, gotSecretKey string
+func TestPutInjectsBearerToken(t *testing.T) {
+	var gotMethod, gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
-		gotAPIKey = r.Header.Get("apikey")
-		gotSecretKey = r.Header.Get("secretkey")
+		gotAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("{}"))
 	}))
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL: srv.URL, APIKey: "k", SecretKey: "s", Timeout: 5 * time.Second,
+		BaseURL: srv.URL, BearerToken: "tok", Timeout: 5 * time.Second,
 	})
 
 	err := client.Put(context.Background(), "/test", nil, map[string]string{"name": "updated"}, nil)
@@ -34,11 +33,8 @@ func TestPutInjectsAuthHeaders(t *testing.T) {
 	if gotMethod != http.MethodPut {
 		t.Errorf("method = %q, want PUT", gotMethod)
 	}
-	if gotAPIKey != "k" {
-		t.Errorf("apikey header = %q, want %q", gotAPIKey, "k")
-	}
-	if gotSecretKey != "s" {
-		t.Errorf("secretkey header = %q, want %q", gotSecretKey, "s")
+	if gotAuth != "Bearer tok" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer tok")
 	}
 }
 
@@ -52,7 +48,7 @@ func TestPutWithQueryParams(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL: srv.URL, APIKey: "k", SecretKey: "s", Timeout: 5 * time.Second,
+		BaseURL: srv.URL, BearerToken: "tok", Timeout: 5 * time.Second,
 	})
 
 	q := url.Values{"uuid": {"vm-123"}, "size": {"3"}}
@@ -78,7 +74,7 @@ func TestPutDecodesResponse(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL: srv.URL, APIKey: "k", SecretKey: "s", Timeout: 5 * time.Second,
+		BaseURL: srv.URL, BearerToken: "tok", Timeout: 5 * time.Second,
 	})
 
 	var result resp
@@ -94,13 +90,14 @@ func TestPutHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"listErrorResponse": map[string]string{"errorCode": "401", "errorMsg": "Unauthorized"},
+			"status":  "Error",
+			"message": "Unauthenticated.",
 		})
 	}))
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL: srv.URL, APIKey: "bad", SecretKey: "creds", Timeout: 5 * time.Second,
+		BaseURL: srv.URL, BearerToken: "bad-token", Timeout: 5 * time.Second,
 	})
 
 	err := client.Put(context.Background(), "/test", nil, nil, nil)

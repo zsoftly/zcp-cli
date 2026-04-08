@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/vmsnapshot"
-	"github.com/zsoftly/zcp-cli/internal/api/waiters"
 )
 
 // NewVMSnapshotCmd returns the 'vm-snapshot' cobra command.
@@ -27,13 +25,10 @@ func NewVMSnapshotCmd() *cobra.Command {
 }
 
 func newVMSnapshotListCmd() *cobra.Command {
-	var zoneUUID, snapshotUUID string
-
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List VM snapshots",
 		Example: `  zcp vm-snapshot list
-  zcp vm-snapshot list --zone <uuid>
   zcp vm-snapshot list --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
@@ -44,99 +39,87 @@ func newVMSnapshotListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			snapshots, err := svc.List(ctx, zoneUUID, snapshotUUID)
+			snapshots, err := svc.List(ctx)
 			if err != nil {
 				return fmt.Errorf("vm-snapshot list: %w", err)
 			}
 
-			headers := []string{"UUID", "NAME", "STATUS", "CURRENT", "ZONE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "STATE", "VM ID", "REGION", "CREATED"}
 			rows := make([][]string, 0, len(snapshots))
 			for _, s := range snapshots {
 				rows = append(rows, []string{
-					s.UUID,
+					s.Slug,
 					s.Name,
-					s.Status,
-					strconv.FormatBool(s.IsCurrent),
-					s.ZoneUUID,
+					s.State,
+					s.VirtualMachineID,
+					s.RegionID,
 					s.CreatedAt,
 				})
 			}
 			return printer.PrintTable(headers, rows)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Filter by zone UUID")
-	cmd.Flags().StringVar(&snapshotUUID, "uuid", "", "Filter by VM snapshot UUID")
 	return cmd
 }
 
 func newVMSnapshotCreateCmd() *cobra.Command {
-	var zoneUUID, name, instanceUUID, description string
+	var vmSlug, name, plan, billingCycle, project, cloudProvider, region, service string
 	var memory bool
-	var wait bool
+	var coupon string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a VM snapshot",
-		Example: `  zcp vm-snapshot create --zone <uuid> --name my-snap --instance <uuid>
-  zcp vm-snapshot create --zone <uuid> --name my-snap --instance <uuid> --description "pre-upgrade" --memory`,
+		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project proj-1 --cloud-provider cp-1 --region rgn-1 --service svc-1
+  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project proj-1 --cloud-provider cp-1 --region rgn-1 --service svc-1 --memory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			if instanceUUID == "" {
-				return fmt.Errorf("--instance is required")
+			if vmSlug == "" {
+				return fmt.Errorf("--vm is required")
 			}
-			profile, client, printer, err := buildClientAndPrinter(cmd)
+			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
-			}
-			zoneUUID = resolveZone(profile, zoneUUID)
-			if zoneUUID == "" {
-				return errNoZone()
 			}
 			svc := vmsnapshot.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
 			req := vmsnapshot.CreateRequest{
-				Name:               name,
-				ZoneUUID:           zoneUUID,
-				VirtualMachineUUID: instanceUUID,
-				Description:        description,
-				SnapshotMemory:     memory,
+				Name:          name,
+				BillingCycle:  billingCycle,
+				Plan:          plan,
+				IsMemory:      memory,
+				IsVMSnapshot:  true,
+				Project:       project,
+				CloudProvider: cloudProvider,
+				Region:        region,
+				Service:       service,
 			}
-			snap, err := svc.Create(ctx, req)
+			if coupon != "" {
+				req.Coupon = &coupon
+			}
+			resp, err := svc.Create(ctx, vmSlug, req)
 			if err != nil {
 				return fmt.Errorf("vm-snapshot create: %w", err)
 			}
 
-			if wait && snap.JobID != "" {
-				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", snap.JobID)
-				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
-				if _, err := waiter.Wait(ctx, snap.JobID); err != nil {
-					return fmt.Errorf("wait failed: %w", err)
-				}
-			}
-
-			headers := []string{"UUID", "NAME", "STATUS", "CURRENT", "ZONE", "JOB ID", "CREATED"}
-			rows := [][]string{{
-				snap.UUID,
-				snap.Name,
-				snap.Status,
-				strconv.FormatBool(snap.IsCurrent),
-				snap.ZoneUUID,
-				snap.JobID,
-				snap.CreatedAt,
-			}}
-			return printer.PrintTable(headers, rows)
+			printer.Fprintf("VM snapshot created (status: %s, message: %s)\n", resp.Status, resp.Message)
+			return nil
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
+	cmd.Flags().StringVar(&vmSlug, "vm", "", "VM slug to snapshot (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Snapshot name (required)")
-	cmd.Flags().StringVar(&instanceUUID, "instance", "", "VM instance UUID (required)")
-	cmd.Flags().StringVar(&description, "description", "", "Optional description")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug")
+	cmd.Flags().StringVar(&service, "service", "", "Service slug")
 	cmd.Flags().BoolVar(&memory, "memory", false, "Include memory state in snapshot")
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
+	cmd.Flags().StringVar(&coupon, "coupon", "", "Optional coupon code")
 	return cmd
 }
 
@@ -144,15 +127,15 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
+		Use:   "delete <slug>",
 		Short: "Delete a VM snapshot permanently",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-snapshot delete <uuid>
-  zcp vm-snapshot delete <uuid> --yes`,
+		Example: `  zcp vm-snapshot delete <slug>
+  zcp vm-snapshot delete <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			uuid := args[0]
-			if !yes {
-				fmt.Fprintf(os.Stdout, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", uuid)
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", slug)
 				var answer string
 				fmt.Scanln(&answer)
 				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
@@ -168,12 +151,11 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			resp, err := svc.Delete(ctx, uuid)
-			if err != nil {
+			if err := svc.Delete(ctx, slug); err != nil {
 				return fmt.Errorf("vm-snapshot delete: %w", err)
 			}
 
-			printer.Fprintf("VM snapshot %q deleted (status: %s)\n", resp.UUID, resp.Status)
+			printer.Fprintf("VM snapshot %q deleted.\n", slug)
 			return nil
 		},
 	}
@@ -183,18 +165,17 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 
 func newVMSnapshotRevertCmd() *cobra.Command {
 	var yes bool
-	var wait bool
 
 	cmd := &cobra.Command{
-		Use:   "revert <uuid>",
+		Use:   "revert <slug>",
 		Short: "Revert a VM to a snapshot state (DESTRUCTIVE)",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-snapshot revert <uuid>
-  zcp vm-snapshot revert <uuid> --yes`,
+		Example: `  zcp vm-snapshot revert <slug>
+  zcp vm-snapshot revert <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			uuid := args[0]
-			if !yes {
-				fmt.Fprintf(os.Stdout, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", uuid)
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", slug)
 				var answer string
 				fmt.Scanln(&answer)
 				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
@@ -210,32 +191,15 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			snap, err := svc.Revert(ctx, uuid)
+			resp, err := svc.Revert(ctx, slug)
 			if err != nil {
 				return fmt.Errorf("vm-snapshot revert: %w", err)
 			}
 
-			if wait && snap.JobID != "" {
-				fmt.Fprintf(os.Stderr, "Waiting for job %s to complete...\n", snap.JobID)
-				waiter := waiters.New(client, waiters.WithProgressWriter(os.Stderr))
-				if _, err := waiter.Wait(ctx, snap.JobID); err != nil {
-					return fmt.Errorf("wait failed: %w", err)
-				}
-			}
-
-			headers := []string{"UUID", "NAME", "STATUS", "CURRENT", "ZONE", "JOB ID"}
-			rows := [][]string{{
-				snap.UUID,
-				snap.Name,
-				snap.Status,
-				strconv.FormatBool(snap.IsCurrent),
-				snap.ZoneUUID,
-				snap.JobID,
-			}}
-			return printer.PrintTable(headers, rows)
+			printer.Fprintf("VM snapshot %q reverted (status: %s, message: %s)\n", slug, resp.Status, resp.Message)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for async operation to complete")
 	return cmd
 }

@@ -14,86 +14,103 @@ import (
 
 func newClient(baseURL string) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    "testkey",
-		SecretKey: "testsecret",
-		Timeout:   5 * time.Second,
+		BaseURL:     baseURL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
 }
 
-type listLoadBalancerRuleResponse struct {
-	Count                        int                 `json:"count"`
-	ListLoadBalancerRuleResponse []loadbalancer.Rule `json:"listLoadBalancerRuleResponse"`
+type envelope struct {
+	Status  string      `json:"status"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+	Total   int         `json:"total,omitempty"`
 }
 
 func TestLoadBalancerList(t *testing.T) {
-	expected := []loadbalancer.Rule{
-		{UUID: "lb-1", Name: "web-lb", PublicPort: "80", PrivatePort: "8080", ZoneUUID: "zone-1"},
-		{UUID: "lb-2", Name: "ssl-lb", PublicPort: "443", PrivatePort: "8443", ZoneUUID: "zone-1"},
+	expected := []loadbalancer.LoadBalancer{
+		{
+			ID:    "lb-1",
+			Name:  "web-lb",
+			Slug:  "web-lb",
+			State: "Running",
+			IPAddress: &loadbalancer.IPAddress{
+				ID:        "ip-1",
+				IPAddress: "1.2.3.4",
+				Slug:      "ip-1",
+			},
+			Region: &loadbalancer.Region{
+				ID:   "region-1",
+				Name: "US East",
+				Slug: "us-east",
+			},
+		},
+		{
+			ID:    "lb-2",
+			Name:  "ssl-lb",
+			Slug:  "ssl-lb",
+			State: "Running",
+		},
 	}
 
-	var gotZone string
+	var gotInclude string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/restapi/loadbalancerrule/loadBalancerRuleList" {
+		if r.URL.Path != "/load-balancers" {
 			http.NotFound(w, r)
 			return
 		}
-		gotZone = r.URL.Query().Get("zoneUuid")
-		if gotZone == "" {
-			http.Error(w, "zoneUuid required", http.StatusBadRequest)
+		if r.Method != http.MethodGet {
+			http.Error(w, "expected GET", http.StatusMethodNotAllowed)
 			return
 		}
+		gotInclude = r.URL.Query().Get("include")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: len(expected), ListLoadBalancerRuleResponse: expected})
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: expected, Total: len(expected)})
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	rules, err := svc.List(context.Background(), "zone-1", "", "")
+	lbs, err := svc.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(rules) != 2 {
-		t.Fatalf("List() returned %d rules, want 2", len(rules))
+	if len(lbs) != 2 {
+		t.Fatalf("List() returned %d load balancers, want 2", len(lbs))
 	}
-	if gotZone != "zone-1" {
-		t.Errorf("zoneUuid query param = %q, want %q", gotZone, "zone-1")
+	if gotInclude == "" {
+		t.Error("expected include query parameter to be set")
 	}
-	if rules[0].UUID != "lb-1" {
-		t.Errorf("rules[0].UUID = %q, want %q", rules[0].UUID, "lb-1")
+	if lbs[0].Slug != "web-lb" {
+		t.Errorf("lbs[0].Slug = %q, want %q", lbs[0].Slug, "web-lb")
+	}
+	if lbs[0].IPAddress == nil || lbs[0].IPAddress.IPAddress != "1.2.3.4" {
+		t.Errorf("lbs[0].IPAddress.IPAddress = %v, want %q", lbs[0].IPAddress, "1.2.3.4")
 	}
 }
 
-func TestLoadBalancerListWithFilters(t *testing.T) {
-	var gotUUID, gotIPAddressUUID string
+func TestLoadBalancerListEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotUUID = r.URL.Query().Get("uuid")
-		gotIPAddressUUID = r.URL.Query().Get("ipAddressUuid")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: 0, ListLoadBalancerRuleResponse: nil})
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: []loadbalancer.LoadBalancer{}, Total: 0})
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.List(context.Background(), "zone-1", "lb-1", "ip-1")
+	lbs, err := svc.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if gotUUID != "lb-1" {
-		t.Errorf("uuid query param = %q, want %q", gotUUID, "lb-1")
-	}
-	if gotIPAddressUUID != "ip-1" {
-		t.Errorf("ipAddressUuid query param = %q, want %q", gotIPAddressUUID, "ip-1")
+	if len(lbs) != 0 {
+		t.Fatalf("List() returned %d load balancers, want 0", len(lbs))
 	}
 }
 
 func TestLoadBalancerCreate(t *testing.T) {
-	created := loadbalancer.Rule{
-		UUID:        "lb-new",
-		Name:        "my-lb",
-		PublicPort:  "80",
-		PrivatePort: "8080",
-		Algorithm:   "roundrobin",
+	created := loadbalancer.LoadBalancer{
+		ID:    "lb-new",
+		Name:  "my-lb",
+		Slug:  "my-lb",
+		State: "Creating",
 	}
 
 	var gotBody map[string]interface{}
@@ -102,146 +119,135 @@ func TestLoadBalancerCreate(t *testing.T) {
 			http.Error(w, "expected POST", http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path != "/restapi/loadbalancerrule/createLoadBalancerRule" {
+		if r.URL.Path != "/load-balancers" {
 			http.NotFound(w, r)
 			return
 		}
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: 1, ListLoadBalancerRuleResponse: []loadbalancer.Rule{created}})
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: created})
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
 	req := loadbalancer.CreateRequest{
-		Name:         "my-lb",
-		PublicIPUUID: "ip-1",
-		PublicPort:   "80",
-		PrivatePort:  "8080",
-		Algorithm:    "roundrobin",
+		Name:          "my-lb",
+		CloudProvider: "nimbo",
+		Project:       "default-33",
+		Region:        "ixg-belagavi",
+		Network:       "d-net-test",
+		Plan:          "load-balancer",
+		BillingCycle:  "hourly",
+		AcquireNewIP:  true,
+		Rules:         []loadbalancer.CreateRuleSpec{},
 	}
 	result, err := svc.Create(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if result.UUID != "lb-new" {
-		t.Errorf("result.UUID = %q, want %q", result.UUID, "lb-new")
+	if result.Slug != "my-lb" {
+		t.Errorf("result.Slug = %q, want %q", result.Slug, "my-lb")
 	}
 	if gotBody["name"] != "my-lb" {
 		t.Errorf("body name = %v, want %q", gotBody["name"], "my-lb")
 	}
-	if gotBody["publicIpUuid"] != "ip-1" {
-		t.Errorf("body publicIpUuid = %v, want %q", gotBody["publicIpUuid"], "ip-1")
+	if gotBody["cloud_provider"] != "nimbo" {
+		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "nimbo")
 	}
-	if gotBody["algorithm"] != "roundrobin" {
-		t.Errorf("body algorithm = %v, want %q", gotBody["algorithm"], "roundrobin")
+	if gotBody["billing_cycle"] != "hourly" {
+		t.Errorf("body billing_cycle = %v, want %q", gotBody["billing_cycle"], "hourly")
 	}
-}
-
-func TestLoadBalancerCreateEmptyResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: 0, ListLoadBalancerRuleResponse: nil})
-	}))
-	defer srv.Close()
-
-	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.Create(context.Background(), loadbalancer.CreateRequest{Name: "x", PublicIPUUID: "ip-1"})
-	if err == nil {
-		t.Fatal("Create() expected error on empty response, got nil")
+	if gotBody["aquire_new_ip"] != true {
+		t.Errorf("body aquire_new_ip = %v, want true", gotBody["aquire_new_ip"])
 	}
 }
 
-func TestLoadBalancerUpdate(t *testing.T) {
-	updated := loadbalancer.Rule{
-		UUID:      "lb-1",
-		Name:      "updated-lb",
-		Algorithm: "leastconn",
-	}
-
+func TestLoadBalancerCreateRule(t *testing.T) {
 	var gotBody map[string]interface{}
+	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			http.Error(w, "expected PUT", http.StatusMethodNotAllowed)
+		if r.Method != http.MethodPost {
+			http.Error(w, "expected POST", http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path != "/restapi/loadbalancerrule/updateLoadBalancerRule" {
-			http.NotFound(w, r)
-			return
-		}
+		gotPath = r.URL.Path
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: 1, ListLoadBalancerRuleResponse: []loadbalancer.Rule{updated}})
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: nil})
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	req := loadbalancer.UpdateRequest{
-		UUID:      "lb-1",
-		Name:      "updated-lb",
-		Algorithm: "leastconn",
+	req := loadbalancer.CreateRuleRequest{
+		Rules: []loadbalancer.CreateRuleSpec{
+			{
+				Name:            "web-rule",
+				PublicPort:      "80",
+				PrivatePort:     "8080",
+				Protocol:        "tcp",
+				Algorithm:       "roundrobin",
+				VirtualMachines: []loadbalancer.VMAttachment{},
+			},
+		},
 	}
-	result, err := svc.Update(context.Background(), req)
+	err := svc.CreateRule(context.Background(), "my-lb", req)
 	if err != nil {
-		t.Fatalf("Update() error = %v", err)
+		t.Fatalf("CreateRule() error = %v", err)
 	}
-	if result.UUID != "lb-1" {
-		t.Errorf("result.UUID = %q, want %q", result.UUID, "lb-1")
+	if gotPath != "/load-balancers/my-lb/load-balancer-rules" {
+		t.Errorf("path = %q, want %q", gotPath, "/load-balancers/my-lb/load-balancer-rules")
 	}
-	if gotBody["name"] != "updated-lb" {
-		t.Errorf("body name = %v, want %q", gotBody["name"], "updated-lb")
+	rules, ok := gotBody["rules"].([]interface{})
+	if !ok || len(rules) != 1 {
+		t.Fatalf("body rules length = %v, want 1", gotBody["rules"])
 	}
-	if gotBody["algorithm"] != "leastconn" {
-		t.Errorf("body algorithm = %v, want %q", gotBody["algorithm"], "leastconn")
+	rule := rules[0].(map[string]interface{})
+	if rule["name"] != "web-rule" {
+		t.Errorf("rule name = %v, want %q", rule["name"], "web-rule")
 	}
-}
-
-func TestLoadBalancerUpdateEmptyResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listLoadBalancerRuleResponse{Count: 0, ListLoadBalancerRuleResponse: nil})
-	}))
-	defer srv.Close()
-
-	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.Update(context.Background(), loadbalancer.UpdateRequest{UUID: "lb-1", Name: "x"})
-	if err == nil {
-		t.Fatal("Update() expected error on empty response, got nil")
+	if rule["algorithm"] != "roundrobin" {
+		t.Errorf("rule algorithm = %v, want %q", rule["algorithm"], "roundrobin")
 	}
 }
 
-func TestLoadBalancerDelete(t *testing.T) {
+func TestLoadBalancerAttachVM(t *testing.T) {
+	var gotBody map[string]interface{}
 	var gotPath, gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
-		w.WriteHeader(http.StatusNoContent)
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: nil})
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	err := svc.Delete(context.Background(), "lb-del-1")
+	req := loadbalancer.AttachVMRequest{
+		VirtualMachines: []string{"vm-slug-1", "vm-slug-2"},
+		CloudProvider:   "nimbo",
+		Region:          "ixg-belagavi",
+		Project:         "default-33",
+	}
+	err := svc.AttachVM(context.Background(), "my-lb", "rule-123", req)
 	if err != nil {
-		t.Fatalf("Delete() error = %v", err)
+		t.Fatalf("AttachVM() error = %v", err)
 	}
-	if gotMethod != http.MethodDelete {
-		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
 	}
-	if gotPath != "/restapi/loadbalancerrule/deleteLoadBalancerRule/lb-del-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/restapi/loadbalancerrule/deleteLoadBalancerRule/lb-del-1")
+	if gotPath != "/load-balancers/my-lb/load-balancer-rules/rule-123/attach" {
+		t.Errorf("path = %q, want %q", gotPath, "/load-balancers/my-lb/load-balancer-rules/rule-123/attach")
 	}
-}
-
-func TestLoadBalancerDeleteError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	svc := loadbalancer.NewService(newClient(srv.URL))
-	err := svc.Delete(context.Background(), "missing")
-	if err == nil {
-		t.Fatal("Delete() expected error on 404, got nil")
+	vms, ok := gotBody["virtual_machines"].([]interface{})
+	if !ok || len(vms) != 2 {
+		t.Fatalf("body virtual_machines length = %v, want 2", gotBody["virtual_machines"])
+	}
+	if vms[0] != "vm-slug-1" {
+		t.Errorf("virtual_machines[0] = %v, want %q", vms[0], "vm-slug-1")
+	}
+	if gotBody["cloud_provider"] != "nimbo" {
+		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "nimbo")
 	}
 }
 
@@ -252,8 +258,47 @@ func TestLoadBalancerListError(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.List(context.Background(), "zone-1", "", "")
+	_, err := svc.List(context.Background())
 	if err == nil {
 		t.Fatal("List() expected error on 500, got nil")
+	}
+}
+
+func TestLoadBalancerCreateError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	_, err := svc.Create(context.Background(), loadbalancer.CreateRequest{Name: "x"})
+	if err == nil {
+		t.Fatal("Create() expected error on 400, got nil")
+	}
+}
+
+func TestLoadBalancerCreateRuleError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.CreateRule(context.Background(), "missing-lb", loadbalancer.CreateRuleRequest{})
+	if err == nil {
+		t.Fatal("CreateRule() expected error on 404, got nil")
+	}
+}
+
+func TestLoadBalancerAttachVMError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.AttachVM(context.Background(), "missing-lb", "rule-1", loadbalancer.AttachVMRequest{})
+	if err == nil {
+		t.Fatal("AttachVM() expected error on 404, got nil")
 	}
 }

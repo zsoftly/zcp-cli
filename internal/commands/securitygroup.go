@@ -229,7 +229,7 @@ func newSGDeleteCmd() *cobra.Command {
 }
 
 func runSGDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
+	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "WARNING: deleting security group %q will also delete all its rules.\n", uuid)
 		fmt.Fprintf(os.Stderr, "Delete security group %q? [y/N]: ", uuid)
 		scanner := bufio.NewScanner(os.Stdin)
@@ -444,7 +444,7 @@ func newSGRuleDeleteCmd() *cobra.Command {
 }
 
 func runSGRuleDelete(cmd *cobra.Command, sgUUID, ruleType, ruleUUID string, yes bool) error {
-	if !yes {
+	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete %s rule %q from security group %q? [y/N]: ", ruleType, ruleUUID, sgUUID)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()

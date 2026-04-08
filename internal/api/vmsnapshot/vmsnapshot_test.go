@@ -14,100 +14,86 @@ import (
 
 func newClient(baseURL string) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    "testkey",
-		SecretKey: "testsecret",
-		Timeout:   5 * time.Second,
+		BaseURL:     baseURL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
-}
-
-type listVMSnapshotResponse struct {
-	Count                  int                     `json:"count"`
-	ListVmSnapshotResponse []vmsnapshot.VMSnapshot `json:"listVmSnapshotResponse"`
 }
 
 func TestVMSnapshotList(t *testing.T) {
 	expected := []vmsnapshot.VMSnapshot{
-		{UUID: "vmsnap-1", Name: "snap-a", ZoneUUID: "zone-1", Status: "Ready"},
-		{UUID: "vmsnap-2", Name: "snap-b", ZoneUUID: "zone-1", Status: "Ready"},
+		{ID: "id-1", Name: "snap-a", Slug: "snap-a", State: "Ready", RegionID: "rgn-1", VirtualMachineID: "vm-1"},
+		{ID: "id-2", Name: "snap-b", Slug: "snap-b", State: "Ready", RegionID: "rgn-1", VirtualMachineID: "vm-2"},
 	}
 
-	var gotZone string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/restapi/vmsnapshot/vmsnapshotList" {
+		if r.URL.Path != "/virtual-machines/snapshots" {
 			http.NotFound(w, r)
 			return
 		}
-		gotZone = r.URL.Query().Get("zoneUuid")
+		data, _ := json.Marshal(expected)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listVMSnapshotResponse{Count: len(expected), ListVmSnapshotResponse: expected})
+		json.NewEncoder(w).Encode(vmsnapshot.Envelope{
+			Status:  "Success",
+			Message: "ok",
+			Data:    data,
+			Total:   len(expected),
+		})
 	}))
 	defer srv.Close()
 
 	svc := vmsnapshot.NewService(newClient(srv.URL))
-	snaps, err := svc.List(context.Background(), "zone-1", "")
+	snaps, err := svc.List(context.Background())
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 	if len(snaps) != 2 {
 		t.Fatalf("List() returned %d snapshots, want 2", len(snaps))
 	}
-	if gotZone != "zone-1" {
-		t.Errorf("zoneUuid query param = %q, want %q", gotZone, "zone-1")
-	}
-	if snaps[0].UUID != "vmsnap-1" {
-		t.Errorf("snaps[0].UUID = %q, want %q", snaps[0].UUID, "vmsnap-1")
+	if snaps[0].Slug != "snap-a" {
+		t.Errorf("snaps[0].Slug = %q, want %q", snaps[0].Slug, "snap-a")
 	}
 }
 
 func TestVMSnapshotCreate(t *testing.T) {
-	created := vmsnapshot.VMSnapshot{
-		UUID:     "vmsnap-new",
-		Name:     "my-vmsnap",
-		ZoneUUID: "zone-1",
-		JobID:    "job-abc",
-		Status:   "Creating",
-	}
-
+	var gotPath, gotMethod string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "expected POST", http.StatusMethodNotAllowed)
-			return
-		}
-		if r.URL.Path != "/restapi/vmsnapshot/createVmSnapshot" {
-			http.NotFound(w, r)
-			return
-		}
+		gotMethod = r.Method
+		gotPath = r.URL.Path
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listVMSnapshotResponse{Count: 1, ListVmSnapshotResponse: []vmsnapshot.VMSnapshot{created}})
+		json.NewEncoder(w).Encode(vmsnapshot.ActionResponse{
+			Status:  "Success",
+			Message: "Snapshot creation initiated",
+		})
 	}))
 	defer srv.Close()
 
 	svc := vmsnapshot.NewService(newClient(srv.URL))
 	req := vmsnapshot.CreateRequest{
-		Name:               "my-vmsnap",
-		ZoneUUID:           "zone-1",
-		VirtualMachineUUID: "vm-1",
-		Description:        "test snapshot",
-		SnapshotMemory:     false,
+		Name:         "my-vmsnap",
+		BillingCycle: "monthly",
+		Plan:         "basic",
+		IsMemory:     false,
+		IsVMSnapshot: true,
+		Project:      "proj-1",
 	}
-	snap, err := svc.Create(context.Background(), req)
+	resp, err := svc.Create(context.Background(), "my-vm", req)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if snap.UUID != "vmsnap-new" {
-		t.Errorf("snap.UUID = %q, want %q", snap.UUID, "vmsnap-new")
+	if resp.Status != "Success" {
+		t.Errorf("resp.Status = %q, want %q", resp.Status, "Success")
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/virtual-machines/my-vm/snapshots" {
+		t.Errorf("path = %q, want %q", gotPath, "/virtual-machines/my-vm/snapshots")
 	}
 	if gotBody["name"] != "my-vmsnap" {
 		t.Errorf("body name = %v, want %q", gotBody["name"], "my-vmsnap")
-	}
-	if gotBody["zoneUuid"] != "zone-1" {
-		t.Errorf("body zoneUuid = %v, want %q", gotBody["zoneUuid"], "zone-1")
-	}
-	if gotBody["virtualmachineUuid"] != "vm-1" {
-		t.Errorf("body virtualmachineUuid = %v, want %q", gotBody["virtualmachineUuid"], "vm-1")
 	}
 }
 
@@ -121,51 +107,43 @@ func TestVMSnapshotDelete(t *testing.T) {
 	defer srv.Close()
 
 	svc := vmsnapshot.NewService(newClient(srv.URL))
-	resp, err := svc.Delete(context.Background(), "vmsnap-del-1")
+	err := svc.Delete(context.Background(), "snap-del-1")
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
-	}
-	if resp == nil {
-		t.Fatal("Delete() returned nil response")
 	}
 	if gotMethod != http.MethodDelete {
 		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
 	}
-	if gotPath != "/restapi/vmsnapshot/deleteVmSnapshot/vmsnap-del-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/restapi/vmsnapshot/deleteVmSnapshot/vmsnap-del-1")
+	if gotPath != "/virtual-machines/snapshots/snap-del-1" {
+		t.Errorf("path = %q, want %q", gotPath, "/virtual-machines/snapshots/snap-del-1")
 	}
 }
 
 func TestVMSnapshotRevert(t *testing.T) {
-	reverted := vmsnapshot.VMSnapshot{
-		UUID:     "vmsnap-1",
-		Name:     "snap-a",
-		ZoneUUID: "zone-1",
-		JobID:    "job-revert",
-		Status:   "Reverting",
-	}
-
-	var gotUUID string
+	var gotPath, gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/restapi/vmsnapshot/revertToVmSnapshot" {
-			http.NotFound(w, r)
-			return
-		}
-		gotUUID = r.URL.Query().Get("uuid")
+		gotMethod = r.Method
+		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listVMSnapshotResponse{Count: 1, ListVmSnapshotResponse: []vmsnapshot.VMSnapshot{reverted}})
+		json.NewEncoder(w).Encode(vmsnapshot.ActionResponse{
+			Status:  "Success",
+			Message: "Revert initiated",
+		})
 	}))
 	defer srv.Close()
 
 	svc := vmsnapshot.NewService(newClient(srv.URL))
-	snap, err := svc.Revert(context.Background(), "vmsnap-1")
+	resp, err := svc.Revert(context.Background(), "snap-1")
 	if err != nil {
 		t.Fatalf("Revert() error = %v", err)
 	}
-	if snap.UUID != "vmsnap-1" {
-		t.Errorf("snap.UUID = %q, want %q", snap.UUID, "vmsnap-1")
+	if resp.Status != "Success" {
+		t.Errorf("resp.Status = %q, want %q", resp.Status, "Success")
 	}
-	if gotUUID != "vmsnap-1" {
-		t.Errorf("uuid query param = %q, want %q", gotUUID, "vmsnap-1")
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/virtual-machines/snapshots/snap-1/revert" {
+		t.Errorf("path = %q, want %q", gotPath, "/virtual-machines/snapshots/snap-1/revert")
 	}
 }

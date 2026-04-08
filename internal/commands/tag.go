@@ -154,7 +154,7 @@ func newTagDeleteCmd() *cobra.Command {
 }
 
 func runTagDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
+	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete tag %q? [y/N]: ", uuid)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()

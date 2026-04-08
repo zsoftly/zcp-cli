@@ -1,11 +1,8 @@
 package commands
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -16,166 +13,97 @@ import (
 func NewNetworkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "network",
-		Short: "Manage virtual networks",
+		Short: "Manage isolated networks",
 	}
 	cmd.AddCommand(newNetworkListCmd())
-	cmd.AddCommand(newNetworkGetCmd())
 	cmd.AddCommand(newNetworkCreateCmd())
-	cmd.AddCommand(newNetworkDeleteCmd())
-	cmd.AddCommand(newNetworkRestartCmd())
+	cmd.AddCommand(newNetworkUpdateCmd())
+	cmd.AddCommand(newNetworkCategoriesCmd())
 	return cmd
 }
 
 func newNetworkListCmd() *cobra.Command {
-	var zoneUUID string
-
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List networks in a zone",
-		Example: `  zcp network list --zone <uuid>
-  zcp network list --zone <uuid> --output json`,
+		Short: "List isolated networks",
+		Example: `  zcp network list
+  zcp network list --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runNetworkList(cmd, zoneUUID)
+			return runNetworkList(cmd)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	return cmd
 }
 
-func runNetworkList(cmd *cobra.Command, zoneUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+func runNetworkList(cmd *cobra.Command) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := network.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	nets, err := svc.List(ctx, zoneUUID, "")
+	nets, err := svc.List(ctx)
 	if err != nil {
 		return fmt.Errorf("network list: %w", err)
 	}
 
-	headers := []string{"UUID", "NAME", "TYPE", "CIDR", "GATEWAY", "STATUS"}
+	headers := []string{"SLUG", "NAME", "TYPE", "CIDR", "GATEWAY", "STATUS", "ZONE"}
 	rows := make([][]string, 0, len(nets))
 	for _, n := range nets {
 		rows = append(rows, []string{
-			n.UUID,
+			n.Slug,
 			n.Name,
 			n.NetworkType,
 			n.CIDR,
 			n.Gateway,
 			n.Status,
+			n.ZoneSlug,
 		})
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newNetworkGetCmd() *cobra.Command {
-	var zoneUUID string
-
-	cmd := &cobra.Command{
-		Use:     "get <uuid>",
-		Short:   "Get details of a network",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp network get <uuid> --zone <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runNetworkGet(cmd, args[0], zoneUUID)
-		},
-	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	return cmd
-}
-
-func runNetworkGet(cmd *cobra.Command, uuid, zoneUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
-	}
-
-	svc := network.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	n, err := svc.Get(ctx, zoneUUID, uuid)
-	if err != nil {
-		return fmt.Errorf("network get: %w", err)
-	}
-
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"UUID", n.UUID},
-		{"Name", n.Name},
-		{"Type", n.NetworkType},
-		{"CIDR", n.CIDR},
-		{"Gateway", n.Gateway},
-		{"Status", n.Status},
-		{"Zone UUID", n.ZoneUUID},
-		{"Domain Name", n.DomainName},
-		{"Network Domain", n.NetworkDomain},
-		{"Offering UUID", n.NetworkOfferingUUID},
-	}
-	return printer.PrintTable(headers, rows)
-}
-
 func newNetworkCreateCmd() *cobra.Command {
-	var zoneUUID, name, offeringUUID, vmUUID, vpcUUID, gateway, netmask, aclUUID string
-	var isPublic bool
+	var name, categorySlug, zoneSlug, gateway, netmask, description string
 
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a new network",
-		Example: `  zcp network create --zone <uuid> --name my-net --offering <uuid>
-  zcp network create --zone <uuid> --name my-tier --offering <uuid> --vpc <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0`,
+		Short: "Create a new isolated network",
+		Example: `  zcp network create --name my-net --category <slug>
+  zcp network create --name my-net --category <slug> --gateway 10.1.1.1 --netmask 255.255.255.0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			if offeringUUID == "" {
-				return fmt.Errorf("--offering is required")
+			if categorySlug == "" {
+				return fmt.Errorf("--category is required")
 			}
 			return runNetworkCreate(cmd, network.CreateRequest{
-				Name:                name,
-				ZoneUUID:            zoneUUID,
-				NetworkOfferingUUID: offeringUUID,
-				VirtualMachineUUID:  vmUUID,
-				IsPublic:            isPublic,
-				VPCUUID:             vpcUUID,
-				Gateway:             gateway,
-				Netmask:             netmask,
-				ACLUUID:             aclUUID,
+				Name:         name,
+				CategorySlug: categorySlug,
+				ZoneSlug:     zoneSlug,
+				Gateway:      gateway,
+				Netmask:      netmask,
+				Description:  description,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
 	cmd.Flags().StringVar(&name, "name", "", "Network name (required)")
-	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
-	cmd.Flags().StringVar(&vmUUID, "instance", "", "Virtual machine UUID to attach on creation")
-	cmd.Flags().BoolVar(&isPublic, "public", false, "Mark network as public")
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (for creating a VPC tier network)")
-	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required for VPC tiers)")
-	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (required for VPC tiers, e.g. 255.255.255.0)")
-	cmd.Flags().StringVar(&aclUUID, "acl", "", "Network ACL UUID (for VPC tiers)")
+	cmd.Flags().StringVar(&categorySlug, "category", "", "Network category slug (required)")
+	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug")
+	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP")
+	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (e.g. 255.255.255.0)")
+	cmd.Flags().StringVar(&description, "description", "", "Network description")
 	return cmd
 }
 
 func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
-	if req.ZoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := network.NewService(client)
@@ -189,46 +117,42 @@ func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", n.UUID},
+		{"Slug", n.Slug},
 		{"Name", n.Name},
 		{"Type", n.NetworkType},
 		{"CIDR", n.CIDR},
 		{"Gateway", n.Gateway},
 		{"Status", n.Status},
-		{"Zone UUID", n.ZoneUUID},
+		{"Zone", n.ZoneSlug},
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newNetworkDeleteCmd() *cobra.Command {
-	var yes bool
+func newNetworkUpdateCmd() *cobra.Command {
+	var name, description string
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
-		Short: "Delete a network",
+		Use:   "update <slug>",
+		Short: "Update a network",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp network delete <uuid>
-  zcp network delete <uuid> --yes`,
+		Example: `  zcp network update <slug> --name new-name
+  zcp network update <slug> --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runNetworkDelete(cmd, args[0], yes)
+			if name == "" && description == "" {
+				return fmt.Errorf("at least one of --name or --description is required")
+			}
+			return runNetworkUpdate(cmd, args[0], network.UpdateRequest{
+				Name:        name,
+				Description: description,
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().StringVar(&name, "name", "", "New network name")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
 	return cmd
 }
 
-func runNetworkDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete network %q? This action cannot be undone. [y/N]: ", uuid)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "Aborted.")
-			return nil
-		}
-	}
-
+func runNetworkUpdate(cmd *cobra.Command, slug string, req network.UpdateRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -238,62 +162,59 @@ func runNetworkDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, uuid); err != nil {
-		return fmt.Errorf("network delete: %w", err)
-	}
-
-	// Verify deletion — Kong may return 204 even when delete silently fails
-	time.Sleep(2 * time.Second)
-	profile, _, _, _ := buildClientAndPrinter(cmd)
-	zoneUUID := resolveZone(profile, "")
-	if zoneUUID != "" {
-		if _, err := svc.Get(ctx, zoneUUID, uuid); err == nil {
-			fmt.Fprintln(os.Stderr, "WARNING: network may not have been deleted (e.g. has active VMs).")
-			return fmt.Errorf("network %q still exists after delete — check dependencies", uuid)
-		}
-	}
-
-	printer.Fprintf("Network %q deleted.\n", uuid)
-	return nil
-}
-
-func newNetworkRestartCmd() *cobra.Command {
-	var cleanUp bool
-
-	cmd := &cobra.Command{
-		Use:   "restart <uuid>",
-		Short: "Restart a network",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp network restart <uuid>
-  zcp network restart <uuid> --cleanup`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runNetworkRestart(cmd, args[0], cleanUp)
-		},
-	}
-	cmd.Flags().BoolVar(&cleanUp, "cleanup", false, "Clean up stale resources during restart")
-	return cmd
-}
-
-func runNetworkRestart(cmd *cobra.Command, uuid string, cleanUp bool) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+	n, err := svc.Update(ctx, slug, req)
 	if err != nil {
-		return err
-	}
-
-	svc := network.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	n, err := svc.Restart(ctx, uuid, cleanUp)
-	if err != nil {
-		return fmt.Errorf("network restart: %w", err)
+		return fmt.Errorf("network update: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", n.UUID},
+		{"Slug", n.Slug},
 		{"Name", n.Name},
+		{"Type", n.NetworkType},
+		{"CIDR", n.CIDR},
+		{"Gateway", n.Gateway},
 		{"Status", n.Status},
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newNetworkCategoriesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "categories",
+		Short: "List network categories",
+		Example: `  zcp network categories
+  zcp network categories --output json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runNetworkCategories(cmd)
+		},
+	}
+	return cmd
+}
+
+func runNetworkCategories(cmd *cobra.Command) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := network.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	cats, err := svc.ListCategories(ctx)
+	if err != nil {
+		return fmt.Errorf("network categories: %w", err)
+	}
+
+	headers := []string{"SLUG", "NAME", "DESCRIPTION"}
+	rows := make([][]string, 0, len(cats))
+	for _, c := range cats {
+		rows = append(rows, []string{
+			c.Slug,
+			c.Name,
+			c.Description,
+		})
 	}
 	return printer.PrintTable(headers, rows)
 }

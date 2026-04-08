@@ -8,11 +8,11 @@ This document describes all configuration options for ZCP CLI, including the con
 
 ZCP CLI stores its configuration in a YAML file. The location depends on the operating system:
 
-| Platform    | Default Path                        |
-|-------------|-------------------------------------|
-| Linux       | `~/.config/zcp/config.yaml`         |
-| macOS       | `~/.config/zcp/config.yaml`         |
-| Windows     | `%AppData%\zcp\config.yaml`         |
+| Platform | Default Path                |
+| -------- | --------------------------- |
+| Linux    | `~/.config/zcp/config.yaml` |
+| macOS    | `~/.config/zcp/config.yaml` |
+| Windows  | `%AppData%\zcp\config.yaml` |
 
 On Linux and macOS, the `XDG_CONFIG_HOME` environment variable is respected. If set, the config file will be located at `$XDG_CONFIG_HOME/zcp/config.yaml`.
 
@@ -28,29 +28,26 @@ active_profile: default
 profiles:
   default:
     name: default
-    apikey: YOUR_API_KEY
-    secretkey: YOUR_SECRET_KEY
-    api_url: ""              # Optional. Blank = use the default API URL.
+    bearer_token: YOUR_BEARER_TOKEN
+    api_url: "" # Optional. Blank = use the default API URL.
 
   staging:
     name: staging
-    apikey: STAGING_API_KEY
-    secretkey: STAGING_SECRET_KEY
-    api_url: https://staging.zcp.zsoftly.ca
+    bearer_token: STAGING_BEARER_TOKEN
+    api_url: https://staging-api.zcp.zsoftly.ca
 
   production:
     name: production
-    apikey: PROD_API_KEY
-    secretkey: PROD_SECRET_KEY
+    bearer_token: PROD_BEARER_TOKEN
     api_url: ""
 ```
 
 ### Top-Level Fields
 
-| Field            | Type   | Description                                              |
-|------------------|--------|----------------------------------------------------------|
-| `active_profile` | string | Name of the profile used when `--profile` is not set.   |
-| `profiles`       | map    | Map of profile name to Profile object.                  |
+| Field            | Type   | Description                                           |
+| ---------------- | ------ | ----------------------------------------------------- |
+| `active_profile` | string | Name of the profile used when `--profile` is not set. |
+| `profiles`       | map    | Map of profile name to Profile object.                |
 
 ---
 
@@ -58,17 +55,16 @@ profiles:
 
 Each profile supports the following fields:
 
-| Field       | YAML Key    | Required | Description                                                                 |
-|-------------|-------------|----------|-----------------------------------------------------------------------------|
-| Name        | `name`      | Yes      | Must match the map key. Used for display in `zcp profile list`.            |
-| API Key     | `apikey`    | Yes      | Your ZCP API key. Obtained from the ZSoftly Cloud Portal.                  |
-| Secret Key  | `secretkey` | Yes      | Your ZCP secret key. Obtained from the ZSoftly Cloud Portal.               |
-| API URL     | `api_url`   | No       | Override the API base URL for this profile. Blank uses the default.        |
+| Field        | YAML Key       | Required | Description                                                         |
+| ------------ | -------------- | -------- | ------------------------------------------------------------------- |
+| Name         | `name`         | Yes      | Must match the map key. Used for display in `zcp profile list`.     |
+| Bearer Token | `bearer_token` | Yes      | Your ZCP API bearer token. Obtained from the ZSoftly Cloud Portal.  |
+| API URL      | `api_url`      | No       | Override the API base URL for this profile. Blank uses the default. |
 
 The default API URL when `api_url` is blank or omitted is:
 
 ```
-https://cloud.zcp.zsoftly.ca
+https://api.zcp.zsoftly.ca
 ```
 
 ---
@@ -77,22 +73,20 @@ https://cloud.zcp.zsoftly.ca
 
 The following environment variables are evaluated at runtime and take precedence over the corresponding config file values.
 
-| Variable          | Overrides                       | Description                                                   |
-|-------------------|---------------------------------|---------------------------------------------------------------|
-| `ZCP_PROFILE`     | `--profile` flag / active profile | Profile name to use for the current invocation.             |
-| `ZCP_API_KEY`     | Profile `apikey`                | API key, bypassing the config file entirely.                 |
-| `ZCP_SECRET_KEY`  | Profile `secretkey`             | Secret key, bypassing the config file entirely.              |
-| `ZCP_API_URL`     | Profile `api_url` / default URL | API base URL override.                                       |
-| `XDG_CONFIG_HOME` | Config file directory (Linux/macOS) | Overrides the base directory for the config file.       |
+| Variable           | Overrides                           | Description                                       |
+| ------------------ | ----------------------------------- | ------------------------------------------------- |
+| `ZCP_PROFILE`      | `--profile` flag / active profile   | Profile name to use for the current invocation.   |
+| `ZCP_BEARER_TOKEN` | Profile `bearer_token`              | Bearer token, bypassing the config file entirely. |
+| `ZCP_API_URL`      | Profile `api_url` / default URL     | API base URL override.                            |
+| `XDG_CONFIG_HOME`  | Config file directory (Linux/macOS) | Overrides the base directory for the config file. |
 
 Environment variables are useful for CI/CD pipelines where you do not want credentials stored in a file on disk.
 
 Example usage in a pipeline:
 
 ```bash
-export ZCP_API_KEY=ci-api-key
-export ZCP_SECRET_KEY=ci-secret-key
-zcp zone list --output json
+export ZCP_BEARER_TOKEN=ci-bearer-token
+zcp region list --output json
 ```
 
 ---
@@ -109,9 +103,8 @@ zcp profile add
 
 # Non-interactive
 zcp profile add staging \
-  --api-key YOUR_STAGING_KEY \
-  --secret-key YOUR_STAGING_SECRET \
-  --api-url https://staging.zcp.zsoftly.ca
+  --bearer-token YOUR_STAGING_TOKEN \
+  --api-url https://staging-api.zcp.zsoftly.ca
 ```
 
 ### Switching the Active Profile
@@ -125,7 +118,7 @@ This updates `active_profile` in the config file.
 ### Per-Command Profile Override
 
 ```bash
-zcp zone list --profile staging
+zcp region list --profile staging
 ```
 
 The `--profile` flag does not modify the config file. It applies only to the current invocation.
@@ -142,7 +135,7 @@ Output includes the profile name, API URL, and whether it is currently active.
 
 ## Security Notes
 
-**Never commit your config file to version control.** The file contains your API key and secret key in plaintext.
+**Never commit your config file to version control.** The file contains your bearer token in plaintext.
 
 Add the config file to your `.gitignore`:
 
@@ -154,6 +147,6 @@ Add the config file to your `.gitignore`:
 Additional recommendations:
 
 - The config file is created with `0600` permissions. Do not change these permissions.
-- If you suspect your credentials have been compromised, rotate your API key immediately in the ZSoftly Cloud Portal.
-- In shared or CI environments, prefer environment variable injection (`ZCP_API_KEY`, `ZCP_SECRET_KEY`) over config files on disk.
-- Do not log or print the config struct in scripts; the secret key will appear in output.
+- If you suspect your credentials have been compromised, rotate your bearer token immediately in the ZSoftly Cloud Portal.
+- In shared or CI environments, prefer environment variable injection (`ZCP_BEARER_TOKEN`) over config files on disk.
+- Do not log or print the config struct in scripts; the bearer token will appear in output.

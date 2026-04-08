@@ -4,40 +4,47 @@ package firewall
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-// FirewallRule represents a ZCP firewall rule.
+// FirewallRule represents a ZCP firewall rule from the STKCNSL API.
 type FirewallRule struct {
-	UUID          string `json:"uuid"`
-	Status        string `json:"status"`
-	IsActive      bool   `json:"isActive"`
-	Protocol      string `json:"protocol"`
-	StartPort     string `json:"startPort"`
-	EndPort       string `json:"endPort"`
-	CIDRList      string `json:"cidrList"`
-	IPAddressUUID string `json:"ipAddressUuid"`
-	ICMPType      string `json:"icmpType"`
-	ICMPCode      string `json:"icmpCode"`
-	ZoneUUID      string `json:"zoneUuid"`
+	ID                  string      `json:"id"`
+	RuleID              string      `json:"rule_id"`
+	Protocol            string      `json:"protocol"`
+	StartPort           interface{} `json:"start_port"`
+	EndPort             interface{} `json:"end_port"`
+	CIDRList            string      `json:"cidr_list"`
+	DestinationCIDRList string      `json:"destination_cidr_list"`
+	ICMPType            string      `json:"icmp_type"`
+	ICMPCode            string      `json:"icmp_code"`
+	State               string      `json:"state"`
+	CreatedAt           string      `json:"created_at"`
+	UpdatedAt           string      `json:"updated_at"`
 }
 
 // CreateRequest holds parameters for creating a firewall rule.
 type CreateRequest struct {
-	IPAddressUUID string `json:"ipAddressUuid"`
-	Protocol      string `json:"protocol"`
-	StartPort     string `json:"startPort,omitempty"`
-	EndPort       string `json:"endPort,omitempty"`
-	CIDRList      string `json:"cidrList,omitempty"`
-	ICMPType      string `json:"icmpType,omitempty"`
-	ICMPCode      string `json:"icmpCode,omitempty"`
+	Protocol            string      `json:"protocol"`
+	CIDRList            string      `json:"cidr_list,omitempty"`
+	DestinationCIDRList string      `json:"destination_cidr_list,omitempty"`
+	StartPort           interface{} `json:"start_port,omitempty"`
+	EndPort             interface{} `json:"end_port,omitempty"`
 }
 
-type listFirewallRuleResponse struct {
-	Count                    int            `json:"count"`
-	ListFirewallRuleResponse []FirewallRule `json:"listFirewallRuleResponse"`
+// listResponse is the STKCNSL envelope for firewall rule lists.
+type listResponse struct {
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Data    []FirewallRule `json:"data"`
+}
+
+// singleResponse is the STKCNSL envelope for a single firewall rule response.
+type singleResponse struct {
+	Status  string       `json:"status"`
+	Message string       `json:"message"`
+	Data    FirewallRule `json:"data"`
 }
 
 // Service provides firewall rule API operations.
@@ -50,38 +57,31 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns firewall rules. zoneUUID is required; uuid and ipAddressUUID are optional filters.
-func (s *Service) List(ctx context.Context, zoneUUID, uuid, ipAddressUUID string) ([]FirewallRule, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if uuid != "" {
-		q.Set("uuid", uuid)
+// List returns firewall rules for a public IP address.
+// ipSlug is the IP address slug (e.g. "1036521143").
+func (s *Service) List(ctx context.Context, ipSlug string) ([]FirewallRule, error) {
+	var resp listResponse
+	if err := s.client.Get(ctx, "/ipaddresses/"+ipSlug+"/firewall-rules", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing firewall rules for IP %s: %w", ipSlug, err)
 	}
-	if ipAddressUUID != "" {
-		q.Set("ipAddressUuid", ipAddressUUID)
-	}
-	var resp listFirewallRuleResponse
-	if err := s.client.Get(ctx, "/restapi/firewallrule/firewallRuleList", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing firewall rules: %w", err)
-	}
-	return resp.ListFirewallRuleResponse, nil
+	return resp.Data, nil
 }
 
-// Create adds a new firewall rule.
-func (s *Service) Create(ctx context.Context, req CreateRequest) (*FirewallRule, error) {
-	var resp listFirewallRuleResponse
-	if err := s.client.Post(ctx, "/restapi/firewallrule/createFirewallRule", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating firewall rule: %w", err)
+// Create adds a new firewall rule on a public IP address.
+// ipSlug is the IP address slug.
+func (s *Service) Create(ctx context.Context, ipSlug string, req CreateRequest) (*FirewallRule, error) {
+	var resp singleResponse
+	if err := s.client.Post(ctx, "/ipaddresses/"+ipSlug+"/firewall-rules", req, &resp); err != nil {
+		return nil, fmt.Errorf("creating firewall rule for IP %s: %w", ipSlug, err)
 	}
-	if len(resp.ListFirewallRuleResponse) == 0 {
-		return nil, fmt.Errorf("create firewall rule returned empty response")
-	}
-	return &resp.ListFirewallRuleResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Delete removes a firewall rule by UUID.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/firewallrule/deleteFirewallRule/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting firewall rule %s: %w", uuid, err)
+// Delete removes a firewall rule by ID from a public IP address.
+// ipSlug is the IP address slug; ruleID is the firewall rule ID.
+func (s *Service) Delete(ctx context.Context, ipSlug, ruleID string) error {
+	if err := s.client.Delete(ctx, "/ipaddresses/"+ipSlug+"/firewall-rules/"+ruleID, nil); err != nil {
+		return fmt.Errorf("deleting firewall rule %s for IP %s: %w", ruleID, ipSlug, err)
 	}
 	return nil
 }

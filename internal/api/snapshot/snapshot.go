@@ -1,4 +1,5 @@
-// Package snapshot provides ZCP volume snapshot API operations.
+// Package snapshot provides ZCP block storage snapshot API operations
+// targeting the STKCNSL API.
 package snapshot
 
 import (
@@ -9,32 +10,61 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-// Snapshot represents a ZCP volume snapshot.
+// Snapshot represents a STKCNSL block storage snapshot.
 type Snapshot struct {
-	UUID         string `json:"uuid"`
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	IsActive     bool   `json:"isActive"`
-	VolumeUUID   string `json:"volumeUuid"`
-	SnapshotType string `json:"snapshotType"`
-	DomainName   string `json:"domainName"`
-	ZoneUUID     string `json:"zoneUuid"`
-	SnapshotTime string `json:"snapshotTime"`
+	ID                   string  `json:"id"`
+	Name                 string  `json:"name"`
+	Slug                 string  `json:"slug"`
+	BlockstorageID       string  `json:"blockstorage_id"`
+	UserID               string  `json:"user_id"`
+	AccountID            string  `json:"account_id"`
+	ProjectID            string  `json:"project_id"`
+	RegionID             string  `json:"region_id"`
+	CloudProviderID      string  `json:"cloud_provider_id"`
+	CloudProviderSetupID string  `json:"cloud_provider_setup_id"`
+	RequestStatus        bool    `json:"request_status"`
+	ServiceName          string  `json:"service_name"`
+	ServiceDisplayName   string  `json:"service_display_name"`
+	AllTimeConsumption   float64 `json:"all_time_consumption"`
+	HasContract          bool    `json:"has_contract"`
+	FrozenAt             *string `json:"frozen_at"`
+	SuspendedAt          *string `json:"suspended_at"`
+	TerminatedAt         *string `json:"terminated_at"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
+	DeletedAt            *string `json:"deleted_at"`
 }
 
-// CreateRequest holds parameters for creating a snapshot.
+// listResponse is the STKCNSL paginated envelope for block storage snapshots.
+type listResponse struct {
+	Status      string     `json:"status"`
+	Message     string     `json:"message"`
+	CurrentPage int        `json:"current_page"`
+	Data        []Snapshot `json:"data"`
+	Total       int        `json:"total"`
+}
+
+// singleResponse is used when the API returns a single snapshot in `data`.
+type singleResponse struct {
+	Status  string   `json:"status"`
+	Message string   `json:"message"`
+	Data    Snapshot `json:"data"`
+}
+
+// CreateRequest holds parameters for creating a block storage snapshot.
 type CreateRequest struct {
-	Name       string `json:"name"`
-	VolumeUUID string `json:"volumeUuid"`
-	ZoneUUID   string `json:"zoneUuid"`
+	Name          string `json:"name"`
+	Plan          string `json:"plan"`
+	Service       string `json:"service"`
+	IsMemory      bool   `json:"is_memory"`
+	Project       string `json:"project"`
+	CloudProvider string `json:"cloud_provider"`
+	Region        string `json:"region"`
+	BillingCycle  string `json:"billing_cycle"`
+	Coupon        string `json:"coupon,omitempty"`
 }
 
-type listSnapshotResponse struct {
-	Count                int        `json:"count"`
-	ListSnapShotResponse []Snapshot `json:"listSnapShotResponse"`
-}
-
-// Service provides snapshot API operations.
+// Service provides block storage snapshot API operations.
 type Service struct {
 	client *httpclient.Client
 }
@@ -44,38 +74,34 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns snapshots. zoneUUID and snapshotUUID are optional filters.
-func (s *Service) List(ctx context.Context, zoneUUID, snapshotUUID string) ([]Snapshot, error) {
-	q := url.Values{}
-	if zoneUUID != "" {
-		q.Set("zoneUuid", zoneUUID)
+// List returns block storage snapshots.
+func (s *Service) List(ctx context.Context) ([]Snapshot, error) {
+	q := url.Values{
+		"include": {"blockstorage,region,cloud_provider,project"},
 	}
-	if snapshotUUID != "" {
-		q.Set("uuid", snapshotUUID)
+	var resp listResponse
+	if err := s.client.Get(ctx, "/blockstorages/snapshots", q, &resp); err != nil {
+		return nil, fmt.Errorf("listing block storage snapshots: %w", err)
 	}
-	var resp listSnapshotResponse
-	if err := s.client.Get(ctx, "/restapi/snapshot/snapshotList", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing snapshots: %w", err)
-	}
-	return resp.ListSnapShotResponse, nil
+	return resp.Data, nil
 }
 
-// Create creates a new snapshot of the given volume.
-func (s *Service) Create(ctx context.Context, req CreateRequest) (*Snapshot, error) {
-	var resp listSnapshotResponse
-	if err := s.client.Post(ctx, "/restapi/snapshot/createSnapshot", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating snapshot: %w", err)
+// Create creates a new block storage snapshot.
+func (s *Service) Create(ctx context.Context, blockstorageSlug string, req CreateRequest) (*Snapshot, error) {
+	var resp singleResponse
+	path := fmt.Sprintf("/blockstorages/%s/snapshots", blockstorageSlug)
+	if err := s.client.Post(ctx, path, req, &resp); err != nil {
+		return nil, fmt.Errorf("creating block storage snapshot: %w", err)
 	}
-	if len(resp.ListSnapShotResponse) == 0 {
-		return nil, fmt.Errorf("create snapshot returned empty response")
-	}
-	return &resp.ListSnapShotResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Delete permanently removes a snapshot.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/snapshot/deleteSnapshot/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting snapshot %s: %w", uuid, err)
+// Revert reverts a block storage volume to a snapshot state.
+func (s *Service) Revert(ctx context.Context, blockstorageSlug, snapshotSlug string) (*Snapshot, error) {
+	var resp singleResponse
+	path := fmt.Sprintf("/blockstorages/%s/snapshots/%s/revert", blockstorageSlug, snapshotSlug)
+	if err := s.client.Post(ctx, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("reverting block storage snapshot %s: %w", snapshotSlug, err)
 	}
-	return nil
+	return &resp.Data, nil
 }

@@ -13,7 +13,7 @@ import (
 
 const (
 	// DefaultAPIURL is the default ZCP API base URL.
-	DefaultAPIURL = "https://cloud.zcp.zsoftly.ca"
+	DefaultAPIURL = "https://portal.webberstop.com/backend/api"
 	// DefaultTimeout is the default HTTP request timeout in seconds.
 	DefaultTimeout = 30
 )
@@ -21,8 +21,7 @@ const (
 // Profile holds credentials and settings for a named profile.
 type Profile struct {
 	Name        string `yaml:"name"`
-	APIKey      string `yaml:"apikey"`
-	SecretKey   string `yaml:"secretkey"`
+	BearerToken string `yaml:"bearer_token"`
 	APIURL      string `yaml:"api_url,omitempty"`
 	DefaultZone string `yaml:"default_zone,omitempty"`
 }
@@ -130,7 +129,7 @@ func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 	if !ok {
 		return nil, fmt.Errorf("profile %q not found — run: zcp profile list", name)
 	}
-	if p.APIKey == "" || p.SecretKey == "" {
+	if p.BearerToken == "" {
 		return nil, fmt.Errorf("profile %q is missing credentials — run: zcp profile add", name)
 	}
 

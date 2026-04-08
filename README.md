@@ -9,7 +9,7 @@ The official command-line interface for the ZSoftly Cloud Platform
 
 ## Overview
 
-ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, and billing. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
+ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
 
 ---
 
@@ -58,17 +58,17 @@ Requirements: Go 1.26.1+, GNU Make.
 ```bash
 # 1. Install (see above)
 
-# 2. Add your first profile — prompts for API key and secret key
+# 2. Add your first profile — prompts for bearer token
 zcp profile add default
 
 # 3. Confirm your credentials work
 zcp auth validate
 
-# 4. Discover available zones
-zcp zone list
+# 4. Discover available regions
+zcp region list
 
 # 5. List your instances
-zcp instance list --zone <zone-uuid>
+zcp instance list
 ```
 
 ---
@@ -84,22 +84,22 @@ zcp profile add default
 ```
 
 You will be prompted for:
-- API key
-- Secret key
-- API URL (leave blank to use the default: `https://cloud.zcp.zsoftly.ca`)
+
+- Bearer token
+- API URL (leave blank to use the default)
 
 To add a named profile non-interactively:
 
 ```bash
-zcp profile add staging --api-key YOUR_KEY --secret-key YOUR_SECRET
+zcp profile add staging --bearer-token YOUR_TOKEN
 ```
 
 ### Config File Location
 
-| Platform     | Path                              |
-|--------------|-----------------------------------|
-| Linux/macOS  | `~/.config/zcp/config.yaml`       |
-| Windows      | `%AppData%\zcp\config.yaml`       |
+| Platform    | Path                        |
+| ----------- | --------------------------- |
+| Linux/macOS | `~/.config/zcp/config.yaml` |
+| Windows     | `%AppData%\zcp\config.yaml` |
 
 The file is created with `0600` permissions (owner read/write only) to protect credentials.
 
@@ -119,8 +119,7 @@ zcp profile show staging
 zcp profile use staging
 
 # Update credentials or API URL on an existing profile
-zcp profile update prod --api-key <new-key>
-zcp profile update prod --secret-key <new-secret>
+zcp profile update prod --bearer-token <new-token>
 zcp profile update prod --api-url-override https://custom.api.url
 
 # Rename a profile
@@ -139,72 +138,107 @@ Use `zcp <command> --help` for the full flag list of any command.
 ### Discovery
 
 ```bash
-# Zones
-zcp zone list
-zcp zone list --uuid <zone-uuid>
+# Regions
+zcp region list
 
-# Compute, storage, network, and VPC offerings
+# Plans by service type (preferred over legacy 'offering' commands)
+zcp plan vm                # Virtual Machine plans
+zcp plan storage           # Block Storage plans
+zcp plan kubernetes        # Kubernetes plans
+zcp plan lb                # Load Balancer plans
+zcp plan router            # Virtual Router plans
+zcp plan ip                # IP Address plans
+zcp plan vm-snapshot       # VM Snapshot plans
+zcp plan template          # My Template plans
+zcp plan iso               # ISO plans
+zcp plan backup            # Backup plans
+
+# Legacy offerings (still available)
 zcp offering compute
-zcp offering compute --zone <zone-uuid>
 zcp offering storage
-zcp offering storage --zone <zone-uuid>
 zcp offering network
 zcp offering vpc
 
 # VM templates
 zcp template list
-zcp template list --zone <zone-uuid>
 
-# Resource availability
+# Resource availability and quotas
 zcp resource available
-zcp resource available --zone <zone-uuid>
+zcp resource quota
+
+# Marketplace
+zcp marketplace list
+
+# ISO images
+zcp iso list
+
+# Store
+zcp store list
 ```
 
 ### Compute
 
 ```bash
 # List and inspect
-zcp instance list --zone <zone-uuid>
-zcp instance get <uuid> --zone <zone-uuid>
-zcp instance status <uuid>
+zcp instance list
+zcp instance get <slug>
 
 # Create — use --wait to block until the instance is Running
 zcp instance create \
-  --zone <zone-uuid> \
   --name my-vm \
-  --template <template-uuid> \
-  --compute-offering <offering-uuid> \
-  --network <network-uuid>
+  --cloud-provider nimbo \
+  --project my-project \
+  --region noida \
+  --template ubuntu-22f \
+  --plan bp-4vc-8gb \
+  --billing-cycle hourly \
+  --storage-category nvme \
+  --blockstorage-plan 50-gb-2 \
+  --ssh-key mykey
 
-zcp instance create ... --ssh-key mykey --wait
+zcp instance create ... --wait
 
 # Lifecycle
-zcp instance start <uuid>
-zcp instance start <uuid> --wait
-zcp instance stop <uuid>
-zcp instance stop <uuid> --force --wait
-zcp instance reboot <uuid>
-zcp instance delete <uuid> [--yes] [--expunge]
+zcp instance start <slug>
+zcp instance stop <slug>
+zcp instance reboot <slug>
+zcp instance reset <slug>            # Hard reset (prompts for confirmation)
 
-# Resize — change compute offering (instance must be stopped)
-zcp instance resize <uuid> --offering <offering-uuid>
-zcp instance resize <uuid> --offering <offering-uuid> --cpu 4 --memory 8192
+# Change plan (instance must be stopped)
+zcp instance change-plan <slug> --plan <new-plan> --billing-cycle hourly
 
-# Rename display name
-zcp instance rename <uuid> --display-name "My Web Server"
+# Change hostname
+zcp instance change-hostname <slug> --hostname new-hostname
 
-# Recover from error state
-zcp instance recover <uuid>
+# Change OS (DESTRUCTIVE — reinstalls the VM)
+zcp instance change-os <slug> --template ubuntu-22f
 
-# List attached networks and passwords
-zcp instance network-list <uuid>
-zcp instance password-list --zone <zone-uuid>
-zcp instance password-list --zone <zone-uuid> --instance <uuid>
+# Change startup script
+zcp instance change-script <slug> --user-data "#!/bin/bash\napt update"
+
+# Change password
+zcp instance change-password <slug> --password "newSecureP@ss"
+
+# Add a network to a running instance
+zcp instance add-network <slug> --network <network-slug>
+
+# Activity logs
+zcp instance logs <slug>
+
+# Tags
+zcp instance tag-create <slug> --key env --value prod
+zcp instance tag-delete <slug> --key env
+
+# Addons
+zcp instance addons <slug>
 
 # Open an SSH session directly from the CLI
-zcp instance ssh <uuid>
-zcp instance ssh <uuid> --user ubuntu
-zcp instance ssh <uuid> --user root --identity-file ~/.ssh/my-key.pem --port 2222
+zcp instance ssh <slug>
+zcp instance ssh <slug> --user ubuntu
+zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
+
+# To cancel/delete an instance, use billing cancel-service:
+zcp billing cancel-service <subscription-slug> --service "Virtual Machine" --reason not_needed_anymore
 ```
 
 The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance reaches the target state, printing progress to stderr.
@@ -213,26 +247,33 @@ The `--wait` flag on `create`, `start`, and `stop` polls the API until the insta
 
 ```bash
 # Volumes
-zcp volume list --zone <zone-uuid>
-zcp volume create --zone <zone-uuid> --name my-disk --storage-offering <uuid>
-zcp volume attach <uuid> --instance <uuid>
-zcp volume detach <uuid>
-zcp volume delete <uuid> [--yes]
+zcp volume list
+zcp volume create \
+  --name my-disk \
+  --project my-project \
+  --cloud-provider nimbo \
+  --region noida \
+  --billing-cycle hourly \
+  --storage-category nvme \
+  --plan 50-gb-2
+zcp volume create ... --vm <vm-slug>   # Attach on creation
+zcp volume attach <volume-slug> --vm <vm-slug>
+zcp volume detach <volume-slug>
 
 # Snapshots
 zcp snapshot list
-zcp snapshot create --volume <uuid> --zone <zone-uuid> --name my-snapshot
-zcp snapshot delete <uuid> [--yes]
+zcp snapshot create --volume <slug> --name my-snapshot
+zcp snapshot delete <slug>
 
 # VM snapshots (whole-instance checkpoint)
 zcp vm-snapshot list
-zcp vm-snapshot create --zone <zone-uuid> --name my-checkpoint --instance <uuid>
-zcp vm-snapshot revert <uuid> [--yes]
+zcp vm-snapshot create --name my-checkpoint --instance <slug>
+zcp vm-snapshot revert <slug>
 
 # Snapshot policies (automated scheduling)
 zcp snapshot-policy list
 zcp snapshot-policy create \
-  --volume <uuid> \
+  --volume <slug> \
   --interval daily \
   --time 02:00 \
   --timezone America/Toronto \
@@ -243,36 +284,36 @@ zcp snapshot-policy create \
 
 ```bash
 # Networks
-zcp network list --zone <zone-uuid>
-zcp network create --zone <zone-uuid> --name my-net --offering <uuid>
-zcp network delete <uuid> [--yes]
+zcp network list
+zcp network create --name my-net --network-offering <slug>
+zcp network delete <slug>
 
 # Public IP addresses
-zcp ip list --zone <zone-uuid>
-zcp ip allocate --network <uuid>
-zcp ip release <uuid> [--yes]
-zcp ip static-nat enable <ip-uuid> --instance <uuid> --network <uuid>
+zcp ip list
+zcp ip allocate --network <slug>
+zcp ip release <slug>
+zcp ip static-nat enable <slug> --instance <slug> --network <slug>
 
 # Firewall rules (ingress)
-zcp firewall list --zone <zone-uuid>
-zcp firewall create --ip <uuid> --protocol tcp --start-port 80 --end-port 80
+zcp firewall list
+zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
 
 # Egress rules
-zcp egress list --zone <zone-uuid>
-zcp egress create --network <uuid> --protocol tcp
+zcp egress list
+zcp egress create --network <slug> --protocol tcp
 
 # Port forwarding
-zcp portforward list --zone <zone-uuid>
+zcp portforward list
 zcp portforward create \
-  --ip <uuid> \
+  --ip <slug> \
   --protocol tcp \
   --public-port 2222 \
   --private-port 22 \
-  --instance <uuid>
+  --instance <slug>
 
 # Resource tags
 zcp tag list
-zcp tag create --zone <zone-uuid> --resource <uuid> --type Instance --key env --value prod
+zcp tag create --resource <slug> --type Instance --key env --value prod
 ```
 
 ### Advanced Networking
@@ -280,28 +321,28 @@ zcp tag create --zone <zone-uuid> --resource <uuid> --type Instance --key env --
 ```bash
 # VPCs
 zcp vpc list
-zcp vpc create --zone <zone-uuid> --name my-vpc --offering <vpc-offering-uuid> --cidr 10.0.0.0/16
-zcp vpc delete <uuid> [--yes]
+zcp vpc create --name my-vpc --vpc-offering <slug> --cidr 10.0.0.0/16
+zcp vpc delete <slug>
 
 # Network ACLs
 zcp acl list
-zcp acl create --vpc <uuid> --name my-acl
-zcp acl delete <uuid> [--yes]
+zcp acl create --vpc <slug> --name my-acl
+zcp acl delete <slug>
 
 # Public load balancers
-zcp loadbalancer list --zone <zone-uuid>
-zcp loadbalancer create --ip <uuid> --name my-lb --algorithm roundrobin
-zcp loadbalancer delete <uuid> [--yes]
+zcp loadbalancer list
+zcp loadbalancer create --ip <slug> --name my-lb --algorithm roundrobin
+zcp loadbalancer delete <slug>
 
 # Internal load balancers (VPC-scoped)
-zcp internal-lb list --zone <zone-uuid>
-zcp internal-lb create --network <uuid> --name my-internal-lb
-zcp internal-lb delete <uuid> [--yes]
+zcp internal-lb list
+zcp internal-lb create --network <slug> --name my-internal-lb
+zcp internal-lb delete <slug>
 
 # VPN gateways and connections
-zcp vpn list --zone <zone-uuid>
-zcp vpn create --vpc <uuid> --name my-vpn
-zcp vpn delete <uuid> [--yes]
+zcp vpn list
+zcp vpn create --vpc <slug> --name my-vpn
+zcp vpn delete <slug>
 ```
 
 ### Security and Access
@@ -310,40 +351,182 @@ zcp vpn delete <uuid> [--yes]
 # SSH keys
 zcp ssh-key list
 zcp ssh-key create --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)"
-zcp ssh-key delete <uuid> [--yes]
+zcp ssh-key delete <slug>
 
 # Security groups
 zcp security-group list
 zcp security-group create --name my-sg --description "Web tier"
-zcp security-group delete <uuid> [--yes]
+zcp security-group delete <slug>
+
+# Affinity groups
+zcp affinity-group list
+zcp affinity-group create --name my-ag --type host-affinity
+zcp affinity-group delete <slug>
+```
+
+### DNS
+
+```bash
+# Domains
+zcp dns list
+zcp dns show <slug>
+
+# Create a domain
+zcp dns create --name example.com --project my-project
+
+# Create a record
+zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
+zcp dns record-create --domain <domain-slug> --name mail --type MX --content mail.example.com --ttl 3600
+
+# Delete a record or domain
+zcp dns record-delete --domain <domain-slug> --record-id 42
+zcp dns delete <domain-slug>
+```
+
+### Backup
+
+```bash
+zcp backup list
+zcp backup get <slug>
+zcp backup create --instance <slug> --name my-backup
+zcp backup restore <slug>
+zcp backup delete <slug>
+```
+
+### Autoscale
+
+```bash
+zcp autoscale list
+zcp autoscale get <slug>
+zcp autoscale create --name my-policy --min 1 --max 5
+zcp autoscale delete <slug>
+```
+
+### Monitoring
+
+```bash
+zcp monitoring list
+zcp monitoring get <slug>
+zcp monitoring create --instance <slug> --type cpu --threshold 80
+zcp monitoring delete <slug>
+```
+
+### Project
+
+```bash
+zcp project list
+zcp project create --name my-project --icon cloud-15 --purpose "Development"
+zcp project update <slug> --name "New Name" --description "Updated description"
+zcp project delete <slug>
+zcp project dashboard <slug>
+
+# Project users
+zcp project user list <slug>
+zcp project user add <slug> --email alice@example.com --role admin
+
+# Project icons
+zcp project icon list
 ```
 
 ### Kubernetes
 
 ```bash
 # 'k8s' is accepted as an alias for 'kubernetes'
-zcp kubernetes list --zone <zone-uuid>
-zcp kubernetes get <uuid>
-zcp kubernetes create --zone <zone-uuid> --name my-cluster --offering <uuid>
-zcp kubernetes delete <uuid> [--yes]
-zcp kubernetes kubeconfig <uuid>   # Download kubeconfig for kubectl access
+zcp kubernetes list
+zcp kubernetes create \
+  --name my-cluster \
+  --version v1.28.4 \
+  --plan k8s-plan-1 \
+  --region noida \
+  --project default-59 \
+  --cloud-provider nimbo \
+  --billing-cycle monthly \
+  --workers 3 \
+  --ssh-key mykey
+
+# HA cluster with multiple control nodes
+zcp kubernetes create \
+  --name ha-cluster \
+  --version v1.28.4 \
+  --plan k8s-plan-1 \
+  --region noida \
+  --project default-59 \
+  --cloud-provider nimbo \
+  --billing-cycle monthly \
+  --workers 3 \
+  --control-nodes 3 \
+  --ha \
+  --ssh-key mykey
+
+# Start / stop / upgrade
+zcp kubernetes start <slug>
+zcp kubernetes stop <slug>
+zcp kubernetes upgrade <slug> --plan k8s-plan-2
+
+# To cancel/delete a cluster, use billing cancel-service:
+zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
 ```
 
 ### Billing and Admin
 
 ```bash
-# Usage records
-zcp usage list
-zcp usage list --zone <zone-uuid>
-zcp usage list --output csv
+# Account balance and costs
+zcp billing balance
+zcp billing costs
+zcp billing monthly-usage
+zcp billing usage
+zcp billing credit-limit
+zcp billing service-counts
+zcp billing free-credits
 
-# Cost summary
+# Invoices and payments
+zcp billing invoices
+zcp billing invoices --page 2
+zcp billing invoices-count
+zcp billing payments
+
+# Subscriptions
+zcp billing subscriptions active
+zcp billing subscriptions inactive
+zcp billing contracts
+zcp billing trials
+
+# Cancel a service (instances, volumes, IPs, etc.)
+zcp billing cancel-service <subscription-slug> --service "Virtual Machine" --reason not_needed_anymore
+zcp billing cancel-service <subscription-slug> --service "Block Storage" --reason not_needed_anymore --type Immediate
+zcp billing cancel-requests
+
+# Coupons
+zcp billing coupons
+zcp billing redeem-coupon SAVE50
+
+# Budget alerts
+zcp billing budget-alert
+zcp billing budget-alert-set --amount 500 --threshold 80 --enabled
+
+# Legacy usage and cost commands
+zcp usage list
 zcp cost summary
-zcp cost summary --zone <zone-uuid>
 
 # Admin operations (requires elevated permissions)
 zcp admin list-accounts
-zcp admin get-account <uuid>
+zcp admin get-account <slug>
+```
+
+### Support
+
+```bash
+zcp support list
+zcp support get <ticket-id>
+zcp support create --subject "Issue title" --description "Details"
+zcp support close <ticket-id>
+```
+
+### Dashboard
+
+```bash
+zcp dashboard summary
+zcp dashboard status
 ```
 
 ### Auth
@@ -362,26 +545,26 @@ All listing commands support three output formats controlled by the `--output` (
 **Table (default)**
 
 ```bash
-zcp zone list
+zcp region list
 ```
 
 ```
-UUID                                  NAME      COUNTRY  ACTIVE
-----                                  ----      -------  ------
-3a7c1e2d-...                          Toronto   Canada   true
-b91f4a8c-...                          Montreal  Canada   true
+SLUG       NAME      COUNTRY  ACTIVE
+----       ----      -------  ------
+toronto    Toronto   Canada   true
+montreal   Montreal  Canada   true
 ```
 
 **JSON**
 
 ```bash
-zcp zone list --output json
+zcp region list --output json
 ```
 
 ```json
 [
   {
-    "uuid": "3a7c1e2d-...",
+    "slug": "toronto",
     "name": "Toronto",
     "country_name": "Canada",
     "is_active": "true"
@@ -392,11 +575,11 @@ zcp zone list --output json
 **YAML**
 
 ```bash
-zcp zone list --output yaml
+zcp region list --output yaml
 ```
 
 ```yaml
-- uuid: 3a7c1e2d-...
+- slug: toronto
   name: Toronto
   country_name: Canada
   is_active: "true"
@@ -408,17 +591,16 @@ zcp zone list --output yaml
 
 These flags are available on every command:
 
-| Flag          | Default                          | Description                                        |
-|---------------|----------------------------------|----------------------------------------------------|
-| `--profile`   | active profile from config       | Profile name to use for this invocation            |
-| `--output`    | `table`                          | Output format: `table`, `json`, `yaml`             |
-| `--api-url`   | `https://cloud.zcp.zsoftly.ca`   | Override the API base URL                          |
-| `--timeout`   | `30`                             | HTTP request timeout in seconds                    |
-| `--debug`     | `false`                          | Enable debug output (requests/responses to stderr) |
-| `--no-color`  | `false`                          | Disable ANSI color in table output                 |
-| `--pager`     | `false`                          | Pipe table output through a pager (`less`)         |
-
-The `-o` shorthand is accepted for `--output`.
+| Flag             | Short | Default                    | Description                                        |
+| ---------------- | ----- | -------------------------- | -------------------------------------------------- |
+| `--profile`      |       | active profile from config | Profile name to use for this invocation            |
+| `--output`       | `-o`  | `table`                    | Output format: `table`, `json`, `yaml`             |
+| `--auto-approve` | `-y`  | `false`                    | Skip all confirmation prompts (useful for CI)      |
+| `--api-url`      |       | from profile config        | Override the API base URL                          |
+| `--timeout`      |       | `30`                       | HTTP request timeout in seconds                    |
+| `--debug`        |       | `false`                    | Enable debug output (requests/responses to stderr) |
+| `--no-color`     |       | `false`                    | Disable ANSI color in table output                 |
+| `--pager`        |       | `false`                    | Pipe table output through a pager (`less`)         |
 
 ---
 

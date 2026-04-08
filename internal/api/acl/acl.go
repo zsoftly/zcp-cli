@@ -3,44 +3,55 @@ package acl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"net/url"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
 // NetworkACL represents a ZCP Network Access Control List.
 type NetworkACL struct {
-	UUID        string `json:"uuid"`
+	Slug        string `json:"slug"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
-	IsActive    bool   `json:"isActive"`
-	ZoneUUID    string `json:"zoneUuid"`
-	VPCUUID     string `json:"vpcUuid"`
+	VPCSlug     string `json:"vpcSlug"`
 }
 
-// CreateRequest holds parameters for creating a Network ACL.
-type CreateRequest struct {
-	Name        string `json:"name"`
-	VPCUUID     string `json:"vpcUuid"`
-	Description string `json:"description,omitempty"`
+// ACLRuleCreateRequest holds parameters for creating a Network ACL rule.
+type ACLRuleCreateRequest struct {
+	Protocol    string `json:"protocol"`
+	CIDRList    string `json:"cidrList,omitempty"`
+	StartPort   int    `json:"startPort,omitempty"`
+	EndPort     int    `json:"endPort,omitempty"`
+	TrafficType string `json:"trafficType,omitempty"`
+	Action      string `json:"action"`
+	Number      int    `json:"number,omitempty"`
+	ICMPCode    int    `json:"icmpCode,omitempty"`
+	ICMPType    int    `json:"icmpType,omitempty"`
 }
 
-type listNetworkAclListResponse struct {
-	Count                      int          `json:"count"`
-	ListNetworkAclListResponse []NetworkACL `json:"listNetworkAclListResponse"`
+// ACLRule represents a single ACL rule.
+type ACLRule struct {
+	Slug        string `json:"slug"`
+	Protocol    string `json:"protocol"`
+	CIDRList    string `json:"cidrList"`
+	StartPort   int    `json:"startPort"`
+	EndPort     int    `json:"endPort"`
+	TrafficType string `json:"trafficType"`
+	Action      string `json:"action"`
+	Number      int    `json:"number"`
 }
 
-// Network represents a minimal network result returned by ACL operations.
-type Network struct {
-	UUID string `json:"uuid"`
-	Name string `json:"name"`
+// ReplaceACLRequest holds parameters for replacing an ACL on a network.
+type ReplaceACLRequest struct {
+	ACLSlug string `json:"aclSlug"`
 }
 
-type listNetworkResponse struct {
-	Count               int       `json:"count"`
-	ListNetworkResponse []Network `json:"listNetworkResponse"`
+// apiResponse is the STKCNSL response envelope.
+type apiResponse struct {
+	Status string          `json:"status"`
+	Data   json.RawMessage `json:"data"`
 }
 
 // Service provides Network ACL API operations.
@@ -53,51 +64,38 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns network ACLs. zoneUUID is required; uuid and vpcUUID are optional filters.
-func (s *Service) List(ctx context.Context, zoneUUID, uuid, vpcUUID string) ([]NetworkACL, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if uuid != "" {
-		q.Set("uuid", uuid)
+// List returns network ACLs for a VPC by slug.
+func (s *Service) List(ctx context.Context, vpcSlug string) ([]NetworkACL, error) {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", nil, &env); err != nil {
+		return nil, fmt.Errorf("listing network ACLs for VPC %s: %w", vpcSlug, err)
 	}
-	if vpcUUID != "" {
-		q.Set("vpcUuid", vpcUUID)
+	var acls []NetworkACL
+	if err := json.Unmarshal(env.Data, &acls); err != nil {
+		return nil, fmt.Errorf("decoding network ACL list: %w", err)
 	}
-	var resp listNetworkAclListResponse
-	if err := s.client.Get(ctx, "/restapi/networkacllist/networkAclList", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing network ACLs: %w", err)
-	}
-	return resp.ListNetworkAclListResponse, nil
+	return acls, nil
 }
 
-// Create provisions a new Network ACL.
-func (s *Service) Create(ctx context.Context, req CreateRequest) (*NetworkACL, error) {
-	var resp listNetworkAclListResponse
-	if err := s.client.Post(ctx, "/restapi/networkacllist/createNetworkAcl", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating network ACL: %w", err)
+// CreateRule creates a new ACL rule in a VPC.
+func (s *Service) CreateRule(ctx context.Context, vpcSlug string, req ACLRuleCreateRequest) (*ACLRule, error) {
+	var env apiResponse
+	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", req, &env); err != nil {
+		return nil, fmt.Errorf("creating ACL rule in VPC %s: %w", vpcSlug, err)
 	}
-	if len(resp.ListNetworkAclListResponse) == 0 {
-		return nil, fmt.Errorf("create network ACL returned empty response")
+	var rule ACLRule
+	if err := json.Unmarshal(env.Data, &rule); err != nil {
+		return nil, fmt.Errorf("decoding created ACL rule: %w", err)
 	}
-	return &resp.ListNetworkAclListResponse[0], nil
+	return &rule, nil
 }
 
-// Delete removes a Network ACL by UUID.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/networkacllist/deleteNetworkAcl/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting network ACL %s: %w", uuid, err)
+// ReplaceNetworkACL replaces the ACL on a network by slug.
+func (s *Service) ReplaceNetworkACL(ctx context.Context, networkSlug, aclSlug string) error {
+	req := ReplaceACLRequest{ACLSlug: aclSlug}
+	var env apiResponse
+	if err := s.client.Post(ctx, "/networks/"+networkSlug+"/replace-acl-list", req, &env); err != nil {
+		return fmt.Errorf("replacing ACL on network %s: %w", networkSlug, err)
 	}
 	return nil
-}
-
-// ReplaceNetworkACL replaces the ACL on a network identified by networkUUID.
-func (s *Service) ReplaceNetworkACL(ctx context.Context, networkUUID, aclUUID string) ([]Network, error) {
-	q := url.Values{
-		"uuid":    {networkUUID},
-		"aclUuid": {aclUUID},
-	}
-	var resp listNetworkResponse
-	if err := s.client.Get(ctx, "/restapi/network/replaceAcl", q, &resp); err != nil {
-		return nil, fmt.Errorf("replacing ACL on network %s: %w", networkUUID, err)
-	}
-	return resp.ListNetworkResponse, nil
 }

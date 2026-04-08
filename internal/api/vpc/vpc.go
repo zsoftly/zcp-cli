@@ -3,6 +3,7 @@ package vpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -11,13 +12,11 @@ import (
 
 // VPC represents a ZCP Virtual Private Cloud.
 type VPC struct {
-	UUID        string `json:"uuid"`
+	Slug        string `json:"slug"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Status      string `json:"status"`
-	IsActive    bool   `json:"isActive"`
-	CIDR        string `json:"cIDR"`
-	ZoneUUID    string `json:"zoneUuid"`
+	CIDR        string `json:"cidr"`
 	ZoneName    string `json:"zoneName"`
 	DomainName  string `json:"domainName"`
 }
@@ -25,55 +24,72 @@ type VPC struct {
 // CreateRequest holds parameters for creating a VPC.
 type CreateRequest struct {
 	Name                       string `json:"name"`
-	ZoneUUID                   string `json:"zoneUuid"`
-	VPCOfferingUUID            string `json:"vpcOfferingUuid"`
-	CIDR                       string `json:"cIDR"`
-	Description                string `json:"description"`
+	ZoneSlug                   string `json:"zoneSlug"`
+	VPCOfferingSlug            string `json:"vpcOfferingSlug"`
+	CIDR                       string `json:"cidr"`
+	Description                string `json:"description,omitempty"`
 	NetworkDomain              string `json:"networkDomain,omitempty"`
-	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider"`
-}
-
-// CreateNetworkRequest holds parameters for creating a VPC tier network.
-type CreateNetworkRequest struct {
-	Name                string `json:"name"`
-	ZoneUUID            string `json:"zoneUuid"`
-	NetworkOfferingUUID string `json:"networkOfferingUuid"`
-	VPCUUID             string `json:"vpcUuid"`
-	Gateway             string `json:"gateway"`
-	Netmask             string `json:"netmask"`
-	ACLUUID             string `json:"aclUuid,omitempty"`
-}
-
-// VPCNetwork represents a network tier inside a VPC.
-type VPCNetwork struct {
-	UUID                string `json:"uuid"`
-	Name                string `json:"name"`
-	IsActive            bool   `json:"isActive"`
-	DomainName          string `json:"domainName"`
-	CIDR                string `json:"cIDR"`
-	Gateway             string `json:"gateway"`
-	NetworkType         string `json:"networkType"`
-	NetworkOfferingUUID string `json:"networkOfferingUuid"`
-	ZoneUUID            string `json:"zoneUuid"`
-	NetworkDomain       string `json:"networkDomain"`
-	Status              string `json:"status"`
-}
-
-type listVpcNetworkResponse struct {
-	Count               int          `json:"count"`
-	ListNetworkResponse []VPCNetwork `json:"listNetworkResponse"`
+	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider,omitempty"`
 }
 
 // UpdateRequest holds parameters for updating a VPC.
 type UpdateRequest struct {
-	UUID        string `json:"uuid"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 }
 
-type listVpcResponse struct {
-	Count           int   `json:"count"`
-	ListVpcResponse []VPC `json:"listVpcResponse"`
+// NetworkACL represents a network ACL inside a VPC.
+type NetworkACL struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+}
+
+// ACLRuleCreateRequest holds parameters for creating a network ACL rule.
+type ACLRuleCreateRequest struct {
+	Protocol    string `json:"protocol"`
+	CIDRList    string `json:"cidrList,omitempty"`
+	StartPort   int    `json:"startPort,omitempty"`
+	EndPort     int    `json:"endPort,omitempty"`
+	TrafficType string `json:"trafficType,omitempty"`
+	Action      string `json:"action"`
+	Number      int    `json:"number,omitempty"`
+	ICMPCode    int    `json:"icmpCode,omitempty"`
+	ICMPType    int    `json:"icmpType,omitempty"`
+}
+
+// ACLRule represents a single ACL rule.
+type ACLRule struct {
+	Slug        string `json:"slug"`
+	Protocol    string `json:"protocol"`
+	CIDRList    string `json:"cidrList"`
+	StartPort   int    `json:"startPort"`
+	EndPort     int    `json:"endPort"`
+	TrafficType string `json:"trafficType"`
+	Action      string `json:"action"`
+	Number      int    `json:"number"`
+}
+
+// VPNGateway represents a VPN gateway attached to a VPC.
+type VPNGateway struct {
+	Slug     string `json:"slug"`
+	PublicIP string `json:"publicIpAddress"`
+	VPCUUID  string `json:"vpcUuid"`
+	VPCSlug  string `json:"vpcSlug"`
+	ZoneName string `json:"zoneName"`
+	Status   string `json:"status"`
+}
+
+// VPNGatewayCreateRequest holds parameters for creating a VPN gateway.
+type VPNGatewayCreateRequest struct {
+	// Intentionally empty — the VPC slug is in the URL path.
+}
+
+// apiResponse is the STKCNSL response envelope.
+type apiResponse struct {
+	Status string          `json:"status"`
+	Data   json.RawMessage `json:"data"`
 }
 
 // Service provides VPC API operations.
@@ -86,118 +102,149 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns VPCs in a zone. zoneUUID is required; uuid is an optional filter.
-func (s *Service) List(ctx context.Context, zoneUUID, uuid string) ([]VPC, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if uuid != "" {
-		q.Set("uuid", uuid)
+// List returns all VPCs. zoneSlug is an optional filter.
+func (s *Service) List(ctx context.Context, zoneSlug string) ([]VPC, error) {
+	var q url.Values
+	if zoneSlug != "" {
+		q = url.Values{"zoneSlug": {zoneSlug}}
 	}
-	var resp listVpcResponse
-	if err := s.client.Get(ctx, "/restapi/vpc/vpcList", q, &resp); err != nil {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs", q, &env); err != nil {
 		return nil, fmt.Errorf("listing VPCs: %w", err)
 	}
-	return resp.ListVpcResponse, nil
+	var vpcs []VPC
+	if err := json.Unmarshal(env.Data, &vpcs); err != nil {
+		return nil, fmt.Errorf("decoding VPC list: %w", err)
+	}
+	return vpcs, nil
 }
 
-// Get returns a single VPC by UUID using the dedicated vpcId endpoint.
-func (s *Service) Get(ctx context.Context, uuid string) (*VPC, error) {
-	q := url.Values{"uuid": {uuid}}
-	var resp listVpcResponse
-	if err := s.client.Get(ctx, "/restapi/vpc/vpcId", q, &resp); err != nil {
-		return nil, fmt.Errorf("getting VPC %s: %w", uuid, err)
+// Get returns a single VPC by slug.
+func (s *Service) Get(ctx context.Context, slug string) (*VPC, error) {
+	vpcs, err := s.List(ctx, "")
+	if err != nil {
+		return nil, err
 	}
-	if len(resp.ListVpcResponse) == 0 {
-		return nil, fmt.Errorf("VPC %q not found", uuid)
+	for i := range vpcs {
+		if vpcs[i].Slug == slug {
+			return &vpcs[i], nil
+		}
 	}
-	return &resp.ListVpcResponse[0], nil
+	return nil, fmt.Errorf("VPC %q not found", slug)
 }
 
 // Create provisions a new VPC.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*VPC, error) {
-	var resp listVpcResponse
-	if err := s.client.Post(ctx, "/restapi/vpc/createVpc", req, &resp); err != nil {
+	var env apiResponse
+	if err := s.client.Post(ctx, "/vpcs", req, &env); err != nil {
 		return nil, fmt.Errorf("creating VPC: %w", err)
 	}
-	if len(resp.ListVpcResponse) == 0 {
-		return nil, fmt.Errorf("create VPC returned empty response")
+	var v VPC
+	if err := json.Unmarshal(env.Data, &v); err != nil {
+		return nil, fmt.Errorf("decoding created VPC: %w", err)
 	}
-	return &resp.ListVpcResponse[0], nil
-}
-
-// CreateNetwork creates a VPC tier network using the dedicated VPC endpoint.
-func (s *Service) CreateNetwork(ctx context.Context, req CreateNetworkRequest) (*VPCNetwork, error) {
-	var resp listVpcNetworkResponse
-	if err := s.client.Post(ctx, "/restapi/vpc/createVpcNetwork", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating VPC network: %w", err)
-	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("create VPC network returned empty response")
-	}
-	return &resp.ListNetworkResponse[0], nil
-}
-
-// UpdateNetworkRequest holds parameters for updating a VPC tier network.
-type UpdateNetworkRequest struct {
-	UUID                string `json:"uuid"`
-	Name                string `json:"name,omitempty"`
-	Description         string `json:"description,omitempty"`
-	NetworkOfferingUUID string `json:"networkOfferingUuid"`
-	NetworkDomain       string `json:"networkDomain,omitempty"`
-}
-
-// UpdateNetwork modifies a VPC tier network.
-func (s *Service) UpdateNetwork(ctx context.Context, req UpdateNetworkRequest) (*VPCNetwork, error) {
-	var resp listVpcNetworkResponse
-	if err := s.client.Put(ctx, "/restapi/vpc/updateVpcNetwork", nil, req, &resp); err != nil {
-		return nil, fmt.Errorf("updating VPC network: %w", err)
-	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("update VPC network returned empty response")
-	}
-	return &resp.ListNetworkResponse[0], nil
+	return &v, nil
 }
 
 // Update modifies a VPC's mutable attributes.
-func (s *Service) Update(ctx context.Context, req UpdateRequest) (*VPC, error) {
-	var resp listVpcResponse
-	if err := s.client.Put(ctx, "/restapi/vpc/updateVpc", nil, req, &resp); err != nil {
-		return nil, fmt.Errorf("updating VPC %s: %w", req.UUID, err)
+func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*VPC, error) {
+	var env apiResponse
+	if err := s.client.Put(ctx, "/vpcs/"+slug, nil, req, &env); err != nil {
+		return nil, fmt.Errorf("updating VPC %s: %w", slug, err)
 	}
-	if len(resp.ListVpcResponse) == 0 {
-		return nil, fmt.Errorf("update VPC returned empty response")
+	var v VPC
+	if err := json.Unmarshal(env.Data, &v); err != nil {
+		return nil, fmt.Errorf("decoding updated VPC: %w", err)
 	}
-	return &resp.ListVpcResponse[0], nil
+	return &v, nil
 }
 
-// Delete removes a VPC by UUID.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/vpc/deleteVpc/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting VPC %s: %w", uuid, err)
+// Delete removes a VPC by slug.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/vpcs/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting VPC %s: %w", slug, err)
 	}
 	return nil
 }
 
-// Restart restarts a VPC. cleanUp triggers cleanup; redundant enables redundant router.
-func (s *Service) Restart(ctx context.Context, uuid string, cleanUp, redundant bool) (*VPC, error) {
-	cleanUpStr := "false"
-	if cleanUp {
-		cleanUpStr = "true"
+// Restart restarts a VPC by slug.
+func (s *Service) Restart(ctx context.Context, slug string) (*VPC, error) {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs/"+slug+"/restart", nil, &env); err != nil {
+		return nil, fmt.Errorf("restarting VPC %s: %w", slug, err)
 	}
-	redundantStr := "false"
-	if redundant {
-		redundantStr = "true"
+	var v VPC
+	if err := json.Unmarshal(env.Data, &v); err != nil {
+		return nil, fmt.Errorf("decoding restarted VPC: %w", err)
 	}
-	q := url.Values{
-		"uuid":               {uuid},
-		"cleanUpVPC":         {cleanUpStr},
-		"redundantVpcRouter": {redundantStr},
+	return &v, nil
+}
+
+// ListACLs returns the network ACLs for a VPC.
+func (s *Service) ListACLs(ctx context.Context, vpcSlug string) ([]NetworkACL, error) {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", nil, &env); err != nil {
+		return nil, fmt.Errorf("listing ACLs for VPC %s: %w", vpcSlug, err)
 	}
-	var resp listVpcResponse
-	if err := s.client.Get(ctx, "/restapi/vpc/restartVpc", q, &resp); err != nil {
-		return nil, fmt.Errorf("restarting VPC %s: %w", uuid, err)
+	var acls []NetworkACL
+	if err := json.Unmarshal(env.Data, &acls); err != nil {
+		return nil, fmt.Errorf("decoding ACL list: %w", err)
 	}
-	if len(resp.ListVpcResponse) == 0 {
-		return nil, fmt.Errorf("restart VPC returned empty response")
+	return acls, nil
+}
+
+// CreateACLRule creates a new ACL rule in a VPC.
+func (s *Service) CreateACLRule(ctx context.Context, vpcSlug string, req ACLRuleCreateRequest) (*ACLRule, error) {
+	var env apiResponse
+	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", req, &env); err != nil {
+		return nil, fmt.Errorf("creating ACL rule in VPC %s: %w", vpcSlug, err)
 	}
-	return &resp.ListVpcResponse[0], nil
+	var rule ACLRule
+	if err := json.Unmarshal(env.Data, &rule); err != nil {
+		return nil, fmt.Errorf("decoding created ACL rule: %w", err)
+	}
+	return &rule, nil
+}
+
+// ReplaceNetworkACL replaces the ACL on a network by slug.
+func (s *Service) ReplaceNetworkACL(ctx context.Context, networkSlug string, req map[string]string) error {
+	var env apiResponse
+	if err := s.client.Post(ctx, "/networks/"+networkSlug+"/replace-acl-list", req, &env); err != nil {
+		return fmt.Errorf("replacing ACL on network %s: %w", networkSlug, err)
+	}
+	return nil
+}
+
+// ListVPNGateways returns VPN gateways for a VPC.
+func (s *Service) ListVPNGateways(ctx context.Context, vpcSlug string) ([]VPNGateway, error) {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/vpn-gateways", nil, &env); err != nil {
+		return nil, fmt.Errorf("listing VPN gateways for VPC %s: %w", vpcSlug, err)
+	}
+	var gateways []VPNGateway
+	if err := json.Unmarshal(env.Data, &gateways); err != nil {
+		return nil, fmt.Errorf("decoding VPN gateway list: %w", err)
+	}
+	return gateways, nil
+}
+
+// CreateVPNGateway creates a VPN gateway for a VPC.
+func (s *Service) CreateVPNGateway(ctx context.Context, vpcSlug string) (*VPNGateway, error) {
+	var env apiResponse
+	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/vpn-gateways", VPNGatewayCreateRequest{}, &env); err != nil {
+		return nil, fmt.Errorf("creating VPN gateway for VPC %s: %w", vpcSlug, err)
+	}
+	var gw VPNGateway
+	if err := json.Unmarshal(env.Data, &gw); err != nil {
+		return nil, fmt.Errorf("decoding created VPN gateway: %w", err)
+	}
+	return &gw, nil
+}
+
+// DeleteVPNGateway deletes a VPN gateway from a VPC.
+func (s *Service) DeleteVPNGateway(ctx context.Context, vpcSlug, gatewayID string) error {
+	if err := s.client.Delete(ctx, "/vpcs/"+vpcSlug+"/vpn-gateways/"+gatewayID, nil); err != nil {
+		return fmt.Errorf("deleting VPN gateway %s from VPC %s: %w", gatewayID, vpcSlug, err)
+	}
+	return nil
 }

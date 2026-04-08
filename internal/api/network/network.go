@@ -4,54 +4,104 @@ package network
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-// Network represents a ZCP virtual network.
+// Network represents a ZCP isolated network.
 type Network struct {
-	UUID                string `json:"uuid"`
-	Name                string `json:"name"`
-	Status              string `json:"status"`
-	IsActive            bool   `json:"isActive"`
-	NetworkType         string `json:"networkType"`
-	Gateway             string `json:"gateway"`
-	CIDR                string `json:"cIDR"`
-	ZoneUUID            string `json:"zoneUuid"`
-	DomainName          string `json:"domainName"`
-	NetworkOfferingUUID string `json:"networkOfferingUuid"`
-	NetworkACLList      string `json:"networkAclList"`
-	CleanUpNetwork      bool   `json:"cleanUpNetwork"`
-	NetworkDomain       string `json:"networkDomain"`
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	NetworkType string `json:"network_type"`
+	Gateway     string `json:"gateway"`
+	CIDR        string `json:"cidr"`
+	Netmask     string `json:"netmask"`
+	DNS1        string `json:"dns1"`
+	DNS2        string `json:"dns2"`
+	ZoneSlug    string `json:"zone_slug"`
+	ZoneName    string `json:"zone_name"`
+	Category    string `json:"category"`
+	Description string `json:"description"`
+	IsDefault   bool   `json:"is_default"`
+}
+
+// Category represents a network category (offering).
+type Category struct {
+	ID          string `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// EgressRule represents a network egress firewall rule.
+type EgressRule struct {
+	ID        string `json:"id"`
+	Protocol  string `json:"protocol"`
+	StartPort string `json:"start_port"`
+	EndPort   string `json:"end_port"`
+	CIDR      string `json:"cidr"`
+	ICMPType  string `json:"icmp_type"`
+	ICMPCode  string `json:"icmp_code"`
+	Status    string `json:"status"`
 }
 
 // CreateRequest holds parameters for creating a network.
 type CreateRequest struct {
-	Name                string `json:"name"`
-	ZoneUUID            string `json:"zoneUuid"`
-	NetworkOfferingUUID string `json:"networkOfferingUuid"`
-	VirtualMachineUUID  string `json:"virtualmachineUuid,omitempty"`
-	VPCUUID             string `json:"vpcUuid,omitempty"`
-	Gateway             string `json:"gateway,omitempty"`
-	Netmask             string `json:"netmask,omitempty"`
-	ACLUUID             string `json:"aclUuid,omitempty"`
-	// IsPublic is sent as a query parameter, not in the JSON body.
-	IsPublic bool `json:"-"`
+	Name         string `json:"name"`
+	CategorySlug string `json:"category_slug"`
+	ZoneSlug     string `json:"zone_slug,omitempty"`
+	Gateway      string `json:"gateway,omitempty"`
+	Netmask      string `json:"netmask,omitempty"`
+	Description  string `json:"description,omitempty"`
 }
 
 // UpdateRequest holds parameters for updating a network.
 type UpdateRequest struct {
-	UUID          string `json:"uuid"`
-	Name          string `json:"name"`
-	Description   string `json:"description,omitempty"`
-	CIDR          string `json:"getcIDR,omitempty"`
-	NetworkDomain string `json:"networkDomain,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// CreateEgressRuleRequest holds parameters for creating an egress rule.
+type CreateEgressRuleRequest struct {
+	Protocol  string `json:"protocol"`
+	StartPort string `json:"start_port,omitempty"`
+	EndPort   string `json:"end_port,omitempty"`
+	CIDR      string `json:"cidr,omitempty"`
+	ICMPType  string `json:"icmp_type,omitempty"`
+	ICMPCode  string `json:"icmp_code,omitempty"`
+}
+
+// apiResponse is the STKCNSL standard envelope.
+type apiResponse struct {
+	Status string `json:"status"`
+	Data   any    `json:"-"`
 }
 
 type listNetworkResponse struct {
-	Count               int       `json:"count"`
-	ListNetworkResponse []Network `json:"listNetworkResponse"`
+	Status string    `json:"status"`
+	Data   []Network `json:"data"`
+}
+
+type singleNetworkResponse struct {
+	Status string  `json:"status"`
+	Data   Network `json:"data"`
+}
+
+type listCategoryResponse struct {
+	Status string     `json:"status"`
+	Data   []Category `json:"data"`
+}
+
+type listEgressRuleResponse struct {
+	Status string       `json:"status"`
+	Data   []EgressRule `json:"data"`
+}
+
+type singleEgressRuleResponse struct {
+	Status string     `json:"status"`
+	Data   EgressRule `json:"data"`
 }
 
 // Service provides network API operations.
@@ -64,82 +114,65 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns networks in a zone. zoneUUID is required; networkUUID is an optional filter.
-func (s *Service) List(ctx context.Context, zoneUUID, networkUUID string) ([]Network, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if networkUUID != "" {
-		q.Set("uuid", networkUUID)
-	}
+// List returns all isolated networks.
+func (s *Service) List(ctx context.Context) ([]Network, error) {
 	var resp listNetworkResponse
-	if err := s.client.Get(ctx, "/restapi/network/networkList", q, &resp); err != nil {
+	if err := s.client.Get(ctx, "/networks", nil, &resp); err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
-	return resp.ListNetworkResponse, nil
+	return resp.Data, nil
 }
 
-// Get returns a single network by UUID using the dedicated networkId endpoint.
-func (s *Service) Get(ctx context.Context, zoneUUID, uuid string) (*Network, error) {
-	q := url.Values{"uuid": {uuid}}
-	var resp listNetworkResponse
-	if err := s.client.Get(ctx, "/restapi/network/networkId", q, &resp); err != nil {
-		return nil, fmt.Errorf("getting network %s: %w", uuid, err)
-	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("network %q not found", uuid)
-	}
-	return &resp.ListNetworkResponse[0], nil
-}
-
-// Create provisions a new network.
+// Create provisions a new isolated network.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Network, error) {
-	path := "/restapi/network/createNetwork"
-	if req.IsPublic {
-		path += "?isPublic=true"
-	}
-	var resp listNetworkResponse
-	if err := s.client.Post(ctx, path, req, &resp); err != nil {
+	var resp singleNetworkResponse
+	if err := s.client.Post(ctx, "/networks", req, &resp); err != nil {
 		return nil, fmt.Errorf("creating network: %w", err)
 	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("create network returned empty response")
-	}
-	return &resp.ListNetworkResponse[0], nil
-}
-
-// Delete removes a network by UUID.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/network/deleteNetwork/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting network %s: %w", uuid, err)
-	}
-	return nil
+	return &resp.Data, nil
 }
 
 // Update modifies a network's mutable attributes.
-// NOTE: The API defines this as PUT but we use Post since httpclient has no Put method.
-func (s *Service) Update(ctx context.Context, req UpdateRequest) (*Network, error) {
-	var resp listNetworkResponse
-	if err := s.client.Post(ctx, "/restapi/network/updateNetwork", req, &resp); err != nil {
-		return nil, fmt.Errorf("updating network %s: %w", req.UUID, err)
+func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*Network, error) {
+	var resp singleNetworkResponse
+	if err := s.client.Put(ctx, "/networks/"+slug, nil, req, &resp); err != nil {
+		return nil, fmt.Errorf("updating network %s: %w", slug, err)
 	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("update network returned empty response")
-	}
-	return &resp.ListNetworkResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Restart restarts a network. cleanUp triggers cleanup of stale resources.
-func (s *Service) Restart(ctx context.Context, uuid string, cleanUp bool) (*Network, error) {
-	cleanUpStr := "false"
-	if cleanUp {
-		cleanUpStr = "true"
+// ListCategories returns available network categories (offerings).
+func (s *Service) ListCategories(ctx context.Context) ([]Category, error) {
+	var resp listCategoryResponse
+	if err := s.client.Get(ctx, "/network/categories", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing network categories: %w", err)
 	}
-	q := url.Values{"uuid": {uuid}, "cleanUpNetwork": {cleanUpStr}}
-	var resp listNetworkResponse
-	if err := s.client.Get(ctx, "/restapi/network/restartNetwork", q, &resp); err != nil {
-		return nil, fmt.Errorf("restarting network %s: %w", uuid, err)
+	return resp.Data, nil
+}
+
+// ListEgressRules returns egress firewall rules for a network.
+func (s *Service) ListEgressRules(ctx context.Context, networkSlug string) ([]EgressRule, error) {
+	var resp listEgressRuleResponse
+	if err := s.client.Get(ctx, "/networks/"+networkSlug+"/egress-firewall-rules", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing egress rules for network %s: %w", networkSlug, err)
 	}
-	if len(resp.ListNetworkResponse) == 0 {
-		return nil, fmt.Errorf("restart network returned empty response")
+	return resp.Data, nil
+}
+
+// CreateEgressRule adds an egress firewall rule to a network.
+func (s *Service) CreateEgressRule(ctx context.Context, networkSlug string, req CreateEgressRuleRequest) (*EgressRule, error) {
+	var resp singleEgressRuleResponse
+	if err := s.client.Post(ctx, "/networks/"+networkSlug+"/egress-firewall-rules", req, &resp); err != nil {
+		return nil, fmt.Errorf("creating egress rule for network %s: %w", networkSlug, err)
 	}
-	return &resp.ListNetworkResponse[0], nil
+	return &resp.Data, nil
+}
+
+// DeleteEgressRule removes an egress firewall rule from a network.
+func (s *Service) DeleteEgressRule(ctx context.Context, networkSlug string, ruleID string) error {
+	path := fmt.Sprintf("/networks/%s/egress-firewall-rules/%s", networkSlug, ruleID)
+	if err := s.client.Delete(ctx, path, nil); err != nil {
+		return fmt.Errorf("deleting egress rule %s for network %s: %w", ruleID, networkSlug, err)
+	}
+	return nil
 }

@@ -20,94 +20,98 @@ func NewIPCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newIPListCmd())
 	cmd.AddCommand(newIPAllocateCmd())
-	cmd.AddCommand(newIPReleaseCmd())
 
 	natCmd := &cobra.Command{Use: "static-nat", Short: "Manage static NAT on IP addresses"}
 	natCmd.AddCommand(newIPStaticNATEnableCmd())
-	natCmd.AddCommand(newIPStaticNATDisableCmd())
 	cmd.AddCommand(natCmd)
+
+	vpnCmd := &cobra.Command{Use: "vpn", Short: "Manage remote access VPN on IP addresses"}
+	vpnCmd.AddCommand(newIPVPNListCmd())
+	vpnCmd.AddCommand(newIPVPNEnableCmd())
+	vpnCmd.AddCommand(newIPVPNDisableCmd())
+	cmd.AddCommand(vpnCmd)
 
 	return cmd
 }
 
 func newIPListCmd() *cobra.Command {
-	var zoneUUID, networkUUID string
+	var vpcSlug string
 
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List public IP addresses",
-		Example: `  zcp ip list --zone <uuid>
-  zcp ip list --zone <uuid> --network <uuid>`,
+		Example: `  zcp ip list
+  zcp ip list --vpc <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runIPList(cmd, zoneUUID, networkUUID)
+			return runIPList(cmd, vpcSlug)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Filter by network UUID")
+	cmd.Flags().StringVar(&vpcSlug, "vpc", "", "Filter by VPC slug")
 	return cmd
 }
 
-func runIPList(cmd *cobra.Command, zoneUUID, networkUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+func runIPList(cmd *cobra.Command, vpcSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := ipaddress.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	ips, err := svc.List(ctx, zoneUUID, networkUUID)
+	ips, err := svc.List(ctx, vpcSlug)
 	if err != nil {
 		return fmt.Errorf("ip list: %w", err)
 	}
 
-	headers := []string{"UUID", "PUBLIC IP", "STATE", "NETWORK", "SOURCE NAT"}
+	headers := []string{"SLUG", "IP ADDRESS", "STRATEGY", "VM", "NETWORK ID", "VPC ID"}
 	rows := make([][]string, 0, len(ips))
 	for _, ip := range ips {
-		sourceNAT := "false"
-		if ip.IsSourceNAT {
-			sourceNAT = "true"
-		}
 		rows = append(rows, []string{
-			ip.UUID,
-			ip.PublicIPAddress,
-			ip.State,
-			ip.NetworkUUID,
-			sourceNAT,
+			ip.Slug,
+			ip.IPAddress,
+			ip.Strategy,
+			ip.VirtualMachineName,
+			ip.NetworkID,
+			ip.VPCID,
 		})
 	}
 	return printer.PrintTable(headers, rows)
 }
 
 func newIPAllocateCmd() *cobra.Command {
-	var networkUUID, networkType string
+	var vpc, network, plan, billingCycle string
 
 	cmd := &cobra.Command{
 		Use:   "allocate",
 		Short: "Allocate a new public IP address",
-		Example: `  zcp ip allocate --network <uuid>
-  zcp ip allocate --network <uuid> --type Isolated`,
+		Example: `  zcp ip allocate --plan ip-plan --billing-cycle hourly
+  zcp ip allocate --plan ip-plan --billing-cycle hourly --network <slug>
+  zcp ip allocate --plan ip-plan --billing-cycle hourly --vpc <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if networkUUID == "" {
-				return fmt.Errorf("--network is required")
+			if plan == "" {
+				return fmt.Errorf("--plan is required")
 			}
-			if networkType == "" {
-				networkType = "Isolated"
+			if billingCycle == "" {
+				return fmt.Errorf("--billing-cycle is required")
 			}
-			return runIPAllocate(cmd, networkUUID, networkType)
+			return runIPAllocate(cmd, ipaddress.CreateRequest{
+				VPC:          vpc,
+				Network:      network,
+				Plan:         plan,
+				BillingCycle: billingCycle,
+			})
 		},
 	}
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Network UUID (required)")
-	cmd.Flags().StringVar(&networkType, "type", "Isolated", "Network type (Isolated or VPC)")
+	cmd.Flags().StringVar(&vpc, "vpc", "", "VPC slug")
+	cmd.Flags().StringVar(&network, "network", "", "Network slug")
+	cmd.Flags().StringVar(&plan, "plan", "", "IP plan slug (required)")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug (required, e.g. hourly, monthly)")
 	return cmd
 }
 
-func runIPAllocate(cmd *cobra.Command, networkUUID, networkType string) error {
+func runIPAllocate(cmd *cobra.Command, req ipaddress.CreateRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -117,93 +121,44 @@ func runIPAllocate(cmd *cobra.Command, networkUUID, networkType string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	ip, err := svc.Acquire(ctx, networkUUID, networkType)
+	ip, err := svc.Allocate(ctx, req)
 	if err != nil {
 		return fmt.Errorf("ip allocate: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", ip.UUID},
-		{"Public IP", ip.PublicIPAddress},
-		{"State", ip.State},
-		{"Network UUID", ip.NetworkUUID},
-		{"Zone UUID", ip.ZoneUUID},
-		{"Source NAT", fmt.Sprintf("%v", ip.IsSourceNAT)},
+		{"Slug", ip.Slug},
+		{"IP Address", ip.IPAddress},
+		{"Strategy", ip.Strategy},
+		{"Network ID", ip.NetworkID},
+		{"VPC ID", ip.VPCID},
+		{"Region ID", ip.RegionID},
+		{"Created At", ip.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newIPReleaseCmd() *cobra.Command {
-	var yes bool
-
-	cmd := &cobra.Command{
-		Use:   "release <ip-uuid>",
-		Short: "Release a public IP address",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp ip release <ip-uuid>
-  zcp ip release <ip-uuid> --yes`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runIPRelease(cmd, args[0], yes)
-		},
-	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	return cmd
-}
-
-func runIPRelease(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Release IP address %q? This action cannot be undone. [y/N]: ", uuid)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "Aborted.")
-			return nil
-		}
-	}
-
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := ipaddress.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	if err := svc.Release(ctx, uuid); err != nil {
-		return fmt.Errorf("ip release: %w", err)
-	}
-
-	printer.Fprintf("IP address %q released.\n", uuid)
-	return nil
-}
-
 func newIPStaticNATEnableCmd() *cobra.Command {
-	var instanceUUID, networkUUID string
+	var vmSlug string
 
 	cmd := &cobra.Command{
-		Use:     "enable <ip-uuid>",
+		Use:     "enable <ip-slug>",
 		Short:   "Enable static NAT on an IP address",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp ip static-nat enable <ip-uuid> --instance <uuid> --network <uuid>`,
+		Example: `  zcp ip static-nat enable <ip-slug> --instance <vm-slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if instanceUUID == "" {
+			if vmSlug == "" {
 				return fmt.Errorf("--instance is required")
 			}
-			if networkUUID == "" {
-				return fmt.Errorf("--network is required")
-			}
-			return runIPStaticNATEnable(cmd, args[0], instanceUUID, networkUUID)
+			return runIPStaticNATEnable(cmd, args[0], vmSlug)
 		},
 	}
-	cmd.Flags().StringVar(&instanceUUID, "instance", "", "VM UUID to associate (required)")
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Network UUID (required)")
+	cmd.Flags().StringVar(&vmSlug, "instance", "", "VM slug to associate (required)")
 	return cmd
 }
 
-func runIPStaticNATEnable(cmd *cobra.Command, ipUUID, vmUUID, networkUUID string) error {
+func runIPStaticNATEnable(cmd *cobra.Command, ipSlug, vmSlug string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -213,42 +168,123 @@ func runIPStaticNATEnable(cmd *cobra.Command, ipUUID, vmUUID, networkUUID string
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	cfg, err := svc.EnableStaticNAT(ctx, ipUUID, vmUUID, networkUUID)
+	ip, err := svc.EnableStaticNAT(ctx, ipSlug, vmSlug)
 	if err != nil {
 		return fmt.Errorf("ip static-nat enable: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"IP Address UUID", cfg.IPAddressUUID},
-		{"VM UUID", cfg.VMUUID},
-		{"VM Name", cfg.VMName},
-		{"Network UUID", cfg.NetworkUUID},
-		{"Status", cfg.Status},
+		{"Slug", ip.Slug},
+		{"IP Address", ip.IPAddress},
+		{"Strategy", ip.Strategy},
+		{"VM", ip.VirtualMachineName},
+		{"Network ID", ip.NetworkID},
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newIPStaticNATDisableCmd() *cobra.Command {
+// ─── Remote Access VPN ───────────────────────────────────────────────────────
+
+func newIPVPNListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list <ip-slug>",
+		Short:   "List remote access VPNs on an IP address",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp ip vpn list <ip-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runIPVPNList(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runIPVPNList(cmd *cobra.Command, ipSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := ipaddress.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	vpns, err := svc.ListRemoteAccessVPNs(ctx, ipSlug)
+	if err != nil {
+		return fmt.Errorf("ip vpn list: %w", err)
+	}
+
+	headers := []string{"ID", "PUBLIC IP", "STATE", "CREATED AT"}
+	rows := make([][]string, 0, len(vpns))
+	for _, v := range vpns {
+		rows = append(rows, []string{
+			v.ID,
+			v.PublicIP,
+			v.State,
+			v.CreatedAt,
+		})
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newIPVPNEnableCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "enable <ip-slug>",
+		Short:   "Enable remote access VPN on an IP address",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp ip vpn enable <ip-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runIPVPNEnable(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runIPVPNEnable(cmd *cobra.Command, ipSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := ipaddress.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	vpn, err := svc.EnableRemoteAccessVPN(ctx, ipSlug)
+	if err != nil {
+		return fmt.Errorf("ip vpn enable: %w", err)
+	}
+
+	headers := []string{"FIELD", "VALUE"}
+	rows := [][]string{
+		{"ID", vpn.ID},
+		{"Public IP", vpn.PublicIP},
+		{"State", vpn.State},
+		{"Created At", vpn.CreatedAt},
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newIPVPNDisableCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "disable <ip-uuid>",
-		Short: "Disable static NAT on an IP address",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp ip static-nat disable <ip-uuid>
-  zcp ip static-nat disable <ip-uuid> --yes`,
+		Use:   "disable <ip-slug> <vpn-id>",
+		Short: "Disable remote access VPN on an IP address",
+		Args:  cobra.ExactArgs(2),
+		Example: `  zcp ip vpn disable <ip-slug> <vpn-id>
+  zcp ip vpn disable <ip-slug> <vpn-id> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runIPStaticNATDisable(cmd, args[0], yes)
+			return runIPVPNDisable(cmd, args[0], args[1], yes)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
-func runIPStaticNATDisable(cmd *cobra.Command, ipUUID string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Disable static NAT for IP address %q? [y/N]: ", ipUUID)
+func runIPVPNDisable(cmd *cobra.Command, ipSlug, vpnID string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Disable remote access VPN %q on IP %q? [y/N]: ", vpnID, ipSlug)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -267,10 +303,10 @@ func runIPStaticNATDisable(cmd *cobra.Command, ipUUID string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.DisableStaticNAT(ctx, ipUUID); err != nil {
-		return fmt.Errorf("ip static-nat disable: %w", err)
+	if err := svc.DisableRemoteAccessVPN(ctx, ipSlug, vpnID); err != nil {
+		return fmt.Errorf("ip vpn disable: %w", err)
 	}
 
-	printer.Fprintf("Static NAT disabled for IP address %q.\n", ipUUID)
+	printer.Fprintf("Remote access VPN %q disabled on IP %q.\n", vpnID, ipSlug)
 	return nil
 }

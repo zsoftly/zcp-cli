@@ -87,12 +87,11 @@ func setupClient(t *testing.T) (*httpclient.Client, string) {
 		zoneUUID = defaultZone
 	}
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   apiURL,
-		APIKey:    profile.APIKey,
-		SecretKey: profile.SecretKey,
-		Timeout:   2 * time.Minute,
-		Debug:     os.Getenv("ZCP_TEST_DEBUG") != "",
-		DebugOut:  os.Stderr,
+		BaseURL:     apiURL,
+		BearerToken: profile.BearerToken,
+		Timeout:     2 * time.Minute,
+		Debug:       os.Getenv("ZCP_TEST_DEBUG") != "",
+		DebugOut:    os.Stderr,
 	})
 	return client, zoneUUID
 }

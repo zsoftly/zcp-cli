@@ -1,343 +1,427 @@
 # ZCP API Inventory
 
-**Base URL**: `https://cloud.zcp.zsoftly.ca/`
-**Spec Version**: OpenAPI 3.0.1
-**Total Endpoints**: 166
-**Auth**: `apikey` and `secretkey` HTTP request headers on every call
+**Base URL**: `https://cloud.zcp.zsoftly.ca/api/v1`
+**Auth**: Bearer token (`Authorization: Bearer <token>`)
+**Style**: RESTful, resource-oriented endpoints with `{SLUG}` path parameters
 
 ---
 
 ## Endpoint Table
 
-| # | Path | Method | Summary | CLI Group | Phase | Scope | Async? |
-|---|------|--------|---------|-----------|-------|-------|--------|
-| 1 | `/restapi/asyncjob/resourceStatus` | GET | Resource Status | (internal) | 1 | Customer | — |
-| 2 | `/restapi/availableResource/getAvailableResourceByDomain` | GET | Resources Availability | `resource` | 1 | Customer | No |
-| 3 | `/restapi/compute/computeOfferingList` | GET | Compute Offering List | `offering compute` | 1 | Customer | No |
-| 4 | `/restapi/compute/computeOfferingListWithPrice` | GET | Compute Offering With Price | `offering compute` | 1 | Customer | No |
-| 5 | `/restapi/costestimate/additional-template-resize-cost` | GET | Additional Template Resize Cost | `cost` | 3 | Customer | No |
-| 6 | `/restapi/costestimate/bandwidth-cost` | GET | Bandwidth Cost | `cost` | 3 | Customer | No |
-| 7 | `/restapi/costestimate/compute-category-list` | GET | Compute Category List | `cost` | 3 | Customer | No |
-| 8 | `/restapi/costestimate/compute-plan-list` | GET | Compute Offering Cost | `cost` | 3 | Customer | No |
-| 9 | `/restapi/costestimate/compute-plan-types` | GET | Compute Plan Types | `cost` | 3 | Customer | No |
-| 10 | `/restapi/costestimate/getpublickey` | GET | Get Public Key | `cost` | 3 | Public | No |
-| 11 | `/restapi/costestimate/ip-cost` | GET | IP Address Cost | `cost` | 3 | Customer | No |
-| 12 | `/restapi/costestimate/k8s-cost` | GET | Kubernetes Cost | `cost` | 3 | Customer | No |
-| 13 | `/restapi/costestimate/kubernetes-version-list` | GET | Kubernetes Version List | `cost` | 3 | Customer | No |
-| 14 | `/restapi/costestimate/list-all-support-category` | GET | Support Categories | `cost` | 3 | Customer | No |
-| 15 | `/restapi/costestimate/list-all-support-plans` | GET | Support Plans | `cost` | 3 | Customer | No |
-| 16 | `/restapi/costestimate/list-sfs-storage-offerings` | GET | List SFS Storage Offerings | `cost` | 3 | Customer | No |
-| 17 | `/restapi/costestimate/loadbalancer-cost` | GET | Load Balancer Cost | `cost` | 3 | Customer | No |
-| 18 | `/restapi/costestimate/multicurrency` | GET | Multi-Currency List | `cost` | 3 | Customer | No |
-| 19 | `/restapi/costestimate/networkoffering-list` | GET | Network Offering List (cost) | `cost` | 3 | Customer | No |
-| 20 | `/restapi/costestimate/object-storage-cost` | GET | Object Storage Cost | `cost` | 3 | Customer | No |
-| 21 | `/restapi/costestimate/portforwarding-cost` | GET | Port Forwarding Cost | `cost` | 3 | Customer | No |
-| 22 | `/restapi/costestimate/service-list` | GET | Service List | `cost` | 3 | Customer | No |
-| 23 | `/restapi/costestimate/snapshot-cost` | GET | Snapshot Cost | `cost` | 3 | Customer | No |
-| 24 | `/restapi/costestimate/storage-category-list` | GET | Storage Category List | `cost` | 3 | Customer | No |
-| 25 | `/restapi/costestimate/storage-plan-list` | GET | Storage Plan List | `cost` | 3 | Customer | No |
-| 26 | `/restapi/costestimate/tax` | GET | Tax | `cost` | 3 | Customer | No |
-| 27 | `/restapi/costestimate/template-category-list` | GET | Template Category List | `cost` | 3 | Customer | No |
-| 28 | `/restapi/costestimate/template-distribution-list` | GET | Template Distribution List | `cost` | 3 | Customer | No |
-| 29 | `/restapi/costestimate/template-list` | GET | Template List (cost) | `cost` | 3 | Customer | No |
-| 30 | `/restapi/costestimate/template-platform-list` | GET | Template Platform List | `cost` | 3 | Customer | No |
-| 31 | `/restapi/costestimate/vm-scheduler-cost` | GET | VM Scheduler Cost | `cost` | 3 | Customer | No |
-| 32 | `/restapi/costestimate/vm-snapshot-cost` | GET | VM Snapshot Cost | `cost` | 3 | Customer | No |
-| 33 | `/restapi/costestimate/vpcoffering-list` | GET | VPC Offering List (cost) | `cost` | 3 | Customer | No |
-| 34 | `/restapi/costestimate/vpn-user-cost` | GET | VPN User Cost | `cost` | 3 | Customer | No |
-| 35 | `/restapi/costestimate/zone-list` | GET | Zone List (cost) | `cost` | 3 | Customer | No |
-| 36 | `/restapi/egressrule/createEgressRule` | POST | Create Egress Rule | `egress` | 2 | Customer | No |
-| 37 | `/restapi/egressrule/deleteEgressRule/{uuid}` | DELETE | Delete Egress Rule | `egress` | 2 | Customer | No |
-| 38 | `/restapi/egressrule/egressRuleList` | GET | Egress Rule List | `egress` | 1 | Customer | No |
-| 39 | `/restapi/firewallrule/createFirewallRule` | POST | Create Firewall Rule | `firewall` | 2 | Customer | No |
-| 40 | `/restapi/firewallrule/deleteFirewallRule/{uuid}` | DELETE | Delete Firewall Rule | `firewall` | 2 | Customer | No |
-| 41 | `/restapi/firewallrule/firewallRuleList` | GET | Firewall Rule List | `firewall` | 1 | Customer | No |
-| 42 | `/restapi/host/hostList` | GET | Host List | `admin host` | 1 | Admin | No |
-| 43 | `/restapi/instance/attachIso` | GET | Attach ISO to Instance | `instance` | 3 | Customer | No |
-| 44 | `/restapi/instance/attachNetwork` | POST | Attach Network to Instance | `instance` | 2 | Customer | No |
-| 45 | `/restapi/instance/createInstance` | POST | Create Instance | `instance` | 2 | Customer | No |
-| 46 | `/restapi/instance/destroyInstance` | GET | Destroy Instance | `instance` | 2 | Customer | No |
-| 47 | `/restapi/instance/detachIso` | GET | Detach ISO | `instance` | 3 | Customer | No |
-| 48 | `/restapi/instance/detachNetwork` | POST | Detach Network from Instance | `instance` | 2 | Customer | No |
-| 49 | `/restapi/instance/instanceList` | GET | Instance List | `instance` | 1 | Customer | No |
-| 50 | `/restapi/instance/instanceNetworkList` | GET | Instance Network List | `instance` | 1 | Customer | No |
-| 51 | `/restapi/instance/instancePasswordList` | GET | Instance Password List | `instance` | 2 | Customer | No |
-| 52 | `/restapi/instance/recoverVm` | GET | Recover VM Instance | `instance` | 2 | Customer | No |
-| 53 | `/restapi/instance/resetSSHkey` | GET | Reset Instance SSH Key | `instance` | 2 | Customer | No |
-| 54 | `/restapi/instance/resizeVm` | GET | Resize VM Instance | `instance` | 2 | Customer | No |
-| 55 | `/restapi/instance/startInstance` | GET | Start Instance | `instance` | 2 | Customer | No |
-| 56 | `/restapi/instance/stopInstance` | GET | Stop Instance | `instance` | 2 | Customer | No |
-| 57 | `/restapi/instance/updateInstanceName` | PUT | Update Instance Name | `instance` | 2 | Customer | No |
-| 58 | `/restapi/instance/vmStatus` | GET | VM Status | `instance` | 1 | Customer | No |
-| 59 | `/restapi/internallb/assignLbRule` | GET | Assign Internal LB Rule | `internal-lb` | 2 | Customer | No |
-| 60 | `/restapi/internallb/createInternalLb` | POST | Create Internal LB | `internal-lb` | 2 | Customer | No |
-| 61 | `/restapi/internallb/deleteInternalLb/{uuid}` | DELETE | Delete Internal LB | `internal-lb` | 2 | Customer | No |
-| 62 | `/restapi/internallb/internalLbList` | GET | Internal LB List | `internal-lb` | 1 | Customer | No |
-| 63 | `/restapi/invoice/changeInvoiceCost` | GET | Change Invoice Payment Cost | `admin invoice` | 3 | Admin | No |
-| 64 | `/restapi/invoice/generateInvoice` | GET | Generate Invoice | `admin invoice` | 3 | Admin | No |
-| 65 | `/restapi/invoice/getInvoicePaymentStatus` | GET | Invoice Payment Status | `admin invoice` | 3 | Admin | No |
-| 66 | `/restapi/invoice/listByClient` | GET | Invoice List by Client | `admin invoice` | 3 | Admin | No |
-| 67 | `/restapi/invoice/listTaxPendingInvoice` | GET | Tax Pending Invoice List | `admin invoice` | 3 | Admin | No |
-| 68 | `/restapi/invoice/updateInvoiceStatus` | POST | Update Invoice Status | `admin invoice` | 3 | Admin | No |
-| 69 | `/restapi/invoice/updateInvoiceTax` | POST | Update Invoice Tax | `admin invoice` | 3 | Admin | No |
-| 70 | `/restapi/ipaddress/acquireIpAddress` | GET | Acquire IP Address | `ip` | 2 | Customer | No |
-| 71 | `/restapi/ipaddress/disableStaticNat` | DELETE | Disable Static NAT | `ip` | 2 | Customer | No |
-| 72 | `/restapi/ipaddress/disableremotevpnaccess` | DELETE | Disable Remote VPN Access | `ip` | 2 | Customer | No |
-| 73 | `/restapi/ipaddress/enableStaticNat` | POST | Enable Static NAT | `ip` | 2 | Customer | No |
-| 74 | `/restapi/ipaddress/enableremotevpnaccess` | GET | Enable Remote VPN Access | `ip` | 2 | Customer | No |
-| 75 | `/restapi/ipaddress/ipAddressList` | GET | IP Address List | `ip` | 1 | Customer | No |
-| 76 | `/restapi/ipaddress/releaseIpAddress` | DELETE | Release IP Address | `ip` | 2 | Customer | No |
-| 77 | `/restapi/kubernetes/createKubernetes` | POST | Create Kubernetes Cluster | `kubernetes` | 2 | Customer | No |
-| 78 | `/restapi/kubernetes/destroyKubernetes` | DELETE | Destroy Kubernetes Cluster | `kubernetes` | 2 | Customer | No |
-| 79 | `/restapi/kubernetes/listCluster` | GET | List Kubernetes Clusters | `kubernetes` | 1 | Customer | No |
-| 80 | `/restapi/kubernetes/listNodes` | GET | List Kubernetes Nodes | `kubernetes` | 1 | Customer | No |
-| 81 | `/restapi/kubernetes/scaleKubernetes` | PUT | Scale Kubernetes Cluster | `kubernetes` | 2 | Customer | No |
-| 82 | `/restapi/kubernetes/startKubernetes` | PUT | Start Kubernetes Cluster | `kubernetes` | 2 | Customer | No |
-| 83 | `/restapi/kubernetes/stopKubernetes` | PUT | Stop Kubernetes Cluster | `kubernetes` | 2 | Customer | No |
-| 84 | `/restapi/loadbalancerrule/createLoadBalancerRule` | POST | Create Load Balancer Rule | `loadbalancer` | 2 | Customer | No |
-| 85 | `/restapi/loadbalancerrule/deleteLoadBalancerRule/{uuid}` | DELETE | Delete Load Balancer Rule | `loadbalancer` | 2 | Customer | No |
-| 86 | `/restapi/loadbalancerrule/loadBalancerRuleList` | GET | Load Balancer Rule List | `loadbalancer` | 1 | Customer | No |
-| 87 | `/restapi/loadbalancerrule/updateLoadBalancerRule` | PUT | Update Load Balancer Rule | `loadbalancer` | 2 | Customer | No |
-| 88 | `/restapi/network/changeSecurityGroup` | GET | Change Network Security Group | `network` | 2 | Customer | No |
-| 89 | `/restapi/network/createNetwork` | POST | Create Network | `network` | 2 | Customer | No |
-| 90 | `/restapi/network/deleteNetwork/{uuid}` | DELETE | Delete Network | `network` | 2 | Customer | No |
-| 91 | `/restapi/network/networkId` | GET | Get Network by ID | `network` | 1 | Customer | No |
-| 92 | `/restapi/network/networkList` | GET | Network List | `network` | 1 | Customer | No |
-| 93 | `/restapi/network/replaceAcl` | GET | Replace Network ACL | `network` | 2 | Customer | No |
-| 94 | `/restapi/network/restartNetwork` | GET | Restart Network | `network` | 2 | Customer | No |
-| 95 | `/restapi/network/updateNetwork` | PUT | Update Network | `network` | 2 | Customer | No |
-| 96 | `/restapi/networkacllist/createNetworkAcl` | POST | Create Network ACL | `acl` | 2 | Customer | No |
-| 97 | `/restapi/networkacllist/deleteNetworkAcl/{uuid}` | DELETE | Delete Network ACL | `acl` | 2 | Customer | No |
-| 98 | `/restapi/networkacllist/networkAclList` | GET | Network ACL List | `acl` | 1 | Customer | No |
-| 99 | `/restapi/networkoffering/networkOfferingList` | GET | Network Offering List | `offering network` | 1 | Customer | No |
-| 100 | `/restapi/networkoffering/vpcNetworkOfferingList` | GET | VPC Network Offering List | `offering network` | 1 | Customer | No |
-| 101 | `/restapi/portforwardingrule/createPortForwardingRule` | POST | Create Port Forwarding Rule | `portforward` | 2 | Customer | No |
-| 102 | `/restapi/portforwardingrule/deletePortForwardingRule/{uuid}` | DELETE | Delete Port Forwarding Rule | `portforward` | 2 | Customer | No |
-| 103 | `/restapi/portforwardingrule/portForwardingRuleList` | GET | Port Forwarding Rule List | `portforward` | 1 | Customer | No |
-| 104 | `/restapi/resource-quota/get-resource-limit` | GET | Get Resource Quota Limits | `admin quota` | 1 | Admin | No |
-| 105 | `/restapi/resourcetags/createTags` | POST | Create Resource Tags | `tag` | 2 | Customer | No |
-| 106 | `/restapi/resourcetags/deleteResourceTag/{uuid}` | DELETE | Delete Resource Tag | `tag` | 2 | Customer | No |
-| 107 | `/restapi/resourcetags/resourceTagsList` | GET | Resource Tags List | `tag` | 1 | Customer | No |
-| 108 | `/restapi/securitygroup/createSecurityGroup` | POST | Create Security Group | `security-group` | 2 | Customer | No |
-| 109 | `/restapi/securitygroup/createSecurityGroupEgressRule` | POST | Create SG Egress Rule | `security-group` | 2 | Customer | No |
-| 110 | `/restapi/securitygroup/createSecurityGroupFirewallRule` | POST | Create SG Firewall Rule | `security-group` | 2 | Customer | No |
-| 111 | `/restapi/securitygroup/createSecurityGroupPortForwardingRule` | POST | Create SG Port Forwarding Rule | `security-group` | 2 | Customer | No |
-| 112 | `/restapi/securitygroup/deleteSecurityGroup/{uuid}` | DELETE | Delete Security Group | `security-group` | 2 | Customer | No |
-| 113 | `/restapi/securitygroup/deleteSecurityGroupRule` | DELETE | Delete Security Group Rule | `security-group` | 2 | Customer | No |
-| 114 | `/restapi/securitygroup/securityList` | GET | Security Group List | `security-group` | 1 | Customer | No |
-| 115 | `/restapi/snapshot/createSnapshot` | POST | Create Snapshot | `snapshot` | 2 | Customer | No |
-| 116 | `/restapi/snapshot/deleteSnapshot/{uuid}` | DELETE | Delete Snapshot | `snapshot` | 2 | Customer | No |
-| 117 | `/restapi/snapshot/snapshotList` | GET | Snapshot List | `snapshot` | 1 | Customer | No |
-| 118 | `/restapi/snapshotPolicy/createSnapshotPolicy` | POST | Create Snapshot Policy | `snapshot-policy` | 2 | Customer | No |
-| 119 | `/restapi/snapshotPolicy/deleteSnapshotPolicy/{uuid}` | DELETE | Delete Snapshot Policy | `snapshot-policy` | 2 | Customer | No |
-| 120 | `/restapi/snapshotPolicy/snapshotPolicyList` | GET | Snapshot Policy List | `snapshot-policy` | 1 | Customer | No |
-| 121 | `/restapi/sshkey/createSSHkey` | POST | Create SSH Key | `ssh-key` | 2 | Customer | No |
-| 122 | `/restapi/sshkey/deleteSSHkey/{uuid}` | DELETE | Delete SSH Key | `ssh-key` | 2 | Customer | No |
-| 123 | `/restapi/sshkey/sshkeyList` | GET | SSH Key List | `ssh-key` | 1 | Customer | No |
-| 124 | `/restapi/storage/storageOfferingList` | GET | Storage Offering List | `offering storage` | 1 | Customer | No |
-| 125 | `/restapi/storage/storageOfferingListWithPrice` | GET | Storage Offering With Price | `offering storage` | 1 | Customer | No |
-| 126 | `/restapi/template/templateList` | GET | Template List | `template` | 1 | Customer | No |
-| 127 | `/restapi/usage/usageConsumptionList` | GET | Usage Consumption List | `usage` | 3 | Customer | No |
-| 128 | `/restapi/usage/usageConsumptionListWithSubDomain` | GET | Usage Consumption With Sub-Domain | `usage` | 3 | Customer | No |
-| 129 | `/restapi/usage/usageProgressStatus` | GET | Usage Progress Status | `usage` | 3 | Customer | No |
-| 130 | `/restapi/usage/usageReportList` | GET | Usage Report List | `usage` | 3 | Customer | No |
-| 131 | `/restapi/user/creditBalance` | GET | User Credit Balance | `admin user` | 3 | Admin | No |
-| 132 | `/restapi/vmsnapshot/createVmSnapshot` | POST | Create VM Snapshot | `vm-snapshot` | 2 | Customer | Yes |
-| 133 | `/restapi/vmsnapshot/deleteVmSnapshot/{uuid}` | DELETE | Delete VM Snapshot | `vm-snapshot` | 2 | Customer | No |
-| 134 | `/restapi/vmsnapshot/revertToVmSnapshot` | GET | Revert to VM Snapshot | `vm-snapshot` | 2 | Customer | Yes |
-| 135 | `/restapi/vmsnapshot/vmsnapshotList` | GET | VM Snapshot List | `vm-snapshot` | 1 | Customer | No |
-| 136 | `/restapi/volume/attachVolume` | GET | Attach Volume | `volume` | 2 | Customer | Yes |
-| 137 | `/restapi/volume/createVolume` | POST | Create Volume | `volume` | 2 | Customer | Yes |
-| 138 | `/restapi/volume/deleteVolume/{uuid}` | DELETE | Delete Volume | `volume` | 2 | Customer | No |
-| 139 | `/restapi/volume/detachVolume` | GET | Detach Volume | `volume` | 2 | Customer | Yes |
-| 140 | `/restapi/volume/resizeVolume` | GET | Resize Volume | `volume` | 2 | Customer | Yes |
-| 141 | `/restapi/volume/uploadVolume` | POST | Upload Volume | `volume` | 3 | Customer | Yes |
-| 142 | `/restapi/volume/volumeList` | GET | Volume List | `volume` | 1 | Customer | No |
-| 143 | `/restapi/vpc/createVpc` | POST | Create VPC | `vpc` | 2 | Customer | No |
-| 144 | `/restapi/vpc/createVpcNetwork` | POST | Create VPC Network | `vpc` | 2 | Customer | No |
-| 145 | `/restapi/vpc/deleteVpc/{uuid}` | DELETE | Delete VPC | `vpc` | 2 | Customer | No |
-| 146 | `/restapi/vpc/restartVpc` | GET | Restart VPC | `vpc` | 2 | Customer | No |
-| 147 | `/restapi/vpc/updateVpc` | PUT | Update VPC | `vpc` | 2 | Customer | No |
-| 148 | `/restapi/vpc/updateVpcNetwork` | PUT | Update VPC Network | `vpc` | 2 | Customer | No |
-| 149 | `/restapi/vpc/vpcId` | GET | Get VPC by ID | `vpc` | 1 | Customer | No |
-| 150 | `/restapi/vpc/vpcList` | GET | VPC List | `vpc` | 1 | Customer | No |
-| 151 | `/restapi/vpcoffering/vpcOfferingList` | GET | VPC Offering List | `offering vpc` | 1 | Customer | No |
-| 152 | `/restapi/vpnconnection/addVpnConnection` | POST | Add VPN Connection | `vpn connection` | 2 | Customer | No |
-| 153 | `/restapi/vpnconnection/deleteVpnConnection/{uuid}` | DELETE | Delete VPN Connection | `vpn connection` | 2 | Customer | No |
-| 154 | `/restapi/vpnconnection/resetVpnConnection/{uuid}` | PUT | Reset VPN Connection | `vpn connection` | 2 | Customer | No |
-| 155 | `/restapi/vpnconnection/vpnConnectionList` | GET | VPN Connection List | `vpn connection` | 1 | Customer | No |
-| 156 | `/restapi/vpncustomergateway/addVpnCustomerGateway` | POST | Add VPN Customer Gateway | `vpn customer-gateway` | 2 | Customer | No |
-| 157 | `/restapi/vpncustomergateway/deleteVpnCustomerGateway/{uuid}` | DELETE | Delete VPN Customer Gateway | `vpn customer-gateway` | 2 | Customer | No |
-| 158 | `/restapi/vpncustomergateway/updateVpnCustomerGateway` | PUT | Update VPN Customer Gateway | `vpn customer-gateway` | 2 | Customer | No |
-| 159 | `/restapi/vpncustomergateway/vpnCustomerGatewayList` | GET | VPN Customer Gateway List | `vpn customer-gateway` | 1 | Customer | No |
-| 160 | `/restapi/vpngateway/addVpnGateway` | POST | Add VPN Gateway | `vpn gateway` | 2 | Customer | No |
-| 161 | `/restapi/vpngateway/deleteVpnGateway/{uuid}` | DELETE | Delete VPN Gateway | `vpn gateway` | 2 | Customer | No |
-| 162 | `/restapi/vpngateway/vpnGatewayList` | GET | VPN Gateway List | `vpn gateway` | 1 | Customer | No |
-| 163 | `/restapi/vpnuser/addVpnUser` | POST | Add VPN User | `vpn user` | 2 | Customer | No |
-| 164 | `/restapi/vpnuser/deleteVpnUser` | DELETE | Delete VPN User | `vpn user` | 2 | Customer | No |
-| 165 | `/restapi/vpnuser/vpnUserlist` | GET | VPN User List | `vpn user` | 1 | Customer | No |
-| 166 | `/restapi/zone/zonelist` | GET | Zone List | `zone` | 1 | Customer | No |
+### Compute (Virtual Machines)
 
-**Phase key:**
-- Phase 1 — Read-only discovery: list, get, status operations (building now)
-- Phase 2 — Instance lifecycle, volume, network, and standard CRUD operations
-- Phase 3 — Advanced/ancillary: cost estimates, usage reporting, ISO, upload, admin billing
+| #   | Path                                             | Method | Summary                  | CLI Group |
+| --- | ------------------------------------------------ | ------ | ------------------------ | --------- |
+| 1   | `/virtual-machines`                              | GET    | List all VMs             | `vm`      |
+| 2   | `/virtual-machines`                              | POST   | Create a VM              | `vm`      |
+| 3   | `/virtual-machines/{SLUG}`                       | GET    | Get VM details           | `vm`      |
+| 4   | `/virtual-machines/{SLUG}/start`                 | PUT    | Start VM                 | `vm`      |
+| 5   | `/virtual-machines/{SLUG}/stop`                  | PUT    | Stop VM                  | `vm`      |
+| 6   | `/virtual-machines/{SLUG}/reboot`                | PUT    | Reboot VM                | `vm`      |
+| 7   | `/virtual-machines/{SLUG}/reset`                 | PUT    | Reset VM                 | `vm`      |
+| 8   | `/virtual-machines/{SLUG}/change-label`          | POST   | Change VM label          | `vm`      |
+| 9   | `/virtual-machines/{SLUG}/change-password`       | POST   | Change VM password       | `vm`      |
+| 10  | `/virtual-machines/{SLUG}/change-plan`           | POST   | Change VM plan/sizing    | `vm`      |
+| 11  | `/virtual-machines/{SLUG}/change-template`       | POST   | Change VM template       | `vm`      |
+| 12  | `/virtual-machines/{SLUG}/change-startup-script` | POST   | Change VM startup script | `vm`      |
+| 13  | `/virtual-machines/{SLUG}/add-network`           | POST   | Add network to VM        | `vm`      |
+| 14  | `/virtual-machines/{SLUG}/tags`                  | POST   | Add tags to VM           | `vm`      |
+| 15  | `/virtual-machines/{SLUG}/tags`                  | DELETE | Remove tags from VM      | `vm`      |
+| 16  | `/virtual-machines/{SLUG}/addons`                | GET    | List VM addons           | `vm`      |
 
-**Async key:**
-- `Yes` — Response object contains a `jobId` field; poll `/restapi/asyncjob/resourceStatus?jobId=<id>` for completion
-- `No` — Operation returns the final result synchronously
+### Storage (Block Storage)
 
----
+| #   | Path                           | Method | Summary                     | CLI Group |
+| --- | ------------------------------ | ------ | --------------------------- | --------- |
+| 17  | `/blockstorages`               | GET    | List block storage volumes  | `storage` |
+| 18  | `/blockstorages`               | POST   | Create block storage volume | `storage` |
+| 19  | `/blockstorages/{SLUG}/attach` | POST   | Attach volume to VM         | `storage` |
+| 20  | `/blockstorages/{SLUG}/detach` | POST   | Detach volume from VM       | `storage` |
 
-## API Response Envelope Patterns
+### Snapshots
 
-### List Response
+| #   | Path                                        | Method | Summary                   | CLI Group  |
+| --- | ------------------------------------------- | ------ | ------------------------- | ---------- |
+| 21  | `/virtual-machines/snapshots`               | GET    | List all VM snapshots     | `snapshot` |
+| 22  | `/virtual-machines/{SLUG}/snapshots`        | POST   | Create VM snapshot        | `snapshot` |
+| 23  | `/virtual-machines/{SLUG}/snapshots/revert` | POST   | Revert to VM snapshot     | `snapshot` |
+| 24  | `/blockstorages/snapshots`                  | GET    | List all volume snapshots | `snapshot` |
+| 25  | `/blockstorages/{SLUG}/snapshots`           | POST   | Create volume snapshot    | `snapshot` |
+| 26  | `/blockstorages/{SLUG}/snapshots/revert`    | POST   | Revert to volume snapshot | `snapshot` |
 
-All list endpoints return a consistent two-field envelope:
+### Backups
 
-```json
-{
-  "count": 3,
-  "<listFieldName>": [ ... ]
-}
-```
+| #   | Path                               | Method | Summary                 | CLI Group |
+| --- | ---------------------------------- | ------ | ----------------------- | --------- |
+| 27  | `/virtual-machines/backups`        | GET    | List all VM backups     | `backup`  |
+| 28  | `/virtual-machines/{SLUG}/backups` | POST   | Create VM backup        | `backup`  |
+| 29  | `/blockstorages/backups`           | GET    | List all volume backups | `backup`  |
+| 30  | `/blockstorages/{SLUG}/backups`    | POST   | Create volume backup    | `backup`  |
 
-The list field name matches the schema and operation, for example:
+### Kubernetes
 
-| Endpoint family | List field name |
-|----------------|-----------------|
-| instance | `listInstanceResponse` |
-| volume | `listVolumeResponse` |
-| network | `listNetworkResponse` |
-| vpc | `listVpcResponse` |
-| snapshot | `listSnapShotResponse` |
-| vmsnapshot | `listVmSnapshotResponse` |
-| securitygroup | `listSecurityGroupResponse` |
-| sshkey | `listSSHKeyResponse` |
-| ipaddress | `listIpAddressResponse` |
-| loadbalancerrule | `listLoadBalancerRuleResponse` |
-| portforwardingrule | `listPortForwardingResponse` |
-| firewallrule | `listFirewallRuleResponse` |
-| egressrule | `listEgressRuleResponse` |
-| internallb | `listInternalLbResponse` |
-| networkacllist | `listNetworkAclListResponse` |
-| vpnconnection | `listVpnConnectionResponse` |
-| vpncustomergateway | `listVpnCustomerGatewayResponse` |
-| vpngateway | `listVpnGatewayResponse` |
-| vpnuser | `listVpnUserResponse` |
-| resourcetags | `kongCreateTagsResponse` |
-| host | `listHostResponse` |
-| invoice | `listInvoiceResponse` |
+| #   | Path                                      | Method | Summary                   | CLI Group    |
+| --- | ----------------------------------------- | ------ | ------------------------- | ------------ |
+| 31  | `/kubernetes-clusters`                    | GET    | List Kubernetes clusters  | `kubernetes` |
+| 32  | `/kubernetes-clusters`                    | POST   | Create Kubernetes cluster | `kubernetes` |
+| 33  | `/kubernetes-clusters/{SLUG}/start`       | PUT    | Start Kubernetes cluster  | `kubernetes` |
+| 34  | `/kubernetes-clusters/{SLUG}/stop`        | PUT    | Stop Kubernetes cluster   | `kubernetes` |
+| 35  | `/kubernetes-clusters/{SLUG}/change-plan` | PUT    | Change cluster plan       | `kubernetes` |
 
-### Async Job Response
+### Load Balancers
 
-Operations that return a `jobId` (volume mutations, VM snapshot create/revert) embed the job fields inside the resource object itself. Poll for completion using:
+| #   | Path                            | Method | Summary                    | CLI Group |
+| --- | ------------------------------- | ------ | -------------------------- | --------- |
+| 36  | `/load-balancers`               | GET    | List load balancers        | `lb`      |
+| 37  | `/load-balancers`               | POST   | Create load balancer       | `lb`      |
+| 38  | `/load-balancers/{SLUG}/rules`  | POST   | Add load balancer rule     | `lb`      |
+| 39  | `/load-balancers/{SLUG}/attach` | POST   | Attach VM to load balancer | `lb`      |
 
-```
-GET /restapi/asyncjob/resourceStatus?jobId=<id>
-```
+### Autoscale
 
-Async job response schema (`KongResourceApiResponse`):
+| #   | Path                                | Method | Summary                    | CLI Group   |
+| --- | ----------------------------------- | ------ | -------------------------- | ----------- |
+| 40  | `/autoscale`                        | GET    | List autoscale groups      | `autoscale` |
+| 41  | `/autoscale`                        | POST   | Create autoscale group     | `autoscale` |
+| 42  | `/autoscale/{SLUG}/change-plan`     | POST   | Change autoscale plan      | `autoscale` |
+| 43  | `/autoscale/{SLUG}/change-template` | POST   | Change autoscale template  | `autoscale` |
+| 44  | `/autoscale/{SLUG}/enable`          | PUT    | Enable autoscale group     | `autoscale` |
+| 45  | `/autoscale/{SLUG}/disable`         | PUT    | Disable autoscale group    | `autoscale` |
+| 46  | `/autoscale/{SLUG}/policies`        | GET    | List autoscale policies    | `autoscale` |
+| 47  | `/autoscale/{SLUG}/policies`        | POST   | Create autoscale policy    | `autoscale` |
+| 48  | `/autoscale/{SLUG}/policies/{ID}`   | PUT    | Update autoscale policy    | `autoscale` |
+| 49  | `/autoscale/{SLUG}/policies/{ID}`   | DELETE | Delete autoscale policy    | `autoscale` |
+| 50  | `/autoscale/{SLUG}/conditions`      | GET    | List autoscale conditions  | `autoscale` |
+| 51  | `/autoscale/{SLUG}/conditions`      | POST   | Create autoscale condition | `autoscale` |
+| 52  | `/autoscale/{SLUG}/conditions/{ID}` | PUT    | Update autoscale condition | `autoscale` |
+| 53  | `/autoscale/{SLUG}/conditions/{ID}` | DELETE | Delete autoscale condition | `autoscale` |
 
-```json
-{
-  "jobId": "string",
-  "resourceId": "string",
-  "resourceType": "string",
-  "status": "string",
-  "errorCode": "string",
-  "errorMessage": "string"
-}
-```
+### Networks
 
-`status` transitions: `IN_PROGRESS` → `SUCCEEDED` / `FAILED`
+| #   | Path                                          | Method | Summary                     | CLI Group |
+| --- | --------------------------------------------- | ------ | --------------------------- | --------- |
+| 54  | `/networks`                                   | GET    | List networks               | `network` |
+| 55  | `/networks`                                   | POST   | Create network              | `network` |
+| 56  | `/networks/{SLUG}`                            | PUT    | Update network              | `network` |
+| 57  | `/networks/categories`                        | GET    | List network categories     | `network` |
+| 58  | `/networks/{SLUG}/egress-firewall-rules`      | GET    | List egress firewall rules  | `network` |
+| 59  | `/networks/{SLUG}/egress-firewall-rules`      | POST   | Create egress firewall rule | `network` |
+| 60  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | PUT    | Update egress firewall rule | `network` |
+| 61  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | DELETE | Delete egress firewall rule | `network` |
 
-Volume operations that embed `jobId` in their response items:
-- `POST /restapi/volume/createVolume`
-- `GET /restapi/volume/attachVolume`
-- `GET /restapi/volume/detachVolume`
-- `GET /restapi/volume/resizeVolume`
-- `POST /restapi/volume/uploadVolume`
+### Virtual Routers
 
-VM snapshot operations that embed `jobId`:
-- `POST /restapi/vmsnapshot/createVmSnapshot`
-- `GET /restapi/vmsnapshot/revertToVmSnapshot`
+| #   | Path                             | Method | Summary               | CLI Group |
+| --- | -------------------------------- | ------ | --------------------- | --------- |
+| 62  | `/virtual-routers`               | GET    | List virtual routers  | `router`  |
+| 63  | `/virtual-routers`               | POST   | Create virtual router | `router`  |
+| 64  | `/virtual-routers/{SLUG}/reboot` | GET    | Reboot virtual router | `router`  |
 
-### Delete Response
+### VPC
 
-Most delete operations return HTTP 200 with an empty body (`{}`). Exceptions:
+| #   | Path                                 | Method | Summary            | CLI Group |
+| --- | ------------------------------------ | ------ | ------------------ | --------- |
+| 65  | `/vpcs`                              | GET    | List VPCs          | `vpc`     |
+| 66  | `/vpcs`                              | POST   | Create VPC         | `vpc`     |
+| 67  | `/vpcs/{SLUG}`                       | PUT    | Update VPC         | `vpc`     |
+| 68  | `/vpcs/{SLUG}/restart`               | GET    | Restart VPC        | `vpc`     |
+| 69  | `/vpcs/{SLUG}/network-acl-list`      | GET    | List network ACLs  | `vpc`     |
+| 70  | `/vpcs/{SLUG}/network-acl-list`      | POST   | Create network ACL | `vpc`     |
+| 71  | `/vpcs/{SLUG}/network-acl-list/{ID}` | PUT    | Update network ACL | `vpc`     |
+| 72  | `/vpcs/{SLUG}/network-acl-list/{ID}` | DELETE | Delete network ACL | `vpc`     |
+| 73  | `/vpcs/{SLUG}/vpn-gateways`          | GET    | List VPN gateways  | `vpc`     |
+| 74  | `/vpcs/{SLUG}/vpn-gateways`          | POST   | Create VPN gateway | `vpc`     |
+| 75  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | PUT    | Update VPN gateway | `vpc`     |
+| 76  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | DELETE | Delete VPN gateway | `vpc`     |
 
-| Path | Returns |
-|------|---------|
-| `DELETE /restapi/volume/deleteVolume/{uuid}` | `{uuid, status}` |
-| `DELETE /restapi/vmsnapshot/deleteVmSnapshot/{uuid}` | `{uuid, status}` |
+### IP Addresses
 
-### Error Response
+| #   | Path                                             | Method | Summary                     | CLI Group |
+| --- | ------------------------------------------------ | ------ | --------------------------- | --------- |
+| 77  | `/ipaddresses`                                   | GET    | List IP addresses           | `ip`      |
+| 78  | `/ipaddresses`                                   | POST   | Acquire IP address          | `ip`      |
+| 79  | `/ipaddresses/{SLUG}/static-nat`                 | POST   | Enable/disable static NAT   | `ip`      |
+| 80  | `/ipaddresses/{SLUG}/firewall-rules`             | GET    | List firewall rules         | `ip`      |
+| 81  | `/ipaddresses/{SLUG}/firewall-rules`             | POST   | Create firewall rule        | `ip`      |
+| 82  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | PUT    | Update firewall rule        | `ip`      |
+| 83  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | DELETE | Delete firewall rule        | `ip`      |
+| 84  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | GET    | List port forwarding rules  | `ip`      |
+| 85  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | POST   | Create port forwarding rule | `ip`      |
+| 86  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | PUT    | Update port forwarding rule | `ip`      |
+| 87  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | DELETE | Delete port forwarding rule | `ip`      |
+| 88  | `/ipaddresses/{SLUG}/remote-access-vpns`         | GET    | List remote access VPNs     | `ip`      |
+| 89  | `/ipaddresses/{SLUG}/remote-access-vpns`         | POST   | Create remote access VPN    | `ip`      |
+| 90  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | PUT    | Update remote access VPN    | `ip`      |
+| 91  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | DELETE | Delete remote access VPN    | `ip`      |
 
-HTTP 550 (API-level error) and HTTP 401 (auth error) are returned as:
+### VPN
 
-```json
-{
-  "listErrorResponse": {
-    "errorCode": "string",
-    "errorMsg": "string"
-  }
-}
-```
+| #   | Path                            | Method | Summary                     | CLI Group |
+| --- | ------------------------------- | ------ | --------------------------- | --------- |
+| 92  | `/vpn-users`                    | GET    | List VPN users              | `vpn`     |
+| 93  | `/vpn-users`                    | POST   | Create VPN user             | `vpn`     |
+| 94  | `/vpn-users/{SLUG}`             | PUT    | Update VPN user             | `vpn`     |
+| 95  | `/vpn-users/{SLUG}`             | DELETE | Delete VPN user             | `vpn`     |
+| 96  | `/vpn-customer-gateways`        | GET    | List VPN customer gateways  | `vpn`     |
+| 97  | `/vpn-customer-gateways`        | POST   | Create VPN customer gateway | `vpn`     |
+| 98  | `/vpn-customer-gateways/{SLUG}` | PUT    | Update VPN customer gateway | `vpn`     |
+| 99  | `/vpn-customer-gateways/{SLUG}` | DELETE | Delete VPN customer gateway | `vpn`     |
 
-### Single Object Response
+### DNS
 
-Some operations return a single flat object rather than a list:
+| #   | Path                               | Method | Summary           | CLI Group |
+| --- | ---------------------------------- | ------ | ----------------- | --------- |
+| 100 | `/dns/domains`                     | GET    | List DNS domains  | `dns`     |
+| 101 | `/dns/domains`                     | POST   | Create DNS domain | `dns`     |
+| 102 | `/dns/domains/{SLUG}`              | PUT    | Update DNS domain | `dns`     |
+| 103 | `/dns/domains/{SLUG}`              | DELETE | Delete DNS domain | `dns`     |
+| 104 | `/dns/domains/{SLUG}/records`      | POST   | Create DNS record | `dns`     |
+| 105 | `/dns/domains/{SLUG}/records/{ID}` | DELETE | Delete DNS record | `dns`     |
 
-| Path | Schema | Fields |
-|------|--------|--------|
-| `GET /restapi/instance/vmStatus` | `KongInstanceStatusResponse` | `uuid`, `status` |
-| `GET /restapi/user/creditBalance` | `KongUserBalanceResponse` | `userEmail`, `userType`, `balanceAmount`, `type` |
-| `GET /restapi/costestimate/getpublickey` | `KongKeyResponse` | `apiKey`, `secretKey` |
-| `POST /restapi/kubernetes/createKubernetes` | `KongKubernetesResponse` | `uuid`, `name`, `state`, `size`, `controlNodes`, ... |
+### Projects
+
+| #   | Path                         | Method | Summary               | CLI Group |
+| --- | ---------------------------- | ------ | --------------------- | --------- |
+| 106 | `/projects`                  | GET    | List projects         | `project` |
+| 107 | `/projects`                  | POST   | Create project        | `project` |
+| 108 | `/projects/{SLUG}`           | PUT    | Update project        | `project` |
+| 109 | `/projects/{SLUG}/dashboard` | GET    | Get project dashboard | `project` |
+| 110 | `/projects/{SLUG}/icons`     | GET    | Get project icons     | `project` |
+| 111 | `/projects/{SLUG}/users`     | GET    | List project users    | `project` |
+| 112 | `/projects/{SLUG}/users`     | POST   | Add user to project   | `project` |
+
+### ISOs
+
+| #   | Path           | Method | Summary             | CLI Group |
+| --- | -------------- | ------ | ------------------- | --------- |
+| 113 | `/isos`        | GET    | List ISOs           | `iso`     |
+| 114 | `/isos`        | POST   | Upload/register ISO | `iso`     |
+| 115 | `/isos/{SLUG}` | PUT    | Update ISO          | `iso`     |
+| 116 | `/isos/{SLUG}` | DELETE | Delete ISO          | `iso`     |
+
+### Affinity Groups
+
+| #   | Path                      | Method | Summary               | CLI Group        |
+| --- | ------------------------- | ------ | --------------------- | ---------------- |
+| 117 | `/affinity-groups`        | GET    | List affinity groups  | `affinity-group` |
+| 118 | `/affinity-groups`        | POST   | Create affinity group | `affinity-group` |
+| 119 | `/affinity-groups/{SLUG}` | DELETE | Delete affinity group | `affinity-group` |
+
+### Templates
+
+| #   | Path                        | Method | Summary                 | CLI Group  |
+| --- | --------------------------- | ------ | ----------------------- | ---------- |
+| 120 | `/templates`                | GET    | List public templates   | `template` |
+| 121 | `/account/templates`        | GET    | List account templates  | `template` |
+| 122 | `/account/templates`        | POST   | Create account template | `template` |
+| 123 | `/account/templates/{SLUG}` | PUT    | Update account template | `template` |
+| 124 | `/account/templates/{SLUG}` | DELETE | Delete account template | `template` |
+
+### Monitoring
+
+| #   | Path                                    | Method | Summary                    | CLI Group    |
+| --- | --------------------------------------- | ------ | -------------------------- | ------------ |
+| 125 | `/monitoring/global`                    | GET    | Global monitoring overview | `monitoring` |
+| 126 | `/monitoring/charts`                    | GET    | Monitoring chart data      | `monitoring` |
+| 127 | `/monitoring/{SLUG}/cpu-usage`          | GET    | VM CPU usage metrics       | `monitoring` |
+| 128 | `/monitoring/{SLUG}/disk-read-write`    | GET    | VM disk read/write metrics | `monitoring` |
+| 129 | `/monitoring/{SLUG}/memory-usage`       | GET    | VM memory usage metrics    | `monitoring` |
+| 130 | `/monitoring/{SLUG}/network-traffic`    | GET    | VM network traffic metrics | `monitoring` |
+| 131 | `/monitoring/{SLUG}/disk-io-read-write` | GET    | VM disk I/O metrics        | `monitoring` |
+
+### Billing
+
+| #   | Path                      | Method | Summary                   | CLI Group |
+| --- | ------------------------- | ------ | ------------------------- | --------- |
+| 132 | `/billing/costs`          | GET    | Get current costs         | `billing` |
+| 133 | `/billing/balance`        | GET    | Get account balance       | `billing` |
+| 134 | `/billing/monthly-usage`  | GET    | Get monthly usage summary | `billing` |
+| 135 | `/billing/credit-limit`   | GET    | Get credit limit          | `billing` |
+| 136 | `/billing/service-counts` | GET    | Get service counts        | `billing` |
+| 137 | `/billing/subscriptions`  | GET    | List subscriptions        | `billing` |
+| 138 | `/billing/invoices`       | GET    | List invoices             | `billing` |
+| 139 | `/billing/usage`          | GET    | Get detailed usage        | `billing` |
+| 140 | `/billing/free-credits`   | GET    | Get free credits          | `billing` |
+| 141 | `/billing/contracts`      | GET    | List contracts            | `billing` |
+| 142 | `/billing/trials`         | GET    | List trials               | `billing` |
+| 143 | `/billing/payments`       | GET    | List payments             | `billing` |
+| 144 | `/billing/coupons`        | GET    | List coupons              | `billing` |
+| 145 | `/billing/coupons`        | POST   | Apply coupon              | `billing` |
+| 146 | `/billing/budget-alerts`  | GET    | List budget alerts        | `billing` |
+| 147 | `/billing/budget-alerts`  | POST   | Create budget alert       | `billing` |
+| 148 | `/billing/cancel-service` | POST   | Cancel a service          | `billing` |
+
+### Profile
+
+| #   | Path                       | Method | Summary                | CLI Group |
+| --- | -------------------------- | ------ | ---------------------- | --------- |
+| 149 | `/profile`                 | GET    | Get user profile       | `profile` |
+| 150 | `/profile`                 | PUT    | Update user profile    | `profile` |
+| 151 | `/profile/company-details` | PUT    | Update company details | `profile` |
+| 152 | `/profile/time-settings`   | POST   | Update time settings   | `profile` |
+| 153 | `/profile/api-enable`      | POST   | Enable API access      | `profile` |
+| 154 | `/profile/api-disable`     | DELETE | Disable API access     | `profile` |
+| 155 | `/profile/activity-logs`   | GET    | Get activity logs      | `profile` |
+
+### SSH Keys
+
+| #   | Path                     | Method | Summary        | CLI Group |
+| --- | ------------------------ | ------ | -------------- | --------- |
+| 156 | `/users/ssh-keys`        | GET    | List SSH keys  | `ssh-key` |
+| 157 | `/users/ssh-keys`        | POST   | Create SSH key | `ssh-key` |
+| 158 | `/users/ssh-keys/{SLUG}` | DELETE | Delete SSH key | `ssh-key` |
+
+### Support
+
+| #   | Path                              | Method | Summary               | CLI Group |
+| --- | --------------------------------- | ------ | --------------------- | --------- |
+| 159 | `/support/tickets`                | GET    | List support tickets  | `support` |
+| 160 | `/support/tickets`                | POST   | Create support ticket | `support` |
+| 161 | `/support/tickets/{SLUG}`         | PUT    | Update support ticket | `support` |
+| 162 | `/support/tickets/{SLUG}`         | DELETE | Delete support ticket | `support` |
+| 163 | `/support/tickets/{SLUG}/replies` | GET    | List ticket replies   | `support` |
+| 164 | `/support/tickets/{SLUG}/replies` | POST   | Reply to ticket       | `support` |
+| 165 | `/support/feedback`               | GET    | List feedback         | `support` |
+| 166 | `/support/feedback`               | POST   | Submit feedback       | `support` |
+| 167 | `/support/faqs`                   | GET    | List FAQs             | `support` |
+
+### Plans
+
+| #   | Path                      | Method | Summary                  | CLI Group |
+| --- | ------------------------- | ------ | ------------------------ | --------- |
+| 168 | `/plans/service/VM`       | GET    | List VM plans            | `plan`    |
+| 169 | `/plans/service/Router`   | GET    | List router plans        | `plan`    |
+| 170 | `/plans/service/Storage`  | GET    | List storage plans       | `plan`    |
+| 171 | `/plans/service/LB`       | GET    | List load balancer plans | `plan`    |
+| 172 | `/plans/service/K8s`      | GET    | List Kubernetes plans    | `plan`    |
+| 173 | `/plans/service/IP`       | GET    | List IP address plans    | `plan`    |
+| 174 | `/plans/service/Snapshot` | GET    | List snapshot plans      | `plan`    |
+| 175 | `/plans/service/Template` | GET    | List template plans      | `plan`    |
+| 176 | `/plans/service/ISO`      | GET    | List ISO plans           | `plan`    |
+| 177 | `/plans/service/Backups`  | GET    | List backup plans        | `plan`    |
+
+### Discovery
+
+| #   | Path                  | Method | Summary                 | CLI Group   |
+| --- | --------------------- | ------ | ----------------------- | ----------- |
+| 178 | `/regions`            | GET    | List regions            | `discovery` |
+| 179 | `/servers`            | GET    | List servers            | `discovery` |
+| 180 | `/cloud-providers`    | GET    | List cloud providers    | `discovery` |
+| 181 | `/currencies`         | GET    | List currencies         | `discovery` |
+| 182 | `/storage-categories` | GET    | List storage categories | `discovery` |
+| 183 | `/billing-cycles`     | GET    | List billing cycles     | `discovery` |
+| 184 | `/unit-pricings`      | GET    | List unit pricings      | `discovery` |
+
+### Store
+
+| #   | Path                         | Method | Summary                 | CLI Group |
+| --- | ---------------------------- | ------ | ----------------------- | --------- |
+| 185 | `/store/items`               | GET    | List store items        | `store`   |
+| 186 | `/store/checkout`            | POST   | Checkout store cart     | `store`   |
+| 187 | `/store/marketplace-apps`    | GET    | List marketplace apps   | `store`   |
+| 188 | `/store/products/categories` | GET    | List product categories | `store`   |
+
+### Auth
+
+| #   | Path              | Method | Summary                      | CLI Group |
+| --- | ----------------- | ------ | ---------------------------- | --------- |
+| 189 | `/login`          | POST   | Log in (obtain Bearer token) | `auth`    |
+| 190 | `/register`       | POST   | Register new account         | `auth`    |
+| 191 | `/reset-password` | POST   | Reset password               | `auth`    |
+| 192 | `/mfa/enable`     | POST   | Enable MFA                   | `auth`    |
+| 193 | `/mfa/disable`    | POST   | Disable MFA                  | `auth`    |
+| 194 | `/mfa/verify`     | POST   | Verify MFA code              | `auth`    |
+
+**Total endpoints**: 194
 
 ---
 
 ## Auth Model
 
-- **Mechanism**: Two HTTP request headers on every call: `apikey` and `secretkey`
-- **No login endpoint**: There is no session token or OAuth flow in the spec
-- **Profile-based management**: The CLI manages named profiles storing `apikey`/`secretkey` pairs locally
-- **Credential source**: Credentials are obtained out-of-band from the ZCP portal
-- **No credential rotation endpoint**: The spec does not expose a key rotation API
-- The `GET /restapi/costestimate/getpublickey` endpoint returns an `apiKey`/`secretKey` pair but requires no auth headers — this appears to be for the cost estimator widget, not the CLI
+- **Mechanism**: Bearer token via `Authorization: Bearer <token>` header on every authenticated request
+- **Login endpoint**: `POST /login` returns a Bearer token given valid credentials
+- **Token management**: The CLI stores tokens per-profile in the local config directory
+- **MFA support**: Optional MFA flow via `/mfa/enable`, `/mfa/verify`, `/mfa/disable`
+- **No API key headers**: The old `apikey`/`secretkey` header pattern is replaced by Bearer tokens
+
+---
+
+## API Response Patterns
+
+### List Response
+
+List endpoints return a JSON array of resource objects, or a wrapper with a `data` array and pagination metadata:
+
+```json
+{
+  "data": [ ... ],
+  "meta": {
+    "total": 42,
+    "page": 1,
+    "per_page": 25
+  }
+}
+```
+
+### Single Resource Response
+
+GET/PUT/POST on a single resource returns the resource object directly:
+
+```json
+{
+  "slug": "abc-123",
+  "name": "my-resource",
+  "status": "running",
+  ...
+}
+```
+
+### Error Response
+
+Errors return standard HTTP status codes with a JSON body:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "Resource not found"
+  }
+}
+```
+
+Common status codes:
+
+- `401` — Invalid or expired Bearer token
+- `403` — Insufficient permissions
+- `404` — Resource not found
+- `422` — Validation error
+- `429` — Rate limit exceeded
+
+### Delete Response
+
+Delete operations return HTTP 204 (No Content) with an empty body on success.
+
+---
+
+## Resource Identifiers
+
+- Resources are identified by **SLUG** (a URL-friendly unique identifier) rather than UUIDs
+- SLUGs appear in URL paths: `/virtual-machines/{SLUG}`
+- Sub-resources use numeric or secondary IDs: `/ipaddresses/{SLUG}/firewall-rules/{ID}`
 
 ---
 
 ## Pagination
 
-- **No cursor/token pagination**: The API does not support page tokens, `nextPageToken`, `offset`, or `limit` query parameters
-- **Count field**: Every list response includes a `count` integer reflecting the total number of items returned
-- **Full result sets**: All matching records are returned in a single response
-- **UUID filter**: Most list endpoints accept a `uuid` query parameter to retrieve a single specific resource by UUID
-- **Zone filter**: Most list endpoints accept a `zoneUuid` query parameter to scope results to a zone
-- **No server-side sorting**: No `sort` or `orderBy` parameters are present in the spec
+- List endpoints support `page` and `per_page` query parameters
+- Response `meta` object includes `total`, `page`, and `per_page` fields
+- Default page size varies by endpoint (typically 25)
 
 ---
 
-## Key Request Body Schemas (Write Operations)
+## Notes
 
-| Operation | Schema | Required Fields |
-|-----------|--------|----------------|
-| Create Instance | `KongInstanceRequest` | `name`, `zoneUuid`, `templateUuid`, `computeOfferingUuid`, `networkUuid` |
-| Create Volume | `KongVolumeRequest` | `name`, `zoneUuid`, `storageOfferingUuid`, `diskSize` |
-| Create Network | `KongNetworkRequest` | `name`, `zoneUuid`, `networkOfferingUuid` |
-| Create VPC | `KongVpcRequest` | `name`, `zoneUuid`, `vpcOfferingUuid`, `getcIDR` |
-| Create Kubernetes | `KongKubernetesRequest` | `name`, `zoneUuid`, `kubernetesSupportedVersionUuid`, `computeOfferingUuid`, `transNetworkUuid`, `size` |
-| Create Snapshot | `KongSnapShotRequest` | `name`, `zoneUuid`, `volumeUuid` |
-| Create VM Snapshot | `KongVmSnapshotRequest` | `name`, `zoneUuid`, `virtualmachineUuid` |
-| Create SSH Key | `KongSSHKeyRequest` | `name`, `publicKey` |
-| Create Security Group | `KongSecurityGroupRequest` | `name` |
-| Create Firewall Rule | `KongFirewallRuleRequest` | `ipAddressUuid`, `protocol` |
-| Create Egress Rule | `KongEgressRuleRequest` | `networkUuid`, `protocol` |
-| Create Port Forwarding Rule | `KongPortForwardingRequest` | `ipAddressUuid`, `protocol`, `privatePort`, `publicPort`, `virtualmachineUuid`, `networkUuid` |
-| Create Load Balancer Rule | `KongLoadBalancerRuleRequest` | `name`, `publicIpUuid`, `publicport`, `privateport`, `networkUuid`, `algorithm` |
-| Create VPN Connection | `KongVpnConnectionRequest` | `vpcUuid`, `customerGatewayUuid` |
-| Create VPN Customer Gateway | `KongVpnCustomerGatewayRequest` | `name`, `gateway`, `cidrlist`, `ipsecpsk`, `ikepolicy`, `esppolicy` |
-| Add VPN Gateway | `KongVpnGatewayRequest` | `vpcUuid` |
-| Add VPN User | `KongVpnUserRequest` | `username`, `password` |
+- All write operations (POST/PUT/DELETE) require a valid Bearer token
+- Discovery endpoints (`/regions`, `/currencies`, etc.) may be publicly accessible
+- The `/plans/service/{ServiceType}` pattern uses fixed service type values (VM, Router, Storage, LB, K8s, IP, Snapshot, Template, ISO, Backups)
+- Monitoring endpoints require the target VM SLUG and return time-series data

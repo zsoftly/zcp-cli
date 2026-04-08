@@ -5,6 +5,56 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.6] - 2026-04-08
+
+### Changed
+
+- **API backend migration**: Migrated entire CLI from STKBILL to STKCNSL API backend
+- **Authentication**: Switched from `apikey`/`secretkey` headers to Bearer token authentication
+- **Config format**: Profile config now uses `bearer_token` instead of `apikey`/`secretkey`
+- **API style**: All endpoints now use RESTful paths with slug identifiers instead of RPC-style paths with UUID query parameters
+- **Response handling**: All API responses now parsed from `{status, message, data}` envelope format with built-in pagination support
+
+### Added
+
+- **`dns`**: Domain and record management (list, show, create, delete, record-create, record-delete)
+- **`project`**: Project management (list, create, update, dashboard, icons, users)
+- **`monitoring`**: Resource monitoring (global, per-VM CPU/memory/disk/network metrics)
+- **`billing`**: Billing operations (costs, balance, invoices, subscriptions, usage, coupons, budget alerts)
+- **`support`**: Support ticket management (CRUD, replies, feedback, FAQs)
+- **`autoscale`**: VM autoscale groups with policies and conditions
+- **`dashboard`**: Account service counts overview
+- **`plan`**: Service plan listing for all resource types (VM, storage, K8s, LB, etc.)
+- **`store`**: Store items and checkout
+- **`marketplace`**: Marketplace app listing
+- **`product`**: Product categories and listing
+- **`iso`**: ISO image management (list, create, update, delete)
+- **`affinity-group`**: Affinity group management (list, create, delete)
+- **`backup`**: VM and block storage backup operations
+- **`region`**: Region listing (replaces zone-based discovery)
+- **`project delete`**: Delete projects with confirmation prompt
+- **`--auto-approve` / `-y`**: Global flag to skip all confirmation prompts (useful for CI/CD automation)
+- **`--blockstorage-plan`**: Required flag on `instance create` for selecting block storage plan size
+- **`billing cancel-service`**: Now accepts `--service`, `--reason`, `--type` flags matching the API requirements
+- **VM operations**: reboot, reset, tags, change-hostname, change-password, change-plan, change-OS, add-network, addons
+- **Network egress rules**: list, create, delete egress firewall rules
+- **VPC ACL management**: list, create, replace ACL rules
+- **VPC VPN gateways**: list, create, delete
+- **Load balancer rules**: create rules, attach VMs to rules
+- **Discovery endpoints**: cloud-providers, currencies, storage-categories, billing-cycles, unit-pricings
+- **Envelope helpers**: `GetEnvelope`/`PostEnvelope`/`PutEnvelope` on httpclient for clean response unwrapping
+- **Generic response types**: `response.Envelope[T]` and `response.Single[T]` in new `api/response` package
+
+### Removed
+
+- **STKBILL API support**: All old `/restapi/` RPC-style endpoints removed
+- **`apikey`/`secretkey` config fields**: Replaced by `bearer_token`
+- **Zone-based filtering**: Replaced by region/slug-based resource identification
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.5...0.0.6
+
+---
+
 ## [0.0.5] - 2026-03-31
 
 ### Fixed

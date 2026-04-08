@@ -14,33 +14,36 @@ import (
 
 func newClient(baseURL string) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    "testkey",
-		SecretKey: "testsecret",
-		Timeout:   5 * time.Second,
+		BaseURL:     baseURL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
 }
 
-type listSSHKeyResponse struct {
-	Count              int             `json:"count"`
-	ListSSHKeyResponse []sshkey.SSHKey `json:"listSSHKeyResponse"`
+// envelope wraps data in the STKCNSL response envelope.
+func envelope(data interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"status":  "Success",
+		"message": "OK",
+		"data":    data,
+	}
 }
 
 func TestSSHKeyList(t *testing.T) {
-	expected := []sshkey.SSHKey{
-		{UUID: "key-1", Name: "my-key", Status: "active", IsActive: true, DomainName: "default"},
-		{UUID: "key-2", Name: "other-key", Status: "active", IsActive: true, DomainName: "default"},
+	expected := []map[string]interface{}{
+		{"id": "key-1", "name": "my-key", "slug": "my-key", "public_key": "ssh-rsa AAA..."},
+		{"id": "key-2", "name": "other-key", "slug": "other-key", "public_key": "ssh-ed25519 BBB..."},
 	}
 
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		if r.URL.Path != "/restapi/sshkey/sshkeyList" {
+		if r.URL.Path != "/users/ssh-keys" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listSSHKeyResponse{Count: len(expected), ListSSHKeyResponse: expected})
+		json.NewEncoder(w).Encode(envelope(expected))
 	}))
 	defer srv.Close()
 
@@ -49,14 +52,14 @@ func TestSSHKeyList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if gotPath != "/restapi/sshkey/sshkeyList" {
-		t.Errorf("path = %q, want %q", gotPath, "/restapi/sshkey/sshkeyList")
+	if gotPath != "/users/ssh-keys" {
+		t.Errorf("path = %q, want %q", gotPath, "/users/ssh-keys")
 	}
 	if len(keys) != 2 {
 		t.Fatalf("List() returned %d keys, want 2", len(keys))
 	}
-	if keys[0].UUID != "key-1" {
-		t.Errorf("keys[0].UUID = %q, want %q", keys[0].UUID, "key-1")
+	if keys[0].ID != "key-1" {
+		t.Errorf("keys[0].ID = %q, want %q", keys[0].ID, "key-1")
 	}
 	if keys[1].Name != "other-key" {
 		t.Errorf("keys[1].Name = %q, want %q", keys[1].Name, "other-key")
@@ -64,12 +67,11 @@ func TestSSHKeyList(t *testing.T) {
 }
 
 func TestSSHKeyCreate(t *testing.T) {
-	created := sshkey.SSHKey{
-		UUID:       "key-new",
-		Name:       "imported-key",
-		Status:     "active",
-		IsActive:   true,
-		DomainName: "default",
+	created := map[string]interface{}{
+		"id":         "key-new",
+		"name":       "imported-key",
+		"slug":       "imported-key",
+		"public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAA test@host",
 	}
 
 	var gotBody map[string]interface{}
@@ -78,13 +80,13 @@ func TestSSHKeyCreate(t *testing.T) {
 			http.Error(w, "expected POST", http.StatusMethodNotAllowed)
 			return
 		}
-		if r.URL.Path != "/restapi/sshkey/createSSHkey" {
+		if r.URL.Path != "/users/ssh-keys" {
 			http.NotFound(w, r)
 			return
 		}
 		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(listSSHKeyResponse{Count: 1, ListSSHKeyResponse: []sshkey.SSHKey{created}})
+		json.NewEncoder(w).Encode(envelope(created))
 	}))
 	defer srv.Close()
 
@@ -97,14 +99,14 @@ func TestSSHKeyCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if key.UUID != "key-new" {
-		t.Errorf("key.UUID = %q, want %q", key.UUID, "key-new")
+	if key.ID != "key-new" {
+		t.Errorf("key.ID = %q, want %q", key.ID, "key-new")
 	}
 	if gotBody["name"] != "imported-key" {
 		t.Errorf("body name = %v, want %q", gotBody["name"], "imported-key")
 	}
-	if gotBody["publicKey"] != "ssh-rsa AAAAB3NzaC1yc2EAAAA test@host" {
-		t.Errorf("body publicKey = %v, want publicKey value", gotBody["publicKey"])
+	if gotBody["public_key"] != "ssh-rsa AAAAB3NzaC1yc2EAAAA test@host" {
+		t.Errorf("body public_key = %v, want public_key value", gotBody["public_key"])
 	}
 }
 
@@ -125,7 +127,7 @@ func TestSSHKeyDelete(t *testing.T) {
 	if gotMethod != http.MethodDelete {
 		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
 	}
-	if gotPath != "/restapi/sshkey/deleteSSHkey/key-del-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/restapi/sshkey/deleteSSHkey/key-del-1")
+	if gotPath != "/users/ssh-keys/key-del-1" {
+		t.Errorf("path = %q, want %q", gotPath, "/users/ssh-keys/key-del-1")
 	}
 }

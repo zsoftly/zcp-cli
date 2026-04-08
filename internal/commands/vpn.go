@@ -18,165 +18,11 @@ import (
 func NewVPNCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vpn",
-		Short: "Manage VPN gateways, connections, and users",
+		Short: "Manage VPN users and customer gateways",
 	}
-	cmd.AddCommand(newVPNGatewayCmd())
 	cmd.AddCommand(newVPNCustomerGatewayCmd())
-	cmd.AddCommand(newVPNConnectionCmd())
 	cmd.AddCommand(newVPNUserCmd())
 	return cmd
-}
-
-// ─── VPN Gateway ──────────────────────────────────────────────────────────────
-
-func newVPNGatewayCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "gateway",
-		Short: "Manage VPN gateways",
-	}
-	cmd.AddCommand(newVPNGatewayListCmd())
-	cmd.AddCommand(newVPNGatewayCreateCmd())
-	cmd.AddCommand(newVPNGatewayDeleteCmd())
-	return cmd
-}
-
-func newVPNGatewayListCmd() *cobra.Command {
-	var zoneUUID, vpcUUID string
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List VPN gateways in a zone",
-		Example: `  zcp vpn gateway list --zone <uuid>
-  zcp vpn gateway list --zone <uuid> --vpc <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNGatewayList(cmd, zoneUUID, vpcUUID)
-		},
-	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
-	return cmd
-}
-
-func runVPNGatewayList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
-	}
-
-	svc := vpn.NewGatewayService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	gateways, err := svc.List(ctx, zoneUUID, "", vpcUUID)
-	if err != nil {
-		return fmt.Errorf("vpn gateway list: %w", err)
-	}
-
-	headers := []string{"UUID", "PUBLIC IP", "VPC", "STATUS"}
-	rows := make([][]string, 0, len(gateways))
-	for _, g := range gateways {
-		rows = append(rows, []string{
-			g.UUID,
-			g.PublicIP,
-			g.VPCUUID,
-			g.Status,
-		})
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPNGatewayCreateCmd() *cobra.Command {
-	var vpcUUID string
-
-	cmd := &cobra.Command{
-		Use:     "create",
-		Short:   "Create a VPN gateway for a VPC",
-		Example: `  zcp vpn gateway create --vpc <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if vpcUUID == "" {
-				return fmt.Errorf("--vpc is required")
-			}
-			return runVPNGatewayCreate(cmd, vpcUUID)
-		},
-	}
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (required)")
-	return cmd
-}
-
-func runVPNGatewayCreate(cmd *cobra.Command, vpcUUID string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpn.NewGatewayService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	g, err := svc.Create(ctx, vpcUUID)
-	if err != nil {
-		return fmt.Errorf("vpn gateway create: %w", err)
-	}
-
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"UUID", g.UUID},
-		{"Public IP", g.PublicIP},
-		{"VPC UUID", g.VPCUUID},
-		{"Zone UUID", g.ZoneUUID},
-		{"Status", g.Status},
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPNGatewayDeleteCmd() *cobra.Command {
-	var yes bool
-
-	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
-		Short: "Delete a VPN gateway",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpn gateway delete <uuid>
-  zcp vpn gateway delete <uuid> --yes`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNGatewayDelete(cmd, args[0], yes)
-		},
-	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	return cmd
-}
-
-func runVPNGatewayDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete VPN gateway %q? This action cannot be undone. [y/N]: ", uuid)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "Aborted.")
-			return nil
-		}
-	}
-
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpn.NewGatewayService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	if err := svc.Delete(ctx, uuid); err != nil {
-		return fmt.Errorf("vpn gateway delete: %w", err)
-	}
-
-	printer.Fprintf("VPN gateway %q deleted.\n", uuid)
-	return nil
 }
 
 // ─── VPN Customer Gateway ─────────────────────────────────────────────────────
@@ -215,18 +61,19 @@ func runVPNCGList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	cgs, err := svc.List(ctx, "")
+	cgs, err := svc.List(ctx)
 	if err != nil {
 		return fmt.Errorf("vpn customer-gateway list: %w", err)
 	}
 
-	headers := []string{"UUID", "IKE POLICY", "ESP LIFETIME", "CIDR"}
+	headers := []string{"SLUG", "NAME", "GATEWAY", "IKE POLICY", "CIDR"}
 	rows := make([][]string, 0, len(cgs))
 	for _, cg := range cgs {
 		rows = append(rows, []string{
-			cg.UUID,
+			cg.Slug,
+			cg.Name,
+			cg.Gateway,
 			cg.IKEPolicy,
-			cg.ESPLifetime,
 			cg.CIDRList,
 		})
 	}
@@ -329,7 +176,9 @@ func runVPNCGCreate(cmd *cobra.Command, req vpn.CustomerGatewayRequest) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", cg.UUID},
+		{"Slug", cg.Slug},
+		{"Name", cg.Name},
+		{"Gateway", cg.Gateway},
 		{"IKE Policy", cg.IKEPolicy},
 		{"IKE Lifetime", cg.IKELifetime},
 		{"ESP Lifetime", cg.ESPLifetime},
@@ -349,31 +198,28 @@ func newVPNCGUpdateCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "update <uuid>",
+		Use:     "update <slug>",
 		Short:   "Update a VPN customer gateway",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpn customer-gateway update <uuid> --name new-name --psk newkey`,
+		Example: `  zcp vpn customer-gateway update <slug> --name new-name --psk newkey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNCGUpdate(cmd, vpn.CustomerGatewayUpdateRequest{
-				UUID: args[0],
-				CustomerGatewayRequest: vpn.CustomerGatewayRequest{
-					Name:            name,
-					Gateway:         gateway,
-					CIDRList:        cidr,
-					IPSecPSK:        psk,
-					IKEPolicy:       ikePolicy,
-					ESPPolicy:       espPolicy,
-					IKELifetime:     ikeLifetime,
-					ESPLifetime:     espLifetime,
-					IKEEncryption:   ikeEncryption,
-					IKEHash:         ikeHash,
-					IKEVersion:      ikeVersion,
-					ESPEncryption:   espEncryption,
-					ESPHash:         espHash,
-					ForceEncap:      forceEncap,
-					SplitConnection: splitConnection,
-					DPD:             dpd,
-				},
+			return runVPNCGUpdate(cmd, args[0], vpn.CustomerGatewayRequest{
+				Name:            name,
+				Gateway:         gateway,
+				CIDRList:        cidr,
+				IPSecPSK:        psk,
+				IKEPolicy:       ikePolicy,
+				ESPPolicy:       espPolicy,
+				IKELifetime:     ikeLifetime,
+				ESPLifetime:     espLifetime,
+				IKEEncryption:   ikeEncryption,
+				IKEHash:         ikeHash,
+				IKEVersion:      ikeVersion,
+				ESPEncryption:   espEncryption,
+				ESPHash:         espHash,
+				ForceEncap:      forceEncap,
+				SplitConnection: splitConnection,
+				DPD:             dpd,
 			})
 		},
 	}
@@ -383,7 +229,7 @@ func newVPNCGUpdateCmd() *cobra.Command {
 	return cmd
 }
 
-func runVPNCGUpdate(cmd *cobra.Command, req vpn.CustomerGatewayUpdateRequest) error {
+func runVPNCGUpdate(cmd *cobra.Command, slug string, req vpn.CustomerGatewayRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -393,14 +239,16 @@ func runVPNCGUpdate(cmd *cobra.Command, req vpn.CustomerGatewayUpdateRequest) er
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	cg, err := svc.Update(ctx, req)
+	cg, err := svc.Update(ctx, slug, req)
 	if err != nil {
 		return fmt.Errorf("vpn customer-gateway update: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", cg.UUID},
+		{"Slug", cg.Slug},
+		{"Name", cg.Name},
+		{"Gateway", cg.Gateway},
 		{"IKE Policy", cg.IKEPolicy},
 		{"IKE Lifetime", cg.IKELifetime},
 		{"ESP Lifetime", cg.ESPLifetime},
@@ -413,11 +261,11 @@ func newVPNCGDeleteCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
+		Use:   "delete <slug>",
 		Short: "Delete a VPN customer gateway",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpn customer-gateway delete <uuid>
-  zcp vpn customer-gateway delete <uuid> --yes`,
+		Example: `  zcp vpn customer-gateway delete <slug>
+  zcp vpn customer-gateway delete <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPNCGDelete(cmd, args[0], yes)
 		},
@@ -426,9 +274,9 @@ func newVPNCGDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runVPNCGDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete VPN customer gateway %q? This action cannot be undone. [y/N]: ", uuid)
+func runVPNCGDelete(cmd *cobra.Command, slug string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete VPN customer gateway %q? This action cannot be undone. [y/N]: ", slug)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -447,215 +295,11 @@ func runVPNCGDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, uuid); err != nil {
+	if err := svc.Delete(ctx, slug); err != nil {
 		return fmt.Errorf("vpn customer-gateway delete: %w", err)
 	}
 
-	printer.Fprintf("VPN customer gateway %q deleted.\n", uuid)
-	return nil
-}
-
-// ─── VPN Connection ───────────────────────────────────────────────────────────
-
-func newVPNConnectionCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "connection",
-		Short: "Manage VPN connections",
-	}
-	cmd.AddCommand(newVPNConnListCmd())
-	cmd.AddCommand(newVPNConnCreateCmd())
-	cmd.AddCommand(newVPNConnResetCmd())
-	cmd.AddCommand(newVPNConnDeleteCmd())
-	return cmd
-}
-
-func newVPNConnListCmd() *cobra.Command {
-	var zoneUUID, vpcUUID string
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List VPN connections in a zone",
-		Example: `  zcp vpn connection list --zone <uuid>
-  zcp vpn connection list --zone <uuid> --vpc <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNConnList(cmd, zoneUUID, vpcUUID)
-		},
-	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
-	return cmd
-}
-
-func runVPNConnList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
-	}
-
-	svc := vpn.NewConnectionService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	conns, err := svc.List(ctx, zoneUUID, "", vpcUUID)
-	if err != nil {
-		return fmt.Errorf("vpn connection list: %w", err)
-	}
-
-	headers := []string{"UUID", "STATE", "IKE POLICY", "CUSTOMER GW", "VPN GW"}
-	rows := make([][]string, 0, len(conns))
-	for _, c := range conns {
-		rows = append(rows, []string{
-			c.UUID,
-			c.State,
-			c.IKEPolicy,
-			c.CustomerGatewayUUID,
-			c.VPNGatewayUUID,
-		})
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPNConnCreateCmd() *cobra.Command {
-	var vpcUUID, customerGatewayUUID string
-	var passive bool
-
-	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a VPN connection",
-		Example: `  zcp vpn connection create --vpc <uuid> --customer-gateway <uuid>
-  zcp vpn connection create --vpc <uuid> --customer-gateway <uuid> --passive`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if vpcUUID == "" {
-				return fmt.Errorf("--vpc is required")
-			}
-			if customerGatewayUUID == "" {
-				return fmt.Errorf("--customer-gateway is required")
-			}
-			return runVPNConnCreate(cmd, vpn.ConnectionCreateRequest{
-				VPCUUID:             vpcUUID,
-				CustomerGatewayUUID: customerGatewayUUID,
-				Passive:             passive,
-			})
-		},
-	}
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (required)")
-	cmd.Flags().StringVar(&customerGatewayUUID, "customer-gateway", "", "Customer gateway UUID (required)")
-	cmd.Flags().BoolVar(&passive, "passive", false, "Create connection in passive mode")
-	return cmd
-}
-
-func runVPNConnCreate(cmd *cobra.Command, req vpn.ConnectionCreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpn.NewConnectionService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	c, err := svc.Create(ctx, req)
-	if err != nil {
-		return fmt.Errorf("vpn connection create: %w", err)
-	}
-
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"UUID", c.UUID},
-		{"State", c.State},
-		{"IKE Policy", c.IKEPolicy},
-		{"ESP Policy", c.ESPPolicy},
-		{"Customer Gateway UUID", c.CustomerGatewayUUID},
-		{"VPN Gateway UUID", c.VPNGatewayUUID},
-		{"Zone UUID", c.ZoneUUID},
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPNConnResetCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "reset <uuid>",
-		Short:   "Reset a VPN connection",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpn connection reset <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNConnReset(cmd, args[0])
-		},
-	}
-	return cmd
-}
-
-func runVPNConnReset(cmd *cobra.Command, uuid string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpn.NewConnectionService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	c, err := svc.Reset(ctx, uuid)
-	if err != nil {
-		return fmt.Errorf("vpn connection reset: %w", err)
-	}
-
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"UUID", c.UUID},
-		{"State", c.State},
-		{"IKE Policy", c.IKEPolicy},
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPNConnDeleteCmd() *cobra.Command {
-	var yes bool
-
-	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
-		Short: "Delete a VPN connection",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpn connection delete <uuid>
-  zcp vpn connection delete <uuid> --yes`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPNConnDelete(cmd, args[0], yes)
-		},
-	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	return cmd
-}
-
-func runVPNConnDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete VPN connection %q? This action cannot be undone. [y/N]: ", uuid)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "Aborted.")
-			return nil
-		}
-	}
-
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpn.NewConnectionService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	if err := svc.Delete(ctx, uuid); err != nil {
-		return fmt.Errorf("vpn connection delete: %w", err)
-	}
-
-	printer.Fprintf("VPN connection %q deleted.\n", uuid)
+	printer.Fprintf("VPN customer gateway %q deleted.\n", slug)
 	return nil
 }
 
@@ -694,16 +338,16 @@ func runVPNUserList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	users, err := svc.List(ctx, "")
+	users, err := svc.List(ctx)
 	if err != nil {
 		return fmt.Errorf("vpn user list: %w", err)
 	}
 
-	headers := []string{"UUID", "USERNAME", "STATUS"}
+	headers := []string{"SLUG", "USERNAME", "STATUS"}
 	rows := make([][]string, 0, len(users))
 	for _, u := range users {
 		rows = append(rows, []string{
-			u.UUID,
+			u.Slug,
 			u.UserName,
 			u.Status,
 		})
@@ -766,7 +410,7 @@ func runVPNUserCreate(cmd *cobra.Command, username, password string) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", u.UUID},
+		{"Slug", u.Slug},
 		{"Username", u.UserName},
 		{"Status", u.Status},
 	}
@@ -777,11 +421,11 @@ func newVPNUserDeleteCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <username>",
-		Short: "Delete a VPN user by username",
+		Use:   "delete <slug>",
+		Short: "Delete a VPN user by slug",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpn user delete alice
-  zcp vpn user delete alice --yes`,
+		Example: `  zcp vpn user delete <slug>
+  zcp vpn user delete <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPNUserDelete(cmd, args[0], yes)
 		},
@@ -790,9 +434,9 @@ func newVPNUserDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runVPNUserDelete(cmd *cobra.Command, username string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete VPN user %q? This action cannot be undone. [y/N]: ", username)
+func runVPNUserDelete(cmd *cobra.Command, slug string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete VPN user %q? This action cannot be undone. [y/N]: ", slug)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -811,10 +455,10 @@ func runVPNUserDelete(cmd *cobra.Command, username string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, username); err != nil {
+	if err := svc.Delete(ctx, slug); err != nil {
 		return fmt.Errorf("vpn user delete: %w", err)
 	}
 
-	printer.Fprintf("VPN user %q deleted.\n", username)
+	printer.Fprintf("VPN user %q deleted.\n", slug)
 	return nil
 }

@@ -11,6 +11,7 @@ GO            := go
 GOFMT         := gofmt
 GOVET         := $(GO) vet
 GOTEST        := $(GO) test
+PRETTIER      := $(shell command -v prettier 2>/dev/null || echo "npx prettier")
 
 .DEFAULT_GOAL := help
 
@@ -68,8 +69,14 @@ test-race: ## Run all tests with race detector
 ##@ Quality
 
 .PHONY: fmt
-fmt: ## Format all Go source files
+fmt: ## Format all Go source files and Markdown docs
 	$(GOFMT) -w .
+	$(PRETTIER) --write '**/*.md' --prose-wrap preserve 2>/dev/null || true
+
+.PHONY: fmt-check
+fmt-check: ## Check formatting without writing (useful in CI)
+	@test -z "$$($(GOFMT) -l .)" || { echo "Go files need formatting:"; $(GOFMT) -l .; exit 1; }
+	$(PRETTIER) --check '**/*.md' --prose-wrap preserve 2>/dev/null || { echo "Markdown files need formatting — run: make fmt"; exit 1; }
 
 .PHONY: vet
 vet: ## Run go vet

@@ -17,11 +17,10 @@ import (
 // Tests that need to exercise backoff timing override Timeout themselves.
 func newTestClient(srv *httptest.Server, maxRetries int) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: maxRetries,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  maxRetries,
 	})
 }
 
@@ -49,11 +48,10 @@ func TestRetryGET500EventuallySucceeds(t *testing.T) {
 	// custom server that responds immediately, so backoff sleeps dominate —
 	// keep MaxRetries small to keep test fast.
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 3,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  3,
 	})
 
 	var result map[string]string
@@ -88,11 +86,10 @@ func TestRetryGET429(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 3,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  3,
 	})
 
 	var result map[string]string
@@ -119,11 +116,10 @@ func TestPOSTDoesNotRetryOn500(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 3,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  3,
 	})
 
 	var result map[string]string
@@ -151,11 +147,10 @@ func TestRetryGETExceedsMaxRetries(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 2, // 1 initial + 2 retries = 3 total requests
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  2, // 1 initial + 2 retries = 3 total requests
 	})
 
 	err := client.Get(context.Background(), "/test", url.Values{}, nil)
@@ -182,11 +177,10 @@ func TestRetryContextCancellationStopsLoop(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 3,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  3,
 	})
 
 	// Cancel immediately after first request fires. The retry backoff (1s)
@@ -225,11 +219,10 @@ func TestRetryGET404DoesNotRetry(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:    srv.URL,
-		APIKey:     "k",
-		SecretKey:  "s",
-		Timeout:    5 * time.Second,
-		MaxRetries: 3,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
+		MaxRetries:  3,
 	})
 
 	err := client.Get(context.Background(), "/missing", url.Values{}, nil)

@@ -37,10 +37,9 @@ func TestSaveAndLoad(t *testing.T) {
 		ActiveProfile: "default",
 		Profiles: map[string]config.Profile{
 			"default": {
-				Name:      "default",
-				APIKey:    "testkey",
-				SecretKey: "testsecret",
-				APIURL:    "",
+				Name:        "default",
+				BearerToken: "test-bearer-token",
+				APIURL:      "",
 			},
 		},
 	}
@@ -70,8 +69,8 @@ func TestSaveAndLoad(t *testing.T) {
 	if !ok {
 		t.Fatal("profile 'default' not found after load")
 	}
-	if p.APIKey != "testkey" {
-		t.Errorf("APIKey = %q, want %q", p.APIKey, "testkey")
+	if p.BearerToken != "test-bearer-token" {
+		t.Errorf("BearerToken = %q, want %q", p.BearerToken, "test-bearer-token")
 	}
 }
 
@@ -79,7 +78,7 @@ func TestResolveProfile(t *testing.T) {
 	cfg := &config.Config{
 		ActiveProfile: "prod",
 		Profiles: map[string]config.Profile{
-			"prod": {Name: "prod", APIKey: "key", SecretKey: "secret"},
+			"prod": {Name: "prod", BearerToken: "token"},
 		},
 	}
 
@@ -117,37 +116,15 @@ func TestResolveProfileNoActive(t *testing.T) {
 }
 
 func TestResolveProfileMissingCredentials(t *testing.T) {
-	tests := []struct {
-		name    string
-		profile config.Profile
-	}{
-		{
-			name:    "missing APIKey",
-			profile: config.Profile{Name: "dev", APIKey: "", SecretKey: "secret"},
-		},
-		{
-			name:    "missing SecretKey",
-			profile: config.Profile{Name: "dev", APIKey: "key", SecretKey: ""},
-		},
-		{
-			name:    "missing both",
-			profile: config.Profile{Name: "dev", APIKey: "", SecretKey: ""},
+	cfg := &config.Config{
+		ActiveProfile: "dev",
+		Profiles: map[string]config.Profile{
+			"dev": {Name: "dev", BearerToken: ""},
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{
-				ActiveProfile: "dev",
-				Profiles: map[string]config.Profile{
-					"dev": tt.profile,
-				},
-			}
-			_, err := config.ResolveProfile(cfg, "dev")
-			if err == nil {
-				t.Errorf("ResolveProfile() expected error for %q, got nil", tt.name)
-			}
-		})
+	_, err := config.ResolveProfile(cfg, "dev")
+	if err == nil {
+		t.Error("ResolveProfile() expected error for missing bearer token, got nil")
 	}
 }
 

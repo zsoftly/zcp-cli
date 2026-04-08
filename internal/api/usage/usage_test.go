@@ -15,10 +15,9 @@ import (
 func newTestClient(t *testing.T, srv *httptest.Server) *httpclient.Client {
 	t.Helper()
 	return httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
 	})
 }
 

@@ -25,7 +25,7 @@ func validateEgressProtocol(protocol string) error {
 func NewEgressCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "egress",
-		Short: "Manage egress rules",
+		Short: "Manage egress firewall rules",
 	}
 	cmd.AddCommand(newEgressListCmd())
 	cmd.AddCommand(newEgressCreateCmd())
@@ -34,50 +34,48 @@ func NewEgressCmd() *cobra.Command {
 }
 
 func newEgressListCmd() *cobra.Command {
-	var zoneUUID, networkUUID string
+	var networkSlug string
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List egress rules",
-		Example: `  zcp egress list --zone <uuid>
-  zcp egress list --zone <uuid> --network <uuid>`,
+		Short: "List egress rules for a network",
+		Example: `  zcp egress list --network <slug>
+  zcp egress list --network <slug> --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runEgressList(cmd, zoneUUID, networkUUID)
+			if networkSlug == "" {
+				return fmt.Errorf("--network is required")
+			}
+			return runEgressList(cmd, networkSlug)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Filter by network UUID")
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
 	return cmd
 }
 
-func runEgressList(cmd *cobra.Command, zoneUUID, networkUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+func runEgressList(cmd *cobra.Command, networkSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := egress.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	rules, err := svc.List(ctx, zoneUUID, "", networkUUID)
+	rules, err := svc.List(ctx, networkSlug)
 	if err != nil {
 		return fmt.Errorf("egress list: %w", err)
 	}
 
-	headers := []string{"UUID", "PROTOCOL", "PORTS", "NETWORK", "STATUS"}
+	headers := []string{"ID", "PROTOCOL", "PORTS", "CIDR", "STATUS"}
 	rows := make([][]string, 0, len(rules))
 	for _, r := range rules {
 		ports := formatEgressPorts(r.StartPort, r.EndPort)
 		rows = append(rows, []string{
-			r.UUID,
+			r.ID,
 			r.Protocol,
 			ports,
-			r.NetworkUUID,
+			r.CIDR,
 			r.Status,
 		})
 	}
@@ -85,15 +83,15 @@ func runEgressList(cmd *cobra.Command, zoneUUID, networkUUID string) error {
 }
 
 func newEgressCreateCmd() *cobra.Command {
-	var networkUUID, protocol, startPort, endPort, cidr, icmpType, icmpCode string
+	var networkSlug, protocol, startPort, endPort, cidr, icmpType, icmpCode string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create an egress rule",
-		Example: `  zcp egress create --network <uuid> --protocol tcp --start-port 443
-  zcp egress create --network <uuid> --protocol all`,
+		Example: `  zcp egress create --network <slug> --protocol tcp --start-port 443
+  zcp egress create --network <slug> --protocol all`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if networkUUID == "" {
+			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
 			if protocol == "" {
@@ -107,21 +105,21 @@ func newEgressCreateCmd() *cobra.Command {
 				fmt.Fprintln(os.Stderr, "Warning: no ports specified for TCP/UDP rule; all ports will be affected.")
 			}
 			return runEgressCreate(cmd, egress.CreateRequest{
-				NetworkUUID: networkUUID,
+				NetworkSlug: networkSlug,
 				Protocol:    proto,
 				StartPort:   startPort,
 				EndPort:     endPort,
-				CIDRList:    cidr,
+				CIDR:        cidr,
 				ICMPType:    icmpType,
 				ICMPCode:    icmpCode,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Network UUID (required)")
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
 	cmd.Flags().StringVar(&protocol, "protocol", "", "Protocol: tcp, udp, icmp, or all (required)")
 	cmd.Flags().StringVar(&startPort, "start-port", "", "Start port number")
 	cmd.Flags().StringVar(&endPort, "end-port", "", "End port number")
-	cmd.Flags().StringVar(&cidr, "cidr", "", "Comma-separated CIDR list")
+	cmd.Flags().StringVar(&cidr, "cidr", "", "CIDR (e.g. 0.0.0.0/0)")
 	cmd.Flags().StringVar(&icmpType, "icmp-type", "", "ICMP type (ICMP protocol only)")
 	cmd.Flags().StringVar(&icmpCode, "icmp-code", "", "ICMP code (ICMP protocol only)")
 	return cmd
@@ -144,35 +142,41 @@ func runEgressCreate(cmd *cobra.Command, req egress.CreateRequest) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", rule.UUID},
+		{"ID", rule.ID},
 		{"Protocol", rule.Protocol},
 		{"Ports", formatEgressPorts(rule.StartPort, rule.EndPort)},
-		{"Network UUID", rule.NetworkUUID},
+		{"CIDR", rule.CIDR},
 		{"Status", rule.Status},
 	}
 	return printer.PrintTable(headers, rows)
 }
 
 func newEgressDeleteCmd() *cobra.Command {
+	var networkSlug string
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
+		Use:   "delete <id>",
 		Short: "Delete an egress rule",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp egress delete <uuid>
-  zcp egress delete <uuid> --yes`,
+		Example: `  zcp egress delete 42 --network <slug>
+  zcp egress delete 42 --network <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runEgressDelete(cmd, args[0], yes)
+			if networkSlug == "" {
+				return fmt.Errorf("--network is required")
+			}
+			ruleID := args[0]
+			return runEgressDelete(cmd, networkSlug, ruleID, yes)
 		},
 	}
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
-func runEgressDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete egress rule %q? [y/N]: ", uuid)
+func runEgressDelete(cmd *cobra.Command, networkSlug string, ruleID string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete egress rule %s from network %q? [y/N]: ", ruleID, networkSlug)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -191,11 +195,11 @@ func runEgressDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, uuid); err != nil {
+	if err := svc.Delete(ctx, networkSlug, ruleID); err != nil {
 		return fmt.Errorf("egress delete: %w", err)
 	}
 
-	printer.Fprintf("Egress rule %q deleted.\n", uuid)
+	printer.Fprintf("Deleted egress rule %s from network %q\n", ruleID, networkSlug)
 	return nil
 }
 

@@ -19,11 +19,10 @@ import (
 
 // Options configures a Client.
 type Options struct {
-	BaseURL   string
-	APIKey    string
-	SecretKey string
-	Timeout   time.Duration
-	Debug     bool
+	BaseURL     string
+	BearerToken string
+	Timeout     time.Duration
+	Debug       bool
 	// DebugOut is where debug output is written (defaults to os.Stderr in New).
 	DebugOut io.Writer
 	// MaxRetries is the number of times to retry GET requests on transient failures.
@@ -41,7 +40,7 @@ type Client struct {
 }
 
 // New creates a new Client with the given options.
-// BaseURL, APIKey, and SecretKey are required.
+// BaseURL and BearerToken are required.
 func New(opts Options) *Client {
 	if opts.Timeout == 0 {
 		opts.Timeout = 30 * time.Second
@@ -171,9 +170,8 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 		return fmt.Errorf("creating request: %w", err)
 	}
 
-	// Auth headers
-	req.Header.Set("apikey", c.opts.APIKey)
-	req.Header.Set("secretkey", c.opts.SecretKey)
+	// Auth header
+	req.Header.Set("Authorization", "Bearer "+c.opts.BearerToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "zcp-cli/"+version.Version)
@@ -211,4 +209,53 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	}
 
 	return nil
+}
+
+// envelope is the standard STKCNSL response wrapper.
+type envelope struct {
+	Status  string          `json:"status"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
+// GetEnvelope performs a GET and unwraps the STKCNSL {status,data} envelope.
+// result receives the unmarshalled data field.
+func (c *Client) GetEnvelope(ctx context.Context, path string, query url.Values, result interface{}) error {
+	var env envelope
+	if err := c.Get(ctx, path, query, &env); err != nil {
+		return err
+	}
+	if result != nil && len(env.Data) > 0 {
+		return json.Unmarshal(env.Data, result)
+	}
+	return nil
+}
+
+// PostEnvelope performs a POST and unwraps the STKCNSL envelope.
+func (c *Client) PostEnvelope(ctx context.Context, path string, body interface{}, result interface{}) error {
+	var env envelope
+	if err := c.Post(ctx, path, body, &env); err != nil {
+		return err
+	}
+	if result != nil && len(env.Data) > 0 {
+		return json.Unmarshal(env.Data, result)
+	}
+	return nil
+}
+
+// PutEnvelope performs a PUT and unwraps the STKCNSL envelope.
+func (c *Client) PutEnvelope(ctx context.Context, path string, query url.Values, body interface{}, result interface{}) error {
+	var env envelope
+	if err := c.Put(ctx, path, query, body, &env); err != nil {
+		return err
+	}
+	if result != nil && len(env.Data) > 0 {
+		return json.Unmarshal(env.Data, result)
+	}
+	return nil
+}
+
+// DeleteEnvelope performs a DELETE and unwraps the STKCNSL envelope.
+func (c *Client) DeleteEnvelope(ctx context.Context, path string, query url.Values) error {
+	return c.Delete(ctx, path, query)
 }

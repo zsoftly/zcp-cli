@@ -37,10 +37,9 @@ func TestZoneList(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
 	})
 
 	svc := zone.NewService(client)
@@ -71,10 +70,9 @@ func TestZoneListWithUUIDFilter(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
 	})
 
 	svc := zone.NewService(client)
@@ -98,10 +96,9 @@ func TestZoneListAPIError(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "bad",
-		SecretKey: "creds",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "bad-token",
+		Timeout:     5 * time.Second,
 	})
 
 	svc := zone.NewService(client)

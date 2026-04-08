@@ -39,12 +39,11 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 
 	baseURL := config.ActiveAPIURL(profile, apiURL)
 	opts := httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    profile.APIKey,
-		SecretKey: profile.SecretKey,
-		Timeout:   time.Duration(timeoutSec) * time.Second,
-		Debug:     debugFlag,
-		DebugOut:  os.Stderr,
+		BaseURL:     baseURL,
+		BearerToken: profile.BearerToken,
+		Timeout:     time.Duration(timeoutSec) * time.Second,
+		Debug:       debugFlag,
+		DebugOut:    os.Stderr,
 	}
 
 	client := httpclient.New(opts)
@@ -78,4 +77,23 @@ func getTimeout(cmd *cobra.Command) int {
 		return 30
 	}
 	return t
+}
+
+// autoApproved returns true if the global --auto-approve / -y flag is set.
+func autoApproved(cmd *cobra.Command) bool {
+	v, _ := cmd.Root().PersistentFlags().GetBool("auto-approve")
+	return v
+}
+
+// confirmAction prompts the user for confirmation unless --auto-approve is set.
+// Returns true if the action should proceed, false if cancelled.
+func confirmAction(cmd *cobra.Command, format string, args ...interface{}) bool {
+	if autoApproved(cmd) {
+		return true
+	}
+	msg := fmt.Sprintf(format, args...)
+	fmt.Fprintf(cmd.ErrOrStderr(), "%s [y/N]: ", msg)
+	var confirm string
+	fmt.Fscanln(cmd.InOrStdin(), &confirm)
+	return confirm == "y" || confirm == "Y"
 }

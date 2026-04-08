@@ -19,7 +19,7 @@ func NewProfileCmd() *cobra.Command {
 		Short: "Manage configuration profiles",
 		Long: `Profiles store named credential sets for different ZCP environments or accounts.
 
-Each profile contains an API key, secret key, and optionally a custom API URL.
+Each profile contains a bearer token and optionally a custom API URL.
 One profile can be set as the active (default) profile.`,
 	}
 	cmd.AddCommand(newProfileAddCmd())
@@ -33,7 +33,7 @@ One profile can be set as the active (default) profile.`,
 }
 
 func newProfileAddCmd() *cobra.Command {
-	var apiKey, secretKey, apiURL string
+	var bearerToken, apiURL string
 	var nonInteractive bool
 
 	cmd := &cobra.Command{
@@ -41,7 +41,7 @@ func newProfileAddCmd() *cobra.Command {
 		Short: "Add or update a profile",
 		Args:  cobra.ExactArgs(1),
 		Example: `  zcp profile add default
-  zcp profile add prod --api-key <key> --secret-key <secret>`,
+  zcp profile add prod --bearer-token <token>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 
@@ -52,22 +52,16 @@ func newProfileAddCmd() *cobra.Command {
 
 			// If flags not provided, prompt interactively
 			if !nonInteractive {
-				if apiKey == "" {
-					apiKey, err = prompt("API Key: ", false)
-					if err != nil {
-						return err
-					}
-				}
-				if secretKey == "" {
-					secretKey, err = prompt("Secret Key: ", true)
+				if bearerToken == "" {
+					bearerToken, err = prompt("Bearer Token: ", true)
 					if err != nil {
 						return err
 					}
 				}
 			}
 
-			if apiKey == "" || secretKey == "" {
-				return fmt.Errorf("apikey and secretkey are required")
+			if bearerToken == "" {
+				return fmt.Errorf("bearer token is required")
 			}
 
 			if cfg.Profiles == nil {
@@ -75,10 +69,9 @@ func newProfileAddCmd() *cobra.Command {
 			}
 
 			cfg.Profiles[name] = config.Profile{
-				Name:      name,
-				APIKey:    apiKey,
-				SecretKey: secretKey,
-				APIURL:    apiURL,
+				Name:        name,
+				BearerToken: bearerToken,
+				APIURL:      apiURL,
 			}
 
 			// Set as active if it's the first or only profile
@@ -97,8 +90,7 @@ func newProfileAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key (prompted if not provided)")
-	cmd.Flags().StringVar(&secretKey, "secret-key", "", "Secret key (prompted if not provided)")
+	cmd.Flags().StringVar(&bearerToken, "bearer-token", "", "Bearer token (prompted if not provided)")
 	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "Custom API URL (optional)")
 	cmd.Flags().BoolVar(&nonInteractive, "no-input", false, "Fail if credentials not provided via flags")
 	return cmd
@@ -226,13 +218,12 @@ func newProfileShowCmd() *cobra.Command {
 			}
 			fmt.Fprintf(os.Stdout, "Profile: %s\n", name)
 			fmt.Fprintf(os.Stdout, "API URL: %s\n", apiURL)
-			fmt.Fprintf(os.Stdout, "API Key: %s\n", maskSecret(p.APIKey))
-			fmt.Fprintf(os.Stdout, "Secret Key: %s\n", maskSecret(p.SecretKey))
+			fmt.Fprintf(os.Stdout, "Bearer Token: %s\n", maskSecret(p.BearerToken))
 			if name == cfg.ActiveProfile {
 				fmt.Fprintln(os.Stdout, "Status: active")
 			}
 			// Credential completeness hint
-			if p.APIKey == "" || p.SecretKey == "" {
+			if p.BearerToken == "" {
 				fmt.Fprintln(os.Stdout, "Warning: profile is missing credentials — run: zcp profile update "+name)
 			}
 			return nil
@@ -241,15 +232,14 @@ func newProfileShowCmd() *cobra.Command {
 }
 
 func newProfileUpdateCmd() *cobra.Command {
-	var apiKey, secretKey, apiURL string
+	var bearerToken, apiURL string
 
 	cmd := &cobra.Command{
 		Use:   "update <name>",
 		Short: "Update fields of an existing profile",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp profile update prod --api-key <new-key>
-  zcp profile update prod --api-url-override https://new.api.url
-  zcp profile update prod --secret-key <new-secret>`,
+		Example: `  zcp profile update prod --bearer-token <new-token>
+  zcp profile update prod --api-url-override https://new.api.url`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			cfg, err := config.Load()
@@ -261,12 +251,8 @@ func newProfileUpdateCmd() *cobra.Command {
 				return fmt.Errorf("profile %q not found — run: zcp profile list", name)
 			}
 			changed := false
-			if apiKey != "" {
-				p.APIKey = apiKey
-				changed = true
-			}
-			if secretKey != "" {
-				p.SecretKey = secretKey
+			if bearerToken != "" {
+				p.BearerToken = bearerToken
 				changed = true
 			}
 			if cmd.Flags().Changed("api-url-override") {
@@ -274,7 +260,7 @@ func newProfileUpdateCmd() *cobra.Command {
 				changed = true
 			}
 			if !changed {
-				return fmt.Errorf("no fields to update — use --api-key, --secret-key, or --api-url-override")
+				return fmt.Errorf("no fields to update — use --bearer-token or --api-url-override")
 			}
 			cfg.Profiles[name] = p
 			if err := config.Save(cfg); err != nil {
@@ -284,8 +270,7 @@ func newProfileUpdateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&apiKey, "api-key", "", "New API key")
-	cmd.Flags().StringVar(&secretKey, "secret-key", "", "New secret key")
+	cmd.Flags().StringVar(&bearerToken, "bearer-token", "", "New bearer token")
 	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "New custom API URL (set to empty string to clear)")
 	return cmd
 }

@@ -52,14 +52,14 @@ func runSSHKeyList(cmd *cobra.Command) error {
 		return fmt.Errorf("ssh-key list: %w", err)
 	}
 
-	headers := []string{"UUID", "NAME", "STATUS", "DOMAIN"}
+	headers := []string{"ID", "NAME", "SLUG", "CREATED"}
 	rows := make([][]string, 0, len(keys))
 	for _, k := range keys {
 		rows = append(rows, []string{
-			k.UUID,
+			k.ID,
 			k.Name,
-			k.Status,
-			k.DomainName,
+			k.Slug,
+			k.CreatedAt,
 		})
 	}
 	return printer.PrintTable(headers, rows)
@@ -116,10 +116,10 @@ func runSSHKeyImport(cmd *cobra.Command, req sshkey.CreateRequest) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", key.UUID},
+		{"ID", key.ID},
 		{"Name", key.Name},
-		{"Status", key.Status},
-		{"Domain", key.DomainName},
+		{"Slug", key.Slug},
+		{"Created", key.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)
 }
@@ -142,7 +142,7 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 }
 
 func runSSHKeyDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
+	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete SSH key %q? [y/N]: ", uuid)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
