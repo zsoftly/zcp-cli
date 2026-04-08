@@ -1,88 +1,47 @@
-# zcp 0.0.6 Release Notes
+# zcp 0.0.7 Release Notes
 
 ## What's New
 
-### API backend migration
+### 8 new commands
 
-The CLI now communicates with the STKCNSL API backend, replacing the previous STKBILL backend. This is a breaking change for configuration files — existing profiles using `apikey`/`secretkey` must be recreated with `bearer_token`.
+| Command                     | Description                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `zcp region list`           | List available regions (replaces `zone list`)                                                  |
+| `zcp profile-info`          | User profile, company details, time settings, API access, activity logs (2FA status via `get`) |
+| `zcp vm-backup list/create` | VM backup operations                                                                           |
+| `zcp cloud-provider list`   | List available cloud providers                                                                 |
+| `zcp server list`           | List available servers                                                                         |
+| `zcp currency list`         | List available currencies                                                                      |
+| `zcp billing-cycle list`    | List available billing cycles                                                                  |
+| `zcp storage-category list` | List available storage categories                                                              |
 
-### Bearer token authentication
+### Dead code removed
 
-Authentication now uses a single bearer token instead of separate API key and secret key. Update your profiles:
+11 commands and 13 API packages that still pointed at old `/restapi/` endpoints have been removed. These commands were broken since v0.0.6 and would return 403 errors:
 
-```bash
-zcp profile add default --bearer-token YOUR_TOKEN
-```
+`zone`, `offering`, `resource`, `host`, `cost`, `usage`, `internal-lb`, `snapshot-policy`, `security-group`, `tag`, `admin`
 
-Config files now use `bearer_token` instead of `apikey`/`secretkey`.
+Use the STKCNSL replacements instead:
 
-### 15 new command groups
+| Old command               | Replacement                 |
+| ------------------------- | --------------------------- |
+| `zcp zone list`           | `zcp region list`           |
+| `zcp offering compute`    | `zcp plan vm`               |
+| `zcp offering storage`    | `zcp plan storage`          |
+| `zcp cost summary`        | `zcp billing costs`         |
+| `zcp usage list`          | `zcp billing monthly-usage` |
+| `zcp tag create`          | `zcp instance tag-create`   |
+| `zcp admin list-accounts` | Not available via API       |
 
-| Command              | Description                                            |
-| -------------------- | ------------------------------------------------------ |
-| `zcp dns`            | DNS domain and record management                       |
-| `zcp project`        | Project management with users and dashboards           |
-| `zcp monitoring`     | Global and per-VM resource monitoring                  |
-| `zcp billing`        | Costs, invoices, subscriptions, coupons, budget alerts |
-| `zcp support`        | Support tickets, replies, feedback, FAQs               |
-| `zcp autoscale`      | VM autoscale groups with policies and conditions       |
-| `zcp dashboard`      | Account service counts overview                        |
-| `zcp plan`           | Service plans for all resource types                   |
-| `zcp store`          | Store items and checkout                               |
-| `zcp marketplace`    | Marketplace app listing                                |
-| `zcp product`        | Product categories and listing                         |
-| `zcp iso`            | ISO image management                                   |
-| `zcp affinity-group` | Affinity group management                              |
-| `zcp backup`         | VM and block storage backups                           |
-| `zcp region`         | Region listing                                         |
+### Auth validate fixed
 
-### Expanded existing commands
-
-- **instance**: reboot, reset, tags, change-hostname, change-password, change-plan, change-OS, add-network, addons
-- **instance create**: now requires `--blockstorage-plan` flag (e.g. `50-gb-2`, `100gb`)
-- **project**: added `delete` subcommand with confirmation prompt
-- **billing cancel-service**: now requires `--service` flag and supports `--reason`, `--type`
-- **network**: egress firewall rule management
-- **vpc**: ACL management, VPN gateway management
-- **loadbalancer**: rule creation, VM attachment to rules
-- **Discovery**: cloud-providers, currencies, storage-categories, billing-cycles, unit-pricings
-
-### Auto-approve for CI/CD
-
-All destructive commands now respect the global `--auto-approve` (or `-y`) flag, skipping confirmation prompts. Useful for scripting and automation pipelines:
-
-```bash
-zcp -y project delete my-project
-zcp -y billing cancel-service my-vm --service "Virtual Machine"
-```
-
-### RESTful API with pagination
-
-All endpoints now use clean RESTful paths with slug identifiers. List responses include pagination metadata (`current_page`, `per_page`, `total`).
-
-### VM creation example
-
-```bash
-zcp instance create \
-  --name my-vm \
-  --cloud-provider nimbo \
-  --project my-project \
-  --region noida \
-  --template ubuntu-22f \
-  --plan bp-4vc-8gb \
-  --billing-cycle hourly \
-  --storage-category nvme \
-  --blockstorage-plan 50-gb-2 \
-  --ssh-key my-key
-```
+`zcp auth validate` now correctly hits the STKCNSL region API instead of the dead zone API.
 
 ---
 
-## Breaking Changes
+## 42 total commands
 
-- **Config format**: `apikey`/`secretkey` replaced by `bearer_token`. Run `zcp profile add` to reconfigure.
-- **Zone commands**: `zcp zone list` still works but `zcp region list` is the new canonical command.
-- **UUID flags**: Flags like `--zone-uuid`, `--uuid` replaced by slug-based identifiers.
+The CLI now has 42 commands, all backed by the STKCNSL API with zero legacy code remaining.
 
 ---
 
@@ -117,4 +76,4 @@ Download the binary for your platform from the assets below, make it executable,
 | Windows | amd64        | `zcp-windows-amd64.exe` |
 | Windows | arm64        | `zcp-windows-arm64.exe` |
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.5...0.0.6
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.6...0.0.7

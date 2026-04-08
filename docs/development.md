@@ -35,14 +35,15 @@ zcp-cli/
 │   ├── httpclient/          # Shared HTTP client with auth header injection
 │   ├── output/              # Table / JSON / YAML output rendering
 │   ├── version/             # Version string (set via ldflags at build time)
-│   ├── commands/            # Cobra command implementations (zone, offering, etc.)
+│   ├── commands/            # Cobra command implementations (instance, region, dns, etc.)
 │   └── api/
 │       ├── apierrors/       # API error types and response parsing
-│       ├── waiters/         # Async job polling
-│       ├── zone/            # Zone service
-│       ├── offering/        # Compute, storage, network, VPC offering services
+│       ├── response/        # Generic response envelope types
+│       ├── region/          # Region service
+│       ├── instance/        # Virtual machine service
+│       ├── plan/            # Service plan listing
 │       ├── template/        # Template service
-│       └── resource/        # Resource availability service
+│       └── ...              # 30+ service packages (volume, network, dns, billing, etc.)
 ├── docs/                    # Markdown documentation
 ├── scripts/                 # Install scripts (install.sh, install.ps1)
 ├── Makefile                 # All build, test, and quality targets
@@ -161,7 +162,7 @@ func (s *Service) List(ctx context.Context) ([]Network, error) {
 
 ### 2. Write tests for the service
 
-Create `internal/api/network/network_test.go` following the pattern used in `internal/api/zone/zone_test.go`:
+Create `internal/api/network/network_test.go` following the pattern used in `internal/api/region/region_test.go`:
 
 - Spin up an `httptest.Server` that returns fixture JSON.
 - Assert on the path, query parameters, and decoded result.

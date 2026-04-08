@@ -153,18 +153,15 @@ zcp plan template          # My Template plans
 zcp plan iso               # ISO plans
 zcp plan backup            # Backup plans
 
-# Legacy offerings (still available)
-zcp offering compute
-zcp offering storage
-zcp offering network
-zcp offering vpc
+# Discovery helpers
+zcp cloud-provider list    # Available cloud providers
+zcp server list            # Available servers
+zcp currency list          # Available currencies
+zcp billing-cycle list     # Available billing cycles
+zcp storage-category list  # Available storage categories
 
 # VM templates
 zcp template list
-
-# Resource availability and quotas
-zcp resource available
-zcp resource quota
 
 # Marketplace
 zcp marketplace list
@@ -262,22 +259,27 @@ zcp volume detach <volume-slug>
 
 # Snapshots
 zcp snapshot list
-zcp snapshot create --volume <slug> --name my-snapshot
-zcp snapshot delete <slug>
+zcp snapshot create \
+  --volume <slug> \
+  --name my-snapshot \
+  --plan snapshot-per-gb \
+  --cloud-provider nimbo \
+  --region noida \
+  --billing-cycle hourly \
+  --project my-project
+zcp snapshot revert <snapshot-slug> --volume <volume-slug>
 
 # VM snapshots (whole-instance checkpoint)
 zcp vm-snapshot list
-zcp vm-snapshot create --name my-checkpoint --instance <slug>
+zcp vm-snapshot create \
+  --vm <slug> \
+  --name my-checkpoint \
+  --plan basic \
+  --billing-cycle hourly \
+  --project my-project \
+  --cloud-provider nimbo \
+  --region noida
 zcp vm-snapshot revert <slug>
-
-# Snapshot policies (automated scheduling)
-zcp snapshot-policy list
-zcp snapshot-policy create \
-  --volume <slug> \
-  --interval daily \
-  --time 02:00 \
-  --timezone America/Toronto \
-  --max-snapshots 7
 ```
 
 ### Networking
@@ -285,8 +287,9 @@ zcp snapshot-policy create \
 ```bash
 # Networks
 zcp network list
-zcp network create --name my-net --network-offering <slug>
-zcp network delete <slug>
+zcp network categories
+zcp network create --name my-net --category <slug>
+zcp network update <slug> --name "New Name"
 
 # Public IP addresses
 zcp ip list
@@ -311,9 +314,6 @@ zcp portforward create \
   --private-port 22 \
   --instance <slug>
 
-# Resource tags
-zcp tag list
-zcp tag create --resource <slug> --type Instance --key env --value prod
 ```
 
 ### Advanced Networking
@@ -321,7 +321,7 @@ zcp tag create --resource <slug> --type Instance --key env --value prod
 ```bash
 # VPCs
 zcp vpc list
-zcp vpc create --name my-vpc --vpc-offering <slug> --cidr 10.0.0.0/16
+zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8
 zcp vpc delete <slug>
 
 # Network ACLs
@@ -333,11 +333,6 @@ zcp acl delete <slug>
 zcp loadbalancer list
 zcp loadbalancer create --ip <slug> --name my-lb --algorithm roundrobin
 zcp loadbalancer delete <slug>
-
-# Internal load balancers (VPC-scoped)
-zcp internal-lb list
-zcp internal-lb create --network <slug> --name my-internal-lb
-zcp internal-lb delete <slug>
 
 # VPN gateways and connections
 zcp vpn list
@@ -352,11 +347,6 @@ zcp vpn delete <slug>
 zcp ssh-key list
 zcp ssh-key create --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)"
 zcp ssh-key delete <slug>
-
-# Security groups
-zcp security-group list
-zcp security-group create --name my-sg --description "Web tier"
-zcp security-group delete <slug>
 
 # Affinity groups
 zcp affinity-group list
@@ -504,13 +494,6 @@ zcp billing redeem-coupon SAVE50
 zcp billing budget-alert
 zcp billing budget-alert-set --amount 500 --threshold 80 --enabled
 
-# Legacy usage and cost commands
-zcp usage list
-zcp cost summary
-
-# Admin operations (requires elevated permissions)
-zcp admin list-accounts
-zcp admin get-account <slug>
 ```
 
 ### Support
