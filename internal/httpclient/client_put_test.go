@@ -51,13 +51,13 @@ func TestPutWithQueryParams(t *testing.T) {
 		BaseURL: srv.URL, BearerToken: "tok", Timeout: 5 * time.Second,
 	})
 
-	q := url.Values{"uuid": {"vm-123"}, "size": {"3"}}
-	err := client.Put(context.Background(), "/restapi/kubernetes/scaleKubernetes", q, nil, nil)
+	q := url.Values{"slug": {"my-cluster"}, "size": {"3"}}
+	err := client.Put(context.Background(), "/kubernetes-clusters/my-cluster/change-plan", q, nil, nil)
 	if err != nil {
 		t.Fatalf("Put() error = %v", err)
 	}
-	if gotQuery.Get("uuid") != "vm-123" {
-		t.Errorf("uuid param = %q, want %q", gotQuery.Get("uuid"), "vm-123")
+	if gotQuery.Get("slug") != "my-cluster" {
+		t.Errorf("slug param = %q, want %q", gotQuery.Get("slug"), "my-cluster")
 	}
 	if gotQuery.Get("size") != "3" {
 		t.Errorf("size param = %q, want %q", gotQuery.Get("size"), "3")

@@ -52,28 +52,14 @@ zcp
 ├── auth                               Authentication utilities
 │   └── validate                       Validate that the active profile credentials are accepted
 │
-├── zone                               Zone operations
-│   ├── list                           List availability zones
-│   └── use                            Set the default zone for the active profile
-│
-├── offering                           Service offering catalogues
-│   ├── compute                        Compute offering operations
-│   │   └── list                       List compute offerings (optionally with pricing)
-│   ├── storage                        Storage offering operations
-│   │   └── list                       List storage offerings (optionally with pricing)
-│   ├── network                        Network offering operations
-│   │   └── list                       List network offerings (standard and VPC)
-│   └── vpc                            VPC offering operations
-│       └── list                       List VPC offerings
+├── region                             Region operations
+│   └── list                           List available regions
 │
 ├── template                           VM template operations
-│   ├── list                           List available public templates (--region filter)
+│   ├── list                           List available public templates
 │   ├── account-list                   List account (user-created) templates
 │   ├── account-create                 Create an account template
 │   └── account-delete                 Delete an account template
-│
-├── resource                           Resource availability
-│   └── available                      Show available resources by domain
 │
 ├── instance                           VM instance operations
 │   ├── list                           List instances
@@ -112,11 +98,6 @@ zcp
 │   ├── create                         Create a VM snapshot
 │   ├── delete                         Delete a VM snapshot
 │   └── revert                         Revert an instance to a VM snapshot
-│
-├── snapshot-policy                    Automated snapshot policy operations
-│   ├── list                           List snapshot policies
-│   ├── create                         Create a snapshot policy
-│   └── delete                         Delete a snapshot policy
 │
 ├── network                            Isolated network operations
 │   ├── list                           List networks
@@ -175,30 +156,10 @@ zcp
 │   ├── create-rule                    Create a load balancer rule
 │   └── attach-vm                      Attach a VM to a load balancer rule
 │
-├── internal-lb                        Internal load balancer operations
-│   ├── list                           List internal LB rules
-│   ├── create                         Create an internal LB
-│   └── delete                         Delete an internal LB
-│
-├── security-group                     Security group operations
-│   ├── list                           List security groups
-│   ├── get                            Get a security group by slug
-│   ├── create                         Create a security group
-│   ├── delete                         Delete a security group
-│   └── rule                           Security group rule operations
-│       ├── add-firewall               Add a firewall (ingress) rule
-│       ├── add-egress                 Add an egress rule
-│       └── delete                     Delete a rule from a security group
-│
 ├── ssh-key                            SSH key operations
 │   ├── list                           List SSH keys
 │   ├── import                         Import an SSH public key
 │   └── delete                         Delete an SSH key
-│
-├── tag                                Resource tag operations
-│   ├── list                           List resource tags
-│   ├── create                         Add a tag to a resource
-│   └── delete                         Remove a tag from a resource
 │
 ├── vpn                                VPN operations
 │   ├── customer-gateway               VPN customer gateway operations
@@ -341,27 +302,34 @@ zcp
 │   ├── list                           List block storage backups
 │   └── create                         Create a block storage backup
 │
-├── usage                              Usage and consumption reporting
-│   ├── consumption                    List usage consumption for a billing period
-│   ├── report                         List usage report summaries
-│   ├── status                         Show billing period progress status
-│   └── credit                         Show credit balance/usage
+├── profile-info                       User profile management
+│   ├── get                            Show user profile
+│   ├── update                         Update user profile
+│   ├── company                        Update company details
+│   ├── time-settings                  Update time/timezone settings
+│   ├── enable-api                     Enable API access
+│   ├── disable-api                    Disable API access
+│   ├── login-activity                 Show login activity
+│   └── activity-logs                  Show activity logs
 │
-├── cost                               Pricing information
-│   ├── currency                       List supported billing currencies and rates
-│   └── tax                            Show tax information
+├── vm-backup                          VM backup operations
+│   ├── list                           List VM backups
+│   └── create                         Create a VM backup
 │
-├── host                               Physical host operations (registered at root)
-│   └── list                           List physical hosts
+├── cloud-provider                     Cloud provider operations
+│   └── list                           List available cloud providers
 │
-└── admin                              Administrator-only operations
-    ├── host                           Physical host operations
-    │   └── list                       List physical hosts
-    ├── quota                          Resource quota operations
-    │   └── list                       List resource quota limits
-    └── invoice                        Invoice operations
-        ├── list                       List invoices
-        └── generate                   Generate an invoice PDF
+├── server                             Server operations
+│   └── list                           List available servers
+│
+├── currency                           Currency operations
+│   └── list                           List available currencies
+│
+├── billing-cycle                      Billing cycle operations
+│   └── list                           List available billing cycles
+│
+└── storage-category                   Storage category operations
+    └── list                           List available storage categories
 ```
 
 ---
@@ -395,10 +363,8 @@ strings assigned by the API (e.g., `my-vm-123`, `root-4153`, `example-com-1`).
 | VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`               |
 | IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`      |
 | Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`         |
-| Zone (legacy)   | `--zone`                          | `zcp zone list --zone <uuid>`            |
 
-The `zone` command still uses UUIDs for backward compatibility. All other new
-commands use slugs.
+All commands use slug-based identifiers.
 
 ---
 
@@ -406,30 +372,22 @@ commands use slugs.
 
 | CLI Group          | API Source        | Notes                                                    |
 | ------------------ | ----------------- | -------------------------------------------------------- |
-| `zone`             | ZCP API (STKBILL) | Zone list, legacy UUID identifiers                       |
-| `offering compute` | ZCP API (STKBILL) | Compute offerings and pricing                            |
-| `offering storage` | ZCP API (STKBILL) | Storage offerings and pricing                            |
-| `offering network` | ZCP API (STKBILL) | Network offerings                                        |
-| `offering vpc`     | ZCP API (STKBILL) | VPC offerings                                            |
+| `region`           | ZCP API (STKCNSL) | Region listing                                           |
+| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                     |
 | `template`         | ZCP API (STKCNSL) | Public and account templates                             |
-| `resource`         | ZCP API (STKBILL) | Available resources by domain                            |
 | `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                        |
 | `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                       |
 | `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                  |
-| `vm-snapshot`      | ZCP API (STKBILL) | VM-level snapshots                                       |
-| `snapshot-policy`  | ZCP API (STKBILL) | Automated snapshot policies                              |
+| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                       |
 | `network`          | ZCP API (STKCNSL) | Isolated networks                                        |
 | `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                 |
-| `acl`              | ZCP API (STKBILL) | Network ACLs                                             |
+| `acl`              | ZCP API (STKCNSL) | Network ACLs                                             |
 | `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                              |
 | `firewall`         | ZCP API (STKCNSL) | Firewall rules                                           |
-| `egress`           | ZCP API (STKBILL) | Egress rules                                             |
+| `egress`           | ZCP API (STKCNSL) | Egress rules                                             |
 | `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                    |
 | `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                 |
-| `internal-lb`      | ZCP API (STKBILL) | Internal load balancers                                  |
-| `security-group`   | ZCP API (STKCNSL) | Security groups and rules                                |
 | `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                       |
-| `tag`              | ZCP API (STKBILL) | Resource tags                                            |
 | `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                             |
 | `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                      |
 | `dns`              | ZCP API (STKCNSL) | DNS domains and records                                  |
@@ -446,33 +404,24 @@ commands use slugs.
 | `iso`              | ZCP API (STKCNSL) | ISO image management                                     |
 | `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                            |
 | `backup`           | ZCP API (STKCNSL) | Block storage backups                                    |
-| `usage`            | ZCP API (STKBILL) | Consumption, reports, status                             |
-| `cost`             | ZCP API (STKBILL) | Currencies and tax                                       |
-| `admin host`       | ZCP API (STKBILL) | Admin only                                               |
-| `admin quota`      | ZCP API (STKBILL) | Admin only                                               |
-| `admin invoice`    | ZCP API (STKBILL) | Admin only                                               |
+| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                               |
+| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access    |
+| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                   |
+| `server`           | ZCP API (STKCNSL) | Server listing                                           |
+| `currency`         | ZCP API (STKCNSL) | Currency listing                                         |
+| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                    |
+| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                 |
 
 ---
 
 ## Async Operation Handling
 
-Commands that trigger async API operations poll for completion:
-
-1. Issue the mutating request; the response item contains a `jobId` field
-2. Poll the async job status endpoint until `status` is `SUCCEEDED` or `FAILED`
-3. On `FAILED`, surface `errorCode` and `errorMessage` to the user
-
-**CLI behavior flags for async commands:**
-
-- Default: poll with a spinner until completion, then print result
-- `--no-wait`: return immediately after the initial request and print the `jobId`
-- `--timeout`: maximum time to wait before giving up (inherits global `--timeout` default)
+All API responses use the STKCNSL `{status, message, data}` envelope format. List responses include pagination metadata.
 
 ---
 
-## Notes on API Quirks
+## Notes
 
-- Several mutating operations use `GET` instead of `POST`/`DELETE`. The CLI preserves these as-is; they cannot be changed to the semantically correct HTTP methods.
-- The `zone` command still accepts `--zone <uuid>` for backward compatibility with the STKBILL zone list API. All STKCNSL-backed commands use slug-based identifiers.
-- Destructive commands (`delete`, `revert`, `cancel-service`) require a `--yes` / `-y` flag to skip the interactive confirmation prompt.
-- Some `billing` and `usage` commands return opaque JSON when the response schema is undefined; these fall through to raw `printer.Print()`.
+- All commands use slug-based identifiers (not UUIDs).
+- Destructive commands (`delete`, `revert`, `cancel-service`) prompt for confirmation. Use `--auto-approve` / `-y` to skip (useful for CI/CD).
+- The `--timeout` flag controls the maximum time for API requests (default: 30s).

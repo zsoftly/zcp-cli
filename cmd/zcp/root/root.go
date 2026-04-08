@@ -32,7 +32,7 @@ instances, volumes, networks, VPCs, Kubernetes clusters, and more.
 Get started:
   zcp profile add default  Configure your API credentials
   zcp auth validate        Verify your credentials work
-  zcp zone list            List available zones
+  zcp region list           List available regions
   zcp instance list        List your instances
 
 Documentation: https://docs.zsoftly.com/zcp-cli`,
@@ -68,37 +68,27 @@ func init() {
 	// Subcommands from the commands package
 	rootCmd.AddCommand(commands.NewProfileCmd())
 	rootCmd.AddCommand(commands.NewAuthCmd())
-	rootCmd.AddCommand(commands.NewZoneCmd())
-	rootCmd.AddCommand(commands.NewOfferingCmd())
 	rootCmd.AddCommand(commands.NewTemplateCmd())
-	rootCmd.AddCommand(commands.NewResourceCmd())
 	// Phase 2: compute, storage, networking
 	rootCmd.AddCommand(commands.NewInstanceCmd())
 	rootCmd.AddCommand(commands.NewVolumeCmd())
 	rootCmd.AddCommand(commands.NewSnapshotCmd())
 	rootCmd.AddCommand(commands.NewVMSnapshotCmd())
-	rootCmd.AddCommand(commands.NewSnapshotPolicyCmd())
 	rootCmd.AddCommand(commands.NewNetworkCmd())
 	rootCmd.AddCommand(commands.NewIPCmd())
 	rootCmd.AddCommand(commands.NewFirewallCmd())
 	rootCmd.AddCommand(commands.NewEgressCmd())
 	rootCmd.AddCommand(commands.NewPortForwardCmd())
-	rootCmd.AddCommand(commands.NewTagCmd())
-	// Phase 3: advanced networking, security, kubernetes, billing/admin
+	// Phase 3: advanced networking, kubernetes
 	rootCmd.AddCommand(commands.NewVPCCmd())
 	rootCmd.AddCommand(commands.NewACLCmd())
 	rootCmd.AddCommand(commands.NewLoadBalancerCmd())
-	rootCmd.AddCommand(commands.NewInternalLBCmd())
 	rootCmd.AddCommand(commands.NewVPNCmd())
 	rootCmd.AddCommand(commands.NewSSHKeyCmd())
-	rootCmd.AddCommand(commands.NewSecurityGroupCmd())
 	rootCmd.AddCommand(commands.NewKubernetesCmd())
-	rootCmd.AddCommand(commands.NewUsageCmd())
-	rootCmd.AddCommand(commands.NewCostCmd())
-	rootCmd.AddCommand(commands.NewHostCmd())
-	rootCmd.AddCommand(commands.NewAdminCmd())
 
 	// STKCNSL API — new feature commands
+	rootCmd.AddCommand(commands.NewRegionCmd())
 	rootCmd.AddCommand(commands.NewProjectCmd())
 	rootCmd.AddCommand(commands.NewSupportCmd())
 	rootCmd.AddCommand(commands.NewDNSCmd())
@@ -113,6 +103,13 @@ func init() {
 	rootCmd.AddCommand(commands.NewDashboardCmd())
 	rootCmd.AddCommand(commands.NewBillingCmd())
 	rootCmd.AddCommand(commands.NewBackupCmd())
+	rootCmd.AddCommand(commands.NewUserProfileCmd())
+	rootCmd.AddCommand(commands.NewVMBackupCmd())
+	rootCmd.AddCommand(commands.NewCloudProviderCmd())
+	rootCmd.AddCommand(commands.NewServerCmd())
+	rootCmd.AddCommand(commands.NewCurrencyCmd())
+	rootCmd.AddCommand(commands.NewBillingCycleCmd())
+	rootCmd.AddCommand(commands.NewStorageCategoryCmd())
 
 	// Flag completions — static values, no network calls
 	rootCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

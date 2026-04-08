@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/zone"
+	"github.com/zsoftly/zcp-cli/internal/api/region"
 	"github.com/zsoftly/zcp-cli/internal/config"
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 	"github.com/zsoftly/zcp-cli/internal/output"
@@ -27,7 +27,7 @@ func newAuthValidateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
 		Short: "Validate API credentials for the active profile",
-		Long: `Validates credentials by making a test API call (zone list).
+		Long: `Validates credentials by making a test API call (region list).
 If the call succeeds, the credentials are valid.`,
 		Example: `  zcp auth validate
   zcp auth validate --profile prod`,
@@ -58,7 +58,7 @@ If the call succeeds, the credentials are valid.`,
 			}
 
 			client := httpclient.New(opts)
-			svc := zone.NewService(client)
+			svc := region.NewService(client)
 
 			ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 			defer cancel()
@@ -67,7 +67,7 @@ If the call succeeds, the credentials are valid.`,
 
 			fmt.Fprintf(os.Stdout, "Validating credentials for profile %q against %s...\n", profile.Name, baseURL)
 
-			_, err = svc.List(ctx, "")
+			_, err = svc.List(ctx)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Validation FAILED:", err)
 				return fmt.Errorf("credential validation failed")

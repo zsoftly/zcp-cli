@@ -5,6 +5,34 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7] - 2026-04-08
+
+### Added
+
+- **`region list`**: List available regions (replaces dead `zone list`)
+- **`profile-info`**: User profile management (get, update, company details, 2FA, time settings, API access, activity logs)
+- **`vm-backup`**: VM backup operations (list, create)
+- **`cloud-provider list`**: List available cloud providers
+- **`server list`**: List available servers
+- **`currency list`**: List available currencies
+- **`billing-cycle list`**: List available billing cycles
+- **`storage-category list`**: List available storage categories
+
+### Removed
+
+- **Dead STKBILL commands**: `zone`, `offering`, `resource`, `host`, `cost`, `usage`, `internal-lb`, `snapshot-policy`, `security-group`, `tag`, `admin` — all pointed at old `/restapi/` endpoints that no longer exist
+- **Dead API packages**: `zone`, `offering`, `resource`, `host`, `cost`, `usage`, `internallb`, `snapshotpolicy`, `securitygroup`, `tags`, `quota`, `waiters`, `invoice` — 13 packages removed
+- **Zero `/restapi/` references** remaining in the codebase
+
+### Fixed
+
+- **`auth validate`**: Now uses `region` API instead of dead `zone` API
+- **Integration tests**: Migrated from deleted packages (`offering`, `securitygroup`, `tags`) to STKCNSL equivalents (`plan`, `instance`)
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.6...0.0.7
+
+---
+
 ## [0.0.6] - 2026-04-08
 
 ### Changed
