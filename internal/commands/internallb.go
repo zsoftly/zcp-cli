@@ -169,7 +169,7 @@ func newInternalLBDeleteCmd() *cobra.Command {
 }
 
 func runInternalLBDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
+	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete internal load balancer %q? This action cannot be undone. [y/N]: ", uuid)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()

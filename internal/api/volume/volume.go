@@ -1,55 +1,134 @@
-// Package volume provides ZCP volume API operations.
+// Package volume provides ZCP block storage (volume) API operations
+// targeting the STKCNSL API.
 package volume
 
 import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-// Volume represents a ZCP data volume.
+// StorageSetting represents the storage configuration for a block storage volume.
+type StorageSetting struct {
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Slug              string `json:"slug"`
+	StorageCategoryID string `json:"storage_category_id"`
+	RegionID          string `json:"region_id"`
+}
+
+// Region represents the region where the volume is deployed.
+type Region struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Slug    string `json:"slug"`
+	Country string `json:"country"`
+}
+
+// CloudProvider represents the cloud provider for the volume.
+type CloudProvider struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Slug        string `json:"slug"`
+}
+
+// BillingCycle represents a billing cycle attached to an offering.
+type BillingCycle struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// Offering represents the billing/plan offering on a volume.
+type Offering struct {
+	ID            string        `json:"id"`
+	Size          string        `json:"size"`
+	Price         string        `json:"price"`
+	BillingStatus bool          `json:"billing_status"`
+	RenewAt       string        `json:"renew_at"`
+	BillingCycle  *BillingCycle `json:"billing_cycle"`
+}
+
+// Volume represents a STKCNSL block storage volume.
 type Volume struct {
-	UUID                string `json:"uuid"`
-	Name                string `json:"name"`
-	Status              string `json:"status"`
-	IsActive            bool   `json:"isActive"`
-	VolumeType          string `json:"volumeType"`
-	StorageDiskSize     string `json:"storageDiskSize"`
-	StorageOfferingUUID string `json:"storageOfferingUuid"`
-	StorageOfferingName string `json:"storageOfferingName"`
-	VMInstanceUUID      string `json:"vmUuid"`
-	VMInstanceName      string `json:"vmInstanceName"`
-	ZoneUUID            string `json:"zoneUuid"`
-	DomainName          string `json:"domainName"`
-	JobID               string `json:"jobId"`
-	CreatedAt           int64  `json:"createdTimeStamp"`
-	ErrorMessage        string `json:"errorMessage"`
-	IsShrink            bool   `json:"isShrink"`
+	ID                    string          `json:"id"`
+	BlockstorageID        string          `json:"blockstorage_id"`
+	VirtualMachineID      string          `json:"virtual_machine_id"`
+	Size                  string          `json:"size"`
+	Name                  string          `json:"name"`
+	Slug                  string          `json:"slug"`
+	Description           *string         `json:"description"`
+	UserID                string          `json:"user_id"`
+	AccountID             string          `json:"account_id"`
+	ProjectID             string          `json:"project_id"`
+	RegionID              string          `json:"region_id"`
+	CloudProviderID       string          `json:"cloud_provider_id"`
+	CloudProviderSetupID  string          `json:"cloud_provider_setup_id"`
+	RequestStatus         bool            `json:"request_status"`
+	VolumeType            string          `json:"volume_type"`
+	Bootable              bool            `json:"bootable"`
+	IsRoot                bool            `json:"is_root"`
+	IsSnapshotHidden      bool            `json:"is_snapshot_hidden"`
+	IsRestricted          bool            `json:"is_restricted"`
+	IsResizeEnable        bool            `json:"is_resize_enable"`
+	ServiceName           string          `json:"service_name"`
+	ServiceDisplayName    string          `json:"service_display_name"`
+	AllTimeConsumption    float64         `json:"all_time_consumption"`
+	HasContract           bool            `json:"has_contract"`
+	IsServiceTrialExpired bool            `json:"is_service_trial_expired"`
+	FrozenAt              *string         `json:"frozen_at"`
+	SuspendedAt           *string         `json:"suspended_at"`
+	TerminatedAt          *string         `json:"terminated_at"`
+	CreatedAt             string          `json:"created_at"`
+	UpdatedAt             string          `json:"updated_at"`
+	DeletedAt             *string         `json:"deleted_at"`
+	StorageSetting        *StorageSetting `json:"storage_setting"`
+	CloudProvider         *CloudProvider  `json:"cloud_provider"`
+	Region                *Region         `json:"region"`
+	Offering              *Offering       `json:"offering"`
 }
 
-// DeleteResponse is returned when deleting a volume.
-type DeleteResponse struct {
-	UUID   string `json:"uuid"`
-	Status string `json:"status"`
+// listResponse is the STKCNSL paginated envelope for block storage volumes.
+type listResponse struct {
+	Status      string   `json:"status"`
+	Message     string   `json:"message"`
+	CurrentPage int      `json:"current_page"`
+	Data        []Volume `json:"data"`
+	Total       int      `json:"total"`
 }
 
-// CreateRequest holds parameters for creating a volume.
+// singleResponse is used when the API returns a single volume in `data`.
+type singleResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Data    Volume `json:"data"`
+}
+
+// CreateRequest holds parameters for creating a block storage volume.
 type CreateRequest struct {
-	Name                string `json:"name"`
-	ZoneUUID            string `json:"zoneUuid"`
-	StorageOfferingUUID string `json:"storageOfferingUuid"`
-	DiskSize            int    `json:"diskSize,omitempty"`
+	Name            string `json:"name"`
+	Project         string `json:"project"`
+	CloudProvider   string `json:"cloud_provider"`
+	Region          string `json:"region"`
+	BillingCycle    string `json:"billing_cycle"`
+	StorageCategory string `json:"storage_category"`
+	Plan            string `json:"plan"`
+	IsCustomPlan    bool   `json:"is_custom_plan"`
+	CustomPlan      string `json:"custom_plan,omitempty"`
+	VirtualMachine  string `json:"virtual_machine,omitempty"`
+	Coupon          string `json:"coupon,omitempty"`
+	IsFreeTrial     bool   `json:"is_free_trial_plan"`
 }
 
-type listVolumeResponse struct {
-	Count              int      `json:"count"`
-	ListVolumeResponse []Volume `json:"listVolumeResponse"`
+// AttachRequest holds parameters for attaching a volume to a VM.
+type AttachRequest struct {
+	VirtualMachine string `json:"virtual_machine"`
 }
 
-// Service provides volume API operations.
+// Service provides block storage API operations.
 type Service struct {
 	client *httpclient.Client
 }
@@ -59,83 +138,44 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns volumes. zoneUUID is required. vmUUID and volumeUUID are optional filters.
-func (s *Service) List(ctx context.Context, zoneUUID, vmUUID, volumeUUID string) ([]Volume, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if vmUUID != "" {
-		q.Set("vmUuid", vmUUID)
+// List returns block storage volumes. Use the include parameter to embed related resources.
+func (s *Service) List(ctx context.Context) ([]Volume, error) {
+	q := url.Values{
+		"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
 	}
-	if volumeUUID != "" {
-		q.Set("uuid", volumeUUID)
+	var resp listResponse
+	if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
+		return nil, fmt.Errorf("listing block storages: %w", err)
 	}
-	var resp listVolumeResponse
-	if err := s.client.Get(ctx, "/restapi/volume/volumeList", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing volumes: %w", err)
-	}
-	return resp.ListVolumeResponse, nil
+	return resp.Data, nil
 }
 
-// Create creates a new data volume. Returns the volume (may include jobId for async tracking).
+// Create creates a new block storage volume.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*Volume, error) {
-	var resp listVolumeResponse
-	if err := s.client.Post(ctx, "/restapi/volume/createVolume", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating volume: %w", err)
+	var resp singleResponse
+	if err := s.client.Post(ctx, "/blockstorages", req, &resp); err != nil {
+		return nil, fmt.Errorf("creating block storage: %w", err)
 	}
-	if len(resp.ListVolumeResponse) == 0 {
-		return nil, fmt.Errorf("create volume returned empty response")
-	}
-	return &resp.ListVolumeResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Attach attaches a volume to an instance.
-func (s *Service) Attach(ctx context.Context, volumeUUID, instanceUUID string) (*Volume, error) {
-	q := url.Values{"uuid": {volumeUUID}, "instanceUuid": {instanceUUID}}
-	var resp listVolumeResponse
-	if err := s.client.Get(ctx, "/restapi/volume/attachVolume", q, &resp); err != nil {
-		return nil, fmt.Errorf("attaching volume %s to instance %s: %w", volumeUUID, instanceUUID, err)
+// Attach attaches a volume to a virtual machine.
+func (s *Service) Attach(ctx context.Context, volumeSlug, vmSlug string) (*Volume, error) {
+	body := AttachRequest{VirtualMachine: vmSlug}
+	var resp singleResponse
+	path := fmt.Sprintf("/blockstorages/%s/attach", volumeSlug)
+	if err := s.client.Post(ctx, path, body, &resp); err != nil {
+		return nil, fmt.Errorf("attaching block storage %s to VM %s: %w", volumeSlug, vmSlug, err)
 	}
-	if len(resp.ListVolumeResponse) == 0 {
-		return nil, fmt.Errorf("attach volume returned empty response")
-	}
-	return &resp.ListVolumeResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Detach detaches a volume from its instance.
-func (s *Service) Detach(ctx context.Context, volumeUUID string) (*Volume, error) {
-	q := url.Values{"uuid": {volumeUUID}}
-	var resp listVolumeResponse
-	if err := s.client.Get(ctx, "/restapi/volume/detachVolume", q, &resp); err != nil {
-		return nil, fmt.Errorf("detaching volume %s: %w", volumeUUID, err)
+// Detach detaches a volume from its virtual machine.
+func (s *Service) Detach(ctx context.Context, volumeSlug string) (*Volume, error) {
+	var resp singleResponse
+	path := fmt.Sprintf("/blockstorages/%s/detach", volumeSlug)
+	if err := s.client.Post(ctx, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("detaching block storage %s: %w", volumeSlug, err)
 	}
-	if len(resp.ListVolumeResponse) == 0 {
-		return nil, fmt.Errorf("detach volume returned empty response")
-	}
-	return &resp.ListVolumeResponse[0], nil
-}
-
-// Delete deletes a volume permanently.
-func (s *Service) Delete(ctx context.Context, uuid string) (*DeleteResponse, error) {
-	if err := s.client.Delete(ctx, "/restapi/volume/deleteVolume/"+uuid, nil); err != nil {
-		return nil, fmt.Errorf("deleting volume %s: %w", uuid, err)
-	}
-	return &DeleteResponse{UUID: uuid, Status: "deleted"}, nil
-}
-
-// Resize changes a volume's storage offering or disk size.
-func (s *Service) Resize(ctx context.Context, uuid, storageOfferingUUID string, diskSize int, isShrink bool) (*Volume, error) {
-	q := url.Values{"uuid": {uuid}, "storageOfferingUuid": {storageOfferingUUID}}
-	if diskSize > 0 {
-		q.Set("diskSize", strconv.Itoa(diskSize))
-	}
-	if isShrink {
-		q.Set("isShrink", "true")
-	}
-	var resp listVolumeResponse
-	if err := s.client.Get(ctx, "/restapi/volume/resizeVolume", q, &resp); err != nil {
-		return nil, fmt.Errorf("resizing volume %s: %w", uuid, err)
-	}
-	if len(resp.ListVolumeResponse) == 0 {
-		return nil, fmt.Errorf("resize volume returned empty response")
-	}
-	return &resp.ListVolumeResponse[0], nil
+	return &resp.Data, nil
 }

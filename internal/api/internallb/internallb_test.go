@@ -14,10 +14,9 @@ import (
 
 func newClient(baseURL string) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   baseURL,
-		APIKey:    "testkey",
-		SecretKey: "testsecret",
-		Timeout:   5 * time.Second,
+		BaseURL:     baseURL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
 }
 

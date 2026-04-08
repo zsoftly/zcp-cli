@@ -7,6 +7,7 @@ Thank you for your interest in zcp-cli.
 Please use [GitHub Issues](https://github.com/zsoftly/zcp-cli/issues) to report bugs or request features.
 
 When filing a bug report, include:
+
 - The `zcp` version (`zcp version`)
 - Your operating system and architecture
 - The exact command you ran

@@ -1,11 +1,8 @@
 package commands
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,91 +16,96 @@ func NewACLCmd() *cobra.Command {
 		Short: "Manage Network ACLs",
 	}
 	cmd.AddCommand(newACLListCmd())
-	cmd.AddCommand(newACLCreateCmd())
-	cmd.AddCommand(newACLDeleteCmd())
+	cmd.AddCommand(newACLCreateRuleCmd())
 	cmd.AddCommand(newACLReplaceCmd())
 	return cmd
 }
 
 func newACLListCmd() *cobra.Command {
-	var zoneUUID, vpcUUID string
-
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List network ACLs in a zone",
-		Example: `  zcp acl list --zone <uuid>
-  zcp acl list --zone <uuid> --vpc <uuid>`,
+		Use:     "list <vpc-slug>",
+		Short:   "List network ACLs for a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp acl list <vpc-slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runACLList(cmd, zoneUUID, vpcUUID)
+			return runACLList(cmd, args[0])
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "Filter by VPC UUID")
 	return cmd
 }
 
-func runACLList(cmd *cobra.Command, zoneUUID, vpcUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+func runACLList(cmd *cobra.Command, vpcSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := acl.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	acls, err := svc.List(ctx, zoneUUID, "", vpcUUID)
+	acls, err := svc.List(ctx, vpcSlug)
 	if err != nil {
 		return fmt.Errorf("acl list: %w", err)
 	}
 
-	headers := []string{"UUID", "NAME", "DESCRIPTION", "VPC", "STATUS"}
+	headers := []string{"SLUG", "NAME", "DESCRIPTION", "VPC", "STATUS"}
 	rows := make([][]string, 0, len(acls))
 	for _, a := range acls {
 		rows = append(rows, []string{
-			a.UUID,
+			a.Slug,
 			a.Name,
 			a.Description,
-			a.VPCUUID,
+			a.VPCSlug,
 			a.Status,
 		})
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newACLCreateCmd() *cobra.Command {
-	var vpcUUID, name, description string
+func newACLCreateRuleCmd() *cobra.Command {
+	var protocol, cidrList, trafficType, action string
+	var startPort, endPort, number, icmpCode, icmpType int
 
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a new network ACL",
-		Example: `  zcp acl create --vpc <uuid> --name my-acl
-  zcp acl create --vpc <uuid> --name my-acl --description "Web tier ACL"`,
+		Use:   "create-rule <vpc-slug>",
+		Short: "Create a network ACL rule in a VPC",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp acl create-rule <vpc-slug> --protocol tcp --action allow --start-port 80 --end-port 80 --cidr 0.0.0.0/0
+  zcp acl create-rule <vpc-slug> --protocol icmp --action deny --icmp-type 8 --icmp-code 0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if vpcUUID == "" {
-				return fmt.Errorf("--vpc is required")
+			if protocol == "" {
+				return fmt.Errorf("--protocol is required")
 			}
-			if name == "" {
-				return fmt.Errorf("--name is required")
+			if action == "" {
+				return fmt.Errorf("--action is required")
 			}
-			return runACLCreate(cmd, acl.CreateRequest{
-				Name:        name,
-				VPCUUID:     vpcUUID,
-				Description: description,
+			return runACLCreateRule(cmd, args[0], acl.ACLRuleCreateRequest{
+				Protocol:    protocol,
+				CIDRList:    cidrList,
+				StartPort:   startPort,
+				EndPort:     endPort,
+				TrafficType: trafficType,
+				Action:      action,
+				Number:      number,
+				ICMPCode:    icmpCode,
+				ICMPType:    icmpType,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (required)")
-	cmd.Flags().StringVar(&name, "name", "", "ACL name (required)")
-	cmd.Flags().StringVar(&description, "description", "", "ACL description")
+	cmd.Flags().StringVar(&protocol, "protocol", "", "Protocol (tcp, udp, icmp, all) (required)")
+	cmd.Flags().StringVar(&cidrList, "cidr", "", "CIDR list (e.g. 0.0.0.0/0)")
+	cmd.Flags().IntVar(&startPort, "start-port", 0, "Start port")
+	cmd.Flags().IntVar(&endPort, "end-port", 0, "End port")
+	cmd.Flags().StringVar(&trafficType, "traffic-type", "", "Traffic type (ingress, egress)")
+	cmd.Flags().StringVar(&action, "action", "", "Action (allow, deny) (required)")
+	cmd.Flags().IntVar(&number, "number", 0, "Rule number (ordering)")
+	cmd.Flags().IntVar(&icmpCode, "icmp-code", 0, "ICMP code")
+	cmd.Flags().IntVar(&icmpType, "icmp-type", 0, "ICMP type")
 	return cmd
 }
 
-func runACLCreate(cmd *cobra.Command, req acl.CreateRequest) error {
+func runACLCreateRule(cmd *cobra.Command, vpcSlug string, req acl.ACLRuleCreateRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -113,91 +115,48 @@ func runACLCreate(cmd *cobra.Command, req acl.CreateRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	a, err := svc.Create(ctx, req)
+	rule, err := svc.CreateRule(ctx, vpcSlug, req)
 	if err != nil {
-		return fmt.Errorf("acl create: %w", err)
+		return fmt.Errorf("acl create-rule: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", a.UUID},
-		{"Name", a.Name},
-		{"Description", a.Description},
-		{"VPC UUID", a.VPCUUID},
-		{"Status", a.Status},
+		{"Slug", rule.Slug},
+		{"Protocol", rule.Protocol},
+		{"Action", rule.Action},
+		{"CIDR List", rule.CIDRList},
+		{"Start Port", fmt.Sprintf("%d", rule.StartPort)},
+		{"End Port", fmt.Sprintf("%d", rule.EndPort)},
+		{"Traffic Type", rule.TrafficType},
+		{"Number", fmt.Sprintf("%d", rule.Number)},
 	}
 	return printer.PrintTable(headers, rows)
 }
 
-func newACLDeleteCmd() *cobra.Command {
-	var yes bool
-
-	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
-		Short: "Delete a network ACL",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp acl delete <uuid>
-  zcp acl delete <uuid> --yes`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runACLDelete(cmd, args[0], yes)
-		},
-	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	return cmd
-}
-
-func runACLDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete network ACL %q? This action cannot be undone. [y/N]: ", uuid)
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-		if answer != "y" && answer != "yes" {
-			fmt.Fprintln(os.Stderr, "Aborted.")
-			return nil
-		}
-	}
-
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := acl.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	if err := svc.Delete(ctx, uuid); err != nil {
-		return fmt.Errorf("acl delete: %w", err)
-	}
-
-	printer.Fprintf("Network ACL %q deleted.\n", uuid)
-	return nil
-}
-
 func newACLReplaceCmd() *cobra.Command {
-	var networkUUID, aclUUID string
+	var networkSlug, aclSlug string
 
 	cmd := &cobra.Command{
 		Use:     "replace",
 		Short:   "Replace the ACL on a network",
-		Example: `  zcp acl replace --network <network-uuid> --acl <acl-uuid>`,
+		Example: `  zcp acl replace --network <network-slug> --acl <acl-slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if networkUUID == "" {
+			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
-			if aclUUID == "" {
+			if aclSlug == "" {
 				return fmt.Errorf("--acl is required")
 			}
-			return runACLReplace(cmd, networkUUID, aclUUID)
+			return runACLReplace(cmd, networkSlug, aclSlug)
 		},
 	}
-	cmd.Flags().StringVar(&networkUUID, "network", "", "Network UUID (required)")
-	cmd.Flags().StringVar(&aclUUID, "acl", "", "ACL UUID (required)")
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
+	cmd.Flags().StringVar(&aclSlug, "acl", "", "ACL slug (required)")
 	return cmd
 }
 
-func runACLReplace(cmd *cobra.Command, networkUUID, aclUUID string) error {
+func runACLReplace(cmd *cobra.Command, networkSlug, aclSlug string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -207,15 +166,10 @@ func runACLReplace(cmd *cobra.Command, networkUUID, aclUUID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	nets, err := svc.ReplaceNetworkACL(ctx, networkUUID, aclUUID)
-	if err != nil {
+	if err := svc.ReplaceNetworkACL(ctx, networkSlug, aclSlug); err != nil {
 		return fmt.Errorf("acl replace: %w", err)
 	}
 
-	headers := []string{"UUID", "NAME"}
-	rows := make([][]string, 0, len(nets))
-	for _, n := range nets {
-		rows = append(rows, []string{n.UUID, n.Name})
-	}
-	return printer.PrintTable(headers, rows)
+	printer.Fprintf("ACL replaced on network %q.\n", networkSlug)
+	return nil
 }

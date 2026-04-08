@@ -39,13 +39,19 @@ func IsForbidden(err error) bool {
 	return errors.As(err, &ae) && ae.StatusCode == 403
 }
 
-// apiErrorResponse mirrors the ZCP error envelope:
-// { "listErrorResponse": { "errorCode": "...", "errorMsg": "..." } }
+// apiErrorResponse mirrors the STKCNSL error envelope:
+// { "status": "Error", "message": "...", "errors": { "field": ["..."] } }
+// It also supports the legacy STKBILL format for backward compatibility.
 type apiErrorResponse struct {
+	// STKCNSL format
+	Status  string                     `json:"status"`
+	Message string                     `json:"message"`
+	Errors  map[string]json.RawMessage `json:"errors"`
+
+	// Legacy STKBILL format
 	ListErrorResponse *apiErrorMsg `json:"listErrorResponse"`
 	ErrorCode         string       `json:"errorCode"`
 	ErrorMsg          string       `json:"errorMsg"`
-	Message           string       `json:"message"`
 }
 
 type apiErrorMsg struct {
@@ -60,13 +66,25 @@ func ParseResponse(statusCode int, body []byte) error {
 	if len(body) > 0 {
 		var resp apiErrorResponse
 		if err := json.Unmarshal(body, &resp); err == nil {
-			if resp.ListErrorResponse != nil {
+			switch {
+			// STKCNSL format: {"status":"Error","message":"...","errors":{...}}
+			case resp.Status != "" && resp.Message != "":
+				ae.Code = resp.Status
+				ae.Message = resp.Message
+				// Append field-level errors if present.
+				if len(resp.Errors) > 0 {
+					if detail, err := json.Marshal(resp.Errors); err == nil {
+						ae.Message += " — " + string(detail)
+					}
+				}
+			// Legacy STKBILL envelope
+			case resp.ListErrorResponse != nil:
 				ae.Code = resp.ListErrorResponse.ErrorCode
 				ae.Message = resp.ListErrorResponse.ErrorMsg
-			} else if resp.ErrorMsg != "" {
+			case resp.ErrorMsg != "":
 				ae.Code = resp.ErrorCode
 				ae.Message = resp.ErrorMsg
-			} else if resp.Message != "" {
+			case resp.Message != "":
 				ae.Message = resp.Message
 			}
 		}

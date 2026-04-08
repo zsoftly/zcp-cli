@@ -24,74 +24,31 @@ func NewVPCCmd() *cobra.Command {
 	cmd.AddCommand(newVPCUpdateCmd())
 	cmd.AddCommand(newVPCDeleteCmd())
 	cmd.AddCommand(newVPCRestartCmd())
-	cmd.AddCommand(newVPCCreateNetworkCmd())
-	cmd.AddCommand(newVPCUpdateNetworkCmd())
+	cmd.AddCommand(newVPCACLListCmd())
+	cmd.AddCommand(newVPCACLCreateRuleCmd())
+	cmd.AddCommand(newVPCACLReplaceCmd())
+	cmd.AddCommand(newVPCVPNGatewayCmd())
 	return cmd
 }
 
 func newVPCListCmd() *cobra.Command {
-	var zoneUUID string
+	var zoneSlug string
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List VPCs in a zone",
-		Example: `  zcp vpc list --zone <uuid>
-  zcp vpc list --zone <uuid> --output json`,
+		Short: "List VPCs",
+		Example: `  zcp vpc list
+  zcp vpc list --zone <slug>
+  zcp vpc list --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPCList(cmd, zoneUUID)
+			return runVPCList(cmd, zoneSlug)
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
+	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Filter by zone slug")
 	return cmd
 }
 
-func runVPCList(cmd *cobra.Command, zoneUUID string) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-	zoneUUID = resolveZone(profile, zoneUUID)
-	if zoneUUID == "" {
-		return errNoZone()
-	}
-
-	svc := vpc.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	vpcs, err := svc.List(ctx, zoneUUID, "")
-	if err != nil {
-		return fmt.Errorf("vpc list: %w", err)
-	}
-
-	headers := []string{"UUID", "NAME", "CIDR", "STATUS", "ZONE"}
-	rows := make([][]string, 0, len(vpcs))
-	for _, v := range vpcs {
-		rows = append(rows, []string{
-			v.UUID,
-			v.Name,
-			v.CIDR,
-			v.Status,
-			v.ZoneUUID,
-		})
-	}
-	return printer.PrintTable(headers, rows)
-}
-
-func newVPCGetCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "get <uuid>",
-		Short:   "Get details of a VPC",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpc get <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPCGet(cmd, args[0])
-		},
-	}
-	return cmd
-}
-
-func runVPCGet(cmd *cobra.Command, uuid string) error {
+func runVPCList(cmd *cobra.Command, zoneSlug string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -101,19 +58,60 @@ func runVPCGet(cmd *cobra.Command, uuid string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	v, err := svc.Get(ctx, uuid)
+	vpcs, err := svc.List(ctx, zoneSlug)
+	if err != nil {
+		return fmt.Errorf("vpc list: %w", err)
+	}
+
+	headers := []string{"SLUG", "NAME", "CIDR", "STATUS", "ZONE"}
+	rows := make([][]string, 0, len(vpcs))
+	for _, v := range vpcs {
+		rows = append(rows, []string{
+			v.Slug,
+			v.Name,
+			v.CIDR,
+			v.Status,
+			v.ZoneName,
+		})
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newVPCGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "get <slug>",
+		Short:   "Get details of a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc get <slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVPCGet(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runVPCGet(cmd *cobra.Command, slug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	v, err := svc.Get(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("vpc get: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", v.UUID},
+		{"Slug", v.Slug},
 		{"Name", v.Name},
 		{"Description", v.Description},
 		{"CIDR", v.CIDR},
 		{"Status", v.Status},
-		{"Zone UUID", v.ZoneUUID},
 		{"Zone Name", v.ZoneName},
 		{"Domain Name", v.DomainName},
 	}
@@ -121,18 +119,18 @@ func runVPCGet(cmd *cobra.Command, uuid string) error {
 }
 
 func newVPCCreateCmd() *cobra.Command {
-	var zoneUUID, name, offeringUUID, cidr, description, networkDomain, lbProvider string
+	var zoneSlug, name, offeringSlug, cidr, description, networkDomain, lbProvider string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPC",
-		Example: `  zcp vpc create --zone <uuid> --name my-vpc --offering <uuid> --cidr 10.0.0.0/8
-  zcp vpc create --zone <uuid> --name my-vpc --offering <uuid> --cidr 10.0.0.0/8 --description "Production VPC"`,
+		Example: `  zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8
+  zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8 --description "Production VPC"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			if offeringUUID == "" {
+			if offeringSlug == "" {
 				return fmt.Errorf("--offering is required")
 			}
 			if cidr == "" {
@@ -141,10 +139,13 @@ func newVPCCreateCmd() *cobra.Command {
 			if !strings.Contains(cidr, "/") {
 				return fmt.Errorf("--cidr must be a valid CIDR (e.g. 10.0.0.0/8)")
 			}
+			if zoneSlug == "" {
+				return fmt.Errorf("--zone is required")
+			}
 			return runVPCCreate(cmd, vpc.CreateRequest{
 				Name:                       name,
-				ZoneUUID:                   zoneUUID,
-				VPCOfferingUUID:            offeringUUID,
+				ZoneSlug:                   zoneSlug,
+				VPCOfferingSlug:            offeringSlug,
 				CIDR:                       cidr,
 				Description:                description,
 				NetworkDomain:              networkDomain,
@@ -152,9 +153,9 @@ func newVPCCreateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
+	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug (required)")
 	cmd.Flags().StringVar(&name, "name", "", "VPC name (required)")
-	cmd.Flags().StringVar(&offeringUUID, "offering", "", "VPC offering UUID (required)")
+	cmd.Flags().StringVar(&offeringSlug, "offering", "", "VPC offering slug (required)")
 	cmd.Flags().StringVar(&cidr, "cidr", "", "CIDR block (required, e.g. 10.0.0.0/8)")
 	cmd.Flags().StringVar(&description, "description", "", "VPC description")
 	cmd.Flags().StringVar(&networkDomain, "network-domain", "", "Network domain")
@@ -163,13 +164,9 @@ func newVPCCreateCmd() *cobra.Command {
 }
 
 func runVPCCreate(cmd *cobra.Command, req vpc.CreateRequest) error {
-	profile, client, printer, err := buildClientAndPrinter(cmd)
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
-	}
-	req.ZoneUUID = resolveZone(profile, req.ZoneUUID)
-	if req.ZoneUUID == "" {
-		return errNoZone()
 	}
 
 	svc := vpc.NewService(client)
@@ -183,11 +180,11 @@ func runVPCCreate(cmd *cobra.Command, req vpc.CreateRequest) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", v.UUID},
+		{"Slug", v.Slug},
 		{"Name", v.Name},
 		{"CIDR", v.CIDR},
 		{"Status", v.Status},
-		{"Zone UUID", v.ZoneUUID},
+		{"Zone Name", v.ZoneName},
 	}
 	return printer.PrintTable(headers, rows)
 }
@@ -196,16 +193,15 @@ func newVPCUpdateCmd() *cobra.Command {
 	var name, description string
 
 	cmd := &cobra.Command{
-		Use:     "update <uuid>",
+		Use:     "update <slug>",
 		Short:   "Update a VPC",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpc update <uuid> --name new-name --description "Updated description"`,
+		Example: `  zcp vpc update <slug> --name new-name --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			return runVPCUpdate(cmd, vpc.UpdateRequest{
-				UUID:        args[0],
+			return runVPCUpdate(cmd, args[0], vpc.UpdateRequest{
 				Name:        name,
 				Description: description,
 			})
@@ -216,7 +212,7 @@ func newVPCUpdateCmd() *cobra.Command {
 	return cmd
 }
 
-func runVPCUpdate(cmd *cobra.Command, req vpc.UpdateRequest) error {
+func runVPCUpdate(cmd *cobra.Command, slug string, req vpc.UpdateRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -226,14 +222,14 @@ func runVPCUpdate(cmd *cobra.Command, req vpc.UpdateRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	v, err := svc.Update(ctx, req)
+	v, err := svc.Update(ctx, slug, req)
 	if err != nil {
 		return fmt.Errorf("vpc update: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", v.UUID},
+		{"Slug", v.Slug},
 		{"Name", v.Name},
 		{"Description", v.Description},
 		{"Status", v.Status},
@@ -245,11 +241,11 @@ func newVPCDeleteCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
+		Use:   "delete <slug>",
 		Short: "Delete a VPC",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpc delete <uuid>
-  zcp vpc delete <uuid> --yes`,
+		Example: `  zcp vpc delete <slug>
+  zcp vpc delete <slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCDelete(cmd, args[0], yes)
 		},
@@ -258,9 +254,9 @@ func newVPCDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runVPCDelete(cmd *cobra.Command, uuid string, yes bool) error {
-	if !yes {
-		fmt.Fprintf(os.Stderr, "Delete VPC %q? This action cannot be undone. [y/N]: ", uuid)
+func runVPCDelete(cmd *cobra.Command, slug string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete VPC %q? This action cannot be undone. [y/N]: ", slug)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -279,164 +275,36 @@ func runVPCDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, uuid); err != nil {
+	if err := svc.Delete(ctx, slug); err != nil {
 		return fmt.Errorf("vpc delete: %w", err)
 	}
 
-	// Verify deletion — Kong may return 204 even when delete silently fails
+	// Verify deletion
 	time.Sleep(2 * time.Second)
-	if _, err := svc.Get(ctx, uuid); err == nil {
+	if _, err := svc.Get(ctx, slug); err == nil {
 		fmt.Fprintln(os.Stderr, "WARNING: VPC may not have been deleted (e.g. has active network tiers).")
 		fmt.Fprintln(os.Stderr, "         Delete all network tiers first, then retry.")
-		return fmt.Errorf("vpc %q still exists after delete — check dependencies", uuid)
+		return fmt.Errorf("vpc %q still exists after delete — check dependencies", slug)
 	}
 
-	printer.Fprintf("VPC %q deleted.\n", uuid)
+	printer.Fprintf("VPC %q deleted.\n", slug)
 	return nil
 }
 
 func newVPCRestartCmd() *cobra.Command {
-	var cleanUp, redundant bool
-
 	cmd := &cobra.Command{
-		Use:   "restart <uuid>",
-		Short: "Restart a VPC",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpc restart <uuid>
-  zcp vpc restart <uuid> --cleanup --redundant`,
+		Use:     "restart <slug>",
+		Short:   "Restart a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc restart <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runVPCRestart(cmd, args[0], cleanUp, redundant)
+			return runVPCRestart(cmd, args[0])
 		},
 	}
-	cmd.Flags().BoolVar(&cleanUp, "cleanup", false, "Clean up stale resources during restart")
-	cmd.Flags().BoolVar(&redundant, "redundant", false, "Enable redundant VPC router")
 	return cmd
 }
 
-func newVPCCreateNetworkCmd() *cobra.Command {
-	var zoneUUID, name, offeringUUID, vpcUUID, gateway, netmask, aclUUID string
-
-	cmd := &cobra.Command{
-		Use:   "create-network",
-		Short: "Create a VPC tier network",
-		Example: `  zcp vpc create-network --zone <uuid> --vpc <uuid> --name my-tier --offering <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0
-  zcp vpc create-network --vpc <uuid> --name my-tier --offering <uuid> --gateway 10.1.1.1 --netmask 255.255.255.0 --acl <uuid>`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if name == "" {
-				return fmt.Errorf("--name is required")
-			}
-			if offeringUUID == "" {
-				return fmt.Errorf("--offering is required")
-			}
-			if vpcUUID == "" {
-				return fmt.Errorf("--vpc is required")
-			}
-			if gateway == "" {
-				return fmt.Errorf("--gateway is required")
-			}
-			if netmask == "" {
-				return fmt.Errorf("--netmask is required")
-			}
-
-			profile, client, printer, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-			zoneUUID = resolveZone(profile, zoneUUID)
-			if zoneUUID == "" {
-				return errNoZone()
-			}
-
-			svc := vpc.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-
-			net, err := svc.CreateNetwork(ctx, vpc.CreateNetworkRequest{
-				Name:                name,
-				ZoneUUID:            zoneUUID,
-				NetworkOfferingUUID: offeringUUID,
-				VPCUUID:             vpcUUID,
-				Gateway:             gateway,
-				Netmask:             netmask,
-				ACLUUID:             aclUUID,
-			})
-			if err != nil {
-				return fmt.Errorf("vpc create-network: %w", err)
-			}
-
-			headers := []string{"FIELD", "VALUE"}
-			rows := [][]string{
-				{"UUID", net.UUID},
-				{"Name", net.Name},
-				{"CIDR", net.CIDR},
-				{"Gateway", net.Gateway},
-				{"Status", net.Status},
-			}
-			return printer.PrintTable(headers, rows)
-		},
-	}
-	cmd.Flags().StringVar(&zoneUUID, "zone", "", "Zone UUID (overrides default zone)")
-	cmd.Flags().StringVar(&name, "name", "", "Network name (required)")
-	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
-	cmd.Flags().StringVar(&vpcUUID, "vpc", "", "VPC UUID (required)")
-	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required, e.g. 10.1.1.1)")
-	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (required, e.g. 255.255.255.0)")
-	cmd.Flags().StringVar(&aclUUID, "acl", "", "Network ACL UUID")
-	return cmd
-}
-
-func newVPCUpdateNetworkCmd() *cobra.Command {
-	var name, description, offeringUUID, networkDomain string
-
-	cmd := &cobra.Command{
-		Use:   "update-network <uuid>",
-		Short: "Update a VPC tier network",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpc update-network <uuid> --offering <uuid> --name new-name
-  zcp vpc update-network <uuid> --offering <uuid> --description "Updated tier"`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if offeringUUID == "" {
-				return fmt.Errorf("--offering is required")
-			}
-
-			_, client, printer, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-
-			svc := vpc.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-
-			net, err := svc.UpdateNetwork(ctx, vpc.UpdateNetworkRequest{
-				UUID:                args[0],
-				Name:                name,
-				Description:         description,
-				NetworkOfferingUUID: offeringUUID,
-				NetworkDomain:       networkDomain,
-			})
-			if err != nil {
-				return fmt.Errorf("vpc update-network: %w", err)
-			}
-
-			headers := []string{"FIELD", "VALUE"}
-			rows := [][]string{
-				{"UUID", net.UUID},
-				{"Name", net.Name},
-				{"CIDR", net.CIDR},
-				{"Status", net.Status},
-			}
-			return printer.PrintTable(headers, rows)
-		},
-	}
-	cmd.Flags().StringVar(&name, "name", "", "New network name")
-	cmd.Flags().StringVar(&description, "description", "", "New description")
-	cmd.Flags().StringVar(&offeringUUID, "offering", "", "Network offering UUID (required)")
-	cmd.Flags().StringVar(&networkDomain, "network-domain", "", "Network domain")
-	return cmd
-}
-
-func runVPCRestart(cmd *cobra.Command, uuid string, cleanUp, redundant bool) error {
+func runVPCRestart(cmd *cobra.Command, slug string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -446,16 +314,310 @@ func runVPCRestart(cmd *cobra.Command, uuid string, cleanUp, redundant bool) err
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	v, err := svc.Restart(ctx, uuid, cleanUp, redundant)
+	v, err := svc.Restart(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("vpc restart: %w", err)
 	}
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"UUID", v.UUID},
+		{"Slug", v.Slug},
 		{"Name", v.Name},
 		{"Status", v.Status},
 	}
 	return printer.PrintTable(headers, rows)
+}
+
+// ─── VPC ACL subcommands ─────────────────────────────────────────────────────
+
+func newVPCACLListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "acl-list <vpc-slug>",
+		Short:   "List network ACLs for a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc acl-list <vpc-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVPCACLList(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runVPCACLList(cmd *cobra.Command, vpcSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	acls, err := svc.ListACLs(ctx, vpcSlug)
+	if err != nil {
+		return fmt.Errorf("vpc acl-list: %w", err)
+	}
+
+	headers := []string{"SLUG", "NAME", "DESCRIPTION", "STATUS"}
+	rows := make([][]string, 0, len(acls))
+	for _, a := range acls {
+		rows = append(rows, []string{
+			a.Slug,
+			a.Name,
+			a.Description,
+			a.Status,
+		})
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newVPCACLCreateRuleCmd() *cobra.Command {
+	var protocol, cidrList, trafficType, action string
+	var startPort, endPort, number, icmpCode, icmpType int
+
+	cmd := &cobra.Command{
+		Use:   "acl-create-rule <vpc-slug>",
+		Short: "Create a network ACL rule in a VPC",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp vpc acl-create-rule <vpc-slug> --protocol tcp --action allow --start-port 80 --end-port 80 --cidr 0.0.0.0/0
+  zcp vpc acl-create-rule <vpc-slug> --protocol icmp --action deny --icmp-type 8 --icmp-code 0`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if protocol == "" {
+				return fmt.Errorf("--protocol is required")
+			}
+			if action == "" {
+				return fmt.Errorf("--action is required")
+			}
+			return runVPCACLCreateRule(cmd, args[0], vpc.ACLRuleCreateRequest{
+				Protocol:    protocol,
+				CIDRList:    cidrList,
+				StartPort:   startPort,
+				EndPort:     endPort,
+				TrafficType: trafficType,
+				Action:      action,
+				Number:      number,
+				ICMPCode:    icmpCode,
+				ICMPType:    icmpType,
+			})
+		},
+	}
+	cmd.Flags().StringVar(&protocol, "protocol", "", "Protocol (tcp, udp, icmp, all) (required)")
+	cmd.Flags().StringVar(&cidrList, "cidr", "", "CIDR list (e.g. 0.0.0.0/0)")
+	cmd.Flags().IntVar(&startPort, "start-port", 0, "Start port")
+	cmd.Flags().IntVar(&endPort, "end-port", 0, "End port")
+	cmd.Flags().StringVar(&trafficType, "traffic-type", "", "Traffic type (ingress, egress)")
+	cmd.Flags().StringVar(&action, "action", "", "Action (allow, deny) (required)")
+	cmd.Flags().IntVar(&number, "number", 0, "Rule number (ordering)")
+	cmd.Flags().IntVar(&icmpCode, "icmp-code", 0, "ICMP code")
+	cmd.Flags().IntVar(&icmpType, "icmp-type", 0, "ICMP type")
+	return cmd
+}
+
+func runVPCACLCreateRule(cmd *cobra.Command, vpcSlug string, req vpc.ACLRuleCreateRequest) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	rule, err := svc.CreateACLRule(ctx, vpcSlug, req)
+	if err != nil {
+		return fmt.Errorf("vpc acl-create-rule: %w", err)
+	}
+
+	headers := []string{"FIELD", "VALUE"}
+	rows := [][]string{
+		{"Slug", rule.Slug},
+		{"Protocol", rule.Protocol},
+		{"Action", rule.Action},
+		{"CIDR List", rule.CIDRList},
+		{"Start Port", fmt.Sprintf("%d", rule.StartPort)},
+		{"End Port", fmt.Sprintf("%d", rule.EndPort)},
+		{"Traffic Type", rule.TrafficType},
+		{"Number", fmt.Sprintf("%d", rule.Number)},
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newVPCACLReplaceCmd() *cobra.Command {
+	var networkSlug, aclSlug string
+
+	cmd := &cobra.Command{
+		Use:     "acl-replace",
+		Short:   "Replace the ACL on a network",
+		Example: `  zcp vpc acl-replace --network <network-slug> --acl <acl-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if networkSlug == "" {
+				return fmt.Errorf("--network is required")
+			}
+			if aclSlug == "" {
+				return fmt.Errorf("--acl is required")
+			}
+			return runVPCACLReplace(cmd, networkSlug, aclSlug)
+		},
+	}
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
+	cmd.Flags().StringVar(&aclSlug, "acl", "", "ACL slug (required)")
+	return cmd
+}
+
+func runVPCACLReplace(cmd *cobra.Command, networkSlug, aclSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	req := map[string]string{"aclSlug": aclSlug}
+	if err := svc.ReplaceNetworkACL(ctx, networkSlug, req); err != nil {
+		return fmt.Errorf("vpc acl-replace: %w", err)
+	}
+
+	printer.Fprintf("ACL replaced on network %q.\n", networkSlug)
+	return nil
+}
+
+// ─── VPC VPN Gateway subcommands ─────────────────────────────────────────────
+
+func newVPCVPNGatewayCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "vpn-gateway",
+		Short: "Manage VPN gateways for a VPC",
+	}
+	cmd.AddCommand(newVPCVPNGatewayListCmd())
+	cmd.AddCommand(newVPCVPNGatewayCreateCmd())
+	cmd.AddCommand(newVPCVPNGatewayDeleteCmd())
+	return cmd
+}
+
+func newVPCVPNGatewayListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list <vpc-slug>",
+		Short:   "List VPN gateways for a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc vpn-gateway list <vpc-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVPCVPNGatewayList(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runVPCVPNGatewayList(cmd *cobra.Command, vpcSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	gateways, err := svc.ListVPNGateways(ctx, vpcSlug)
+	if err != nil {
+		return fmt.Errorf("vpc vpn-gateway list: %w", err)
+	}
+
+	headers := []string{"SLUG", "PUBLIC IP", "VPC SLUG", "STATUS"}
+	rows := make([][]string, 0, len(gateways))
+	for _, g := range gateways {
+		rows = append(rows, []string{
+			g.Slug,
+			g.PublicIP,
+			g.VPCSlug,
+			g.Status,
+		})
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newVPCVPNGatewayCreateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "create <vpc-slug>",
+		Short:   "Create a VPN gateway for a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc vpn-gateway create <vpc-slug>`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVPCVPNGatewayCreate(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runVPCVPNGatewayCreate(cmd *cobra.Command, vpcSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	g, err := svc.CreateVPNGateway(ctx, vpcSlug)
+	if err != nil {
+		return fmt.Errorf("vpc vpn-gateway create: %w", err)
+	}
+
+	headers := []string{"FIELD", "VALUE"}
+	rows := [][]string{
+		{"Slug", g.Slug},
+		{"Public IP", g.PublicIP},
+		{"VPC Slug", g.VPCSlug},
+		{"Zone Name", g.ZoneName},
+		{"Status", g.Status},
+	}
+	return printer.PrintTable(headers, rows)
+}
+
+func newVPCVPNGatewayDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <vpc-slug> <gateway-id>",
+		Short: "Delete a VPN gateway from a VPC",
+		Args:  cobra.ExactArgs(2),
+		Example: `  zcp vpc vpn-gateway delete <vpc-slug> <gateway-id>
+  zcp vpc vpn-gateway delete <vpc-slug> <gateway-id> --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runVPCVPNGatewayDelete(cmd, args[0], args[1], yes)
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func runVPCVPNGatewayDelete(cmd *cobra.Command, vpcSlug, gatewayID string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete VPN gateway %q from VPC %q? This action cannot be undone. [y/N]: ", gatewayID, vpcSlug)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
+			return nil
+		}
+	}
+
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := vpc.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	if err := svc.DeleteVPNGateway(ctx, vpcSlug, gatewayID); err != nil {
+		return fmt.Errorf("vpc vpn-gateway delete: %w", err)
+	}
+
+	printer.Fprintf("VPN gateway %q deleted from VPC %q.\n", gatewayID, vpcSlug)
+	return nil
 }

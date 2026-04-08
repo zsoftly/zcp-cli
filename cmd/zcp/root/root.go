@@ -11,13 +11,14 @@ import (
 )
 
 var (
-	profileFlag string
-	outputFlag  string
-	apiURLFlag  string
-	timeoutFlag int
-	debugFlag   bool
-	noColorFlag bool
-	pagerFlag   bool
+	profileFlag     string
+	outputFlag      string
+	apiURLFlag      string
+	timeoutFlag     int
+	debugFlag       bool
+	noColorFlag     bool
+	pagerFlag       bool
+	autoApproveFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -56,6 +57,7 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugFlag, "debug", false, "Enable debug output (written to stderr)")
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "Disable color output")
 	rootCmd.PersistentFlags().BoolVar(&pagerFlag, "pager", false, "Pipe table output through less (requires less in PATH)")
+	rootCmd.PersistentFlags().BoolVarP(&autoApproveFlag, "auto-approve", "y", false, "Skip all confirmation prompts (useful for automation/CI)")
 
 	// Version subcommand
 	rootCmd.AddCommand(newVersionCmd())
@@ -95,6 +97,22 @@ func init() {
 	rootCmd.AddCommand(commands.NewCostCmd())
 	rootCmd.AddCommand(commands.NewHostCmd())
 	rootCmd.AddCommand(commands.NewAdminCmd())
+
+	// STKCNSL API — new feature commands
+	rootCmd.AddCommand(commands.NewProjectCmd())
+	rootCmd.AddCommand(commands.NewSupportCmd())
+	rootCmd.AddCommand(commands.NewDNSCmd())
+	rootCmd.AddCommand(commands.NewAutoscaleCmd())
+	rootCmd.AddCommand(commands.NewISOCmd())
+	rootCmd.AddCommand(commands.NewAffinityGroupCmd())
+	rootCmd.AddCommand(commands.NewMonitoringCmd())
+	rootCmd.AddCommand(commands.NewStoreCmd())
+	rootCmd.AddCommand(commands.NewProductCmd())
+	rootCmd.AddCommand(commands.NewMarketplaceCmd())
+	rootCmd.AddCommand(commands.NewPlanCmd())
+	rootCmd.AddCommand(commands.NewDashboardCmd())
+	rootCmd.AddCommand(commands.NewBillingCmd())
+	rootCmd.AddCommand(commands.NewBackupCmd())
 
 	// Flag completions — static values, no network calls
 	rootCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

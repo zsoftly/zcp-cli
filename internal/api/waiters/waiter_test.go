@@ -24,10 +24,9 @@ type statusResponse struct {
 
 func newTestClient(srv *httptest.Server) *httpclient.Client {
 	return httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "test-key",
-		SecretKey: "test-secret",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
 	})
 }
 

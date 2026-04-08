@@ -148,7 +148,7 @@ func newSnapshotPolicyDeleteCmd() *cobra.Command {
   zcp snapshot-policy delete <uuid> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			uuid := args[0]
-			if !yes {
+			if !yes && !autoApproved(cmd) {
 				fmt.Fprintf(os.Stdout, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", uuid)
 				var answer string
 				fmt.Scanln(&answer)

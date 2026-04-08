@@ -6,11 +6,11 @@ This guide explains how to set up a development environment for ZCP CLI, underst
 
 ## Prerequisites
 
-| Tool  | Minimum Version | Notes                                              |
-|-------|-----------------|----------------------------------------------------|
-| Go    | 1.26.1          | As declared in `go.mod` toolchain directive        |
-| Make  | Any             | GNU Make for build targets                         |
-| Git   | Any             | Required for version embedding via `git describe`  |
+| Tool | Minimum Version | Notes                                             |
+| ---- | --------------- | ------------------------------------------------- |
+| Go   | 1.26.1          | As declared in `go.mod` toolchain directive       |
+| Make | Any             | GNU Make for build targets                        |
+| Git  | Any             | Required for version embedding via `git describe` |
 
 Install Go from [https://go.dev/dl/](https://go.dev/dl/). Verify your installation:
 
@@ -53,11 +53,11 @@ zcp-cli/
 ### Key Packages
 
 - `internal/config` — manages `~/.config/zcp/config.yaml`, profile resolution, and URL precedence logic.
-- `internal/httpclient` — a single `Client` struct used by all API service packages. It injects `apikey` and `secretkey` headers, sets `User-Agent`, and delegates error parsing to `apierrors`.
+- `internal/httpclient` — a single `Client` struct used by all API service packages. It injects the `Authorization: Bearer` header, sets `User-Agent`, and delegates error parsing to `apierrors`. Also provides `GetEnvelope`/`PostEnvelope`/`PutEnvelope` helpers for unwrapping the `{status, data}` response envelope.
 - `internal/output` — the `Printer` type renders tabular data in table, JSON, or YAML format. All commands use this for consistent output.
-- `internal/api/apierrors` — parses ZCP's error envelope (`listErrorResponse`) into typed `APIError` values.
-- `internal/api/waiters` — polls `/restapi/asyncjob/resourceStatus` until a job reaches `COMPLETE` or `FAILED`.
-- `internal/commands` — one file per command group (e.g., `zone.go`, `offering.go`). Each file registers Cobra subcommands and implements `RunE` functions.
+- `internal/api/apierrors` — parses ZCP API error envelopes into typed `APIError` values.
+- `internal/api/response` — generic response envelope types (`Envelope[T]`, `Single[T]`) for the paginated API format.
+- `internal/commands` — one file per command group (e.g., `instance.go`, `region.go`, `dns.go`). Each file registers Cobra subcommands and implements `RunE` functions.
 
 ---
 
@@ -162,6 +162,7 @@ func (s *Service) List(ctx context.Context) ([]Network, error) {
 ### 2. Write tests for the service
 
 Create `internal/api/network/network_test.go` following the pattern used in `internal/api/zone/zone_test.go`:
+
 - Spin up an `httptest.Server` that returns fixture JSON.
 - Assert on the path, query parameters, and decoded result.
 - Assert that HTTP error responses surface as errors.
@@ -271,10 +272,10 @@ go mod verify
 
 Current direct dependencies:
 
-| Package                          | Purpose                          |
-|----------------------------------|----------------------------------|
-| `github.com/spf13/cobra`         | CLI framework                    |
-| `github.com/olekukonko/tablewriter` | Terminal table rendering      |
-| `gopkg.in/yaml.v3`               | YAML marshalling/unmarshalling   |
+| Package                             | Purpose                        |
+| ----------------------------------- | ------------------------------ |
+| `github.com/spf13/cobra`            | CLI framework                  |
+| `github.com/olekukonko/tablewriter` | Terminal table rendering       |
+| `gopkg.in/yaml.v3`                  | YAML marshalling/unmarshalling |
 
 Prefer the standard library where possible. Introduce new dependencies only when they provide significant value over a standard library implementation.

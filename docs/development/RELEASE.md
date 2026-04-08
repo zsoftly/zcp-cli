@@ -29,14 +29,14 @@ Examples: `0.0.1`, `0.1.0`, `1.0.0`
 
 ## Build Artifacts
 
-| Platform      | Binary                    |
-| ------------- | ------------------------- |
-| Linux amd64   | `zcp-linux-amd64`         |
-| Linux arm64   | `zcp-linux-arm64`         |
-| macOS amd64   | `zcp-darwin-amd64`        |
-| macOS arm64   | `zcp-darwin-arm64`        |
-| Windows amd64 | `zcp-windows-amd64.exe`   |
-| Windows arm64 | `zcp-windows-arm64.exe`   |
+| Platform      | Binary                  |
+| ------------- | ----------------------- |
+| Linux amd64   | `zcp-linux-amd64`       |
+| Linux arm64   | `zcp-linux-arm64`       |
+| macOS amd64   | `zcp-darwin-amd64`      |
+| macOS arm64   | `zcp-darwin-arm64`      |
+| Windows amd64 | `zcp-windows-amd64.exe` |
+| Windows arm64 | `zcp-windows-arm64.exe` |
 
 Also included in the release:
 

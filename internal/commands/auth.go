@@ -50,12 +50,11 @@ If the call succeeds, the credentials are valid.`,
 
 			baseURL := config.ActiveAPIURL(profile, apiURL)
 			opts := httpclient.Options{
-				BaseURL:   baseURL,
-				APIKey:    profile.APIKey,
-				SecretKey: profile.SecretKey,
-				Timeout:   time.Duration(timeoutSec) * time.Second,
-				Debug:     debugFlag,
-				DebugOut:  os.Stderr,
+				BaseURL:     baseURL,
+				BearerToken: profile.BearerToken,
+				Timeout:     time.Duration(timeoutSec) * time.Second,
+				Debug:       debugFlag,
+				DebugOut:    os.Stderr,
 			}
 
 			client := httpclient.New(opts)

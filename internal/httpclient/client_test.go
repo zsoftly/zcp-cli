@@ -12,22 +12,20 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
-func TestGetInjectsAuthHeaders(t *testing.T) {
-	var gotAPIKey, gotSecretKey string
+func TestGetInjectsBearerToken(t *testing.T) {
+	var gotAuth string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAPIKey = r.Header.Get("apikey")
-		gotSecretKey = r.Header.Get("secretkey")
+		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
 	}))
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "my-api-key",
-		SecretKey: "my-secret-key",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "my-test-token",
+		Timeout:     5 * time.Second,
 	})
 
 	var result map[string]string
@@ -36,11 +34,8 @@ func TestGetInjectsAuthHeaders(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	}
 
-	if gotAPIKey != "my-api-key" {
-		t.Errorf("apikey header = %q, want %q", gotAPIKey, "my-api-key")
-	}
-	if gotSecretKey != "my-secret-key" {
-		t.Errorf("secretkey header = %q, want %q", gotSecretKey, "my-secret-key")
+	if gotAuth != "Bearer my-test-token" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer my-test-token")
 	}
 }
 
@@ -57,10 +52,9 @@ func TestGetDecodesJSON(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
 	})
 
 	var result testResp
@@ -87,10 +81,9 @@ func TestGetQueryParams(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     5 * time.Second,
 	})
 
 	q := url.Values{"zoneUuid": {"abc-123"}}
@@ -105,19 +98,16 @@ func TestGetHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"listErrorResponse": map[string]string{
-				"errorCode": "401",
-				"errorMsg":  "Invalid credentials",
-			},
+			"status":  "Error",
+			"message": "Unauthenticated.",
 		})
 	}))
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "bad",
-		SecretKey: "creds",
-		Timeout:   5 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "bad-token",
+		Timeout:     5 * time.Second,
 	})
 
 	err := client.Get(context.Background(), "/protected", url.Values{}, nil)
@@ -134,10 +124,9 @@ func TestGetContextCancellation(t *testing.T) {
 	defer srv.Close()
 
 	client := httpclient.New(httpclient.Options{
-		BaseURL:   srv.URL,
-		APIKey:    "k",
-		SecretKey: "s",
-		Timeout:   10 * time.Second,
+		BaseURL:     srv.URL,
+		BearerToken: "tok",
+		Timeout:     10 * time.Second,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

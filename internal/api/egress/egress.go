@@ -1,43 +1,53 @@
 // Package egress provides ZCP egress rule API operations.
+//
+// In the STKCNSL API, egress rules are nested under networks:
+//
+//	GET    /networks/{SLUG}/egress-firewall-rules
+//	POST   /networks/{SLUG}/egress-firewall-rules
+//	DELETE /networks/{SLUG}/egress-firewall-rules/{ID}
+//
+// This package delegates to the network package's egress methods but preserves
+// the Service/NewService pattern for backward compatibility with the commands layer.
 package egress
 
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
 // EgressRule represents a ZCP egress firewall rule.
 type EgressRule struct {
-	UUID        string `json:"uuid"`
-	Status      string `json:"status"`
-	IsActive    bool   `json:"isActive"`
-	Protocol    string `json:"protocol"`
-	StartPort   string `json:"startPort"`
-	EndPort     string `json:"endPort"`
-	NetworkUUID string `json:"networkUuid"`
-	CIDRList    string `json:"cidrList"`
-	ICMPType    string `json:"icmpType"`
-	ICMPCode    string `json:"icmpCode"`
-	ZoneUUID    string `json:"zoneUuid"`
+	ID        string `json:"id"`
+	Protocol  string `json:"protocol"`
+	StartPort string `json:"start_port"`
+	EndPort   string `json:"end_port"`
+	CIDR      string `json:"cidr"`
+	ICMPType  string `json:"icmp_type"`
+	ICMPCode  string `json:"icmp_code"`
+	Status    string `json:"status"`
 }
 
 // CreateRequest holds parameters for creating an egress rule.
 type CreateRequest struct {
-	NetworkUUID string `json:"networkUuid"`
+	NetworkSlug string `json:"-"`
 	Protocol    string `json:"protocol"`
-	StartPort   string `json:"startPort,omitempty"`
-	EndPort     string `json:"endPort,omitempty"`
-	CIDRList    string `json:"cidrList,omitempty"`
-	ICMPType    string `json:"icmpType,omitempty"`
-	ICMPCode    string `json:"icmpCode,omitempty"`
+	StartPort   string `json:"start_port,omitempty"`
+	EndPort     string `json:"end_port,omitempty"`
+	CIDR        string `json:"cidr,omitempty"`
+	ICMPType    string `json:"icmp_type,omitempty"`
+	ICMPCode    string `json:"icmp_code,omitempty"`
 }
 
 type listEgressRuleResponse struct {
-	Count                  int          `json:"count"`
-	ListEgressRuleResponse []EgressRule `json:"listEgressRuleResponse"`
+	Status string       `json:"status"`
+	Data   []EgressRule `json:"data"`
+}
+
+type singleEgressRuleResponse struct {
+	Status string     `json:"status"`
+	Data   EgressRule `json:"data"`
 }
 
 // Service provides egress rule API operations.
@@ -50,38 +60,29 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns egress rules. zoneUUID is required; uuid and networkUUID are optional filters.
-func (s *Service) List(ctx context.Context, zoneUUID, uuid, networkUUID string) ([]EgressRule, error) {
-	q := url.Values{"zoneUuid": {zoneUUID}}
-	if uuid != "" {
-		q.Set("uuid", uuid)
-	}
-	if networkUUID != "" {
-		q.Set("networkUuid", networkUUID)
-	}
+// List returns egress rules for a network identified by slug.
+func (s *Service) List(ctx context.Context, networkSlug string) ([]EgressRule, error) {
 	var resp listEgressRuleResponse
-	if err := s.client.Get(ctx, "/restapi/egressrule/egressRuleList", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing egress rules: %w", err)
+	if err := s.client.Get(ctx, "/networks/"+networkSlug+"/egress-firewall-rules", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing egress rules for network %s: %w", networkSlug, err)
 	}
-	return resp.ListEgressRuleResponse, nil
+	return resp.Data, nil
 }
 
-// Create adds a new egress rule.
+// Create adds a new egress rule to a network.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, error) {
-	var resp listEgressRuleResponse
-	if err := s.client.Post(ctx, "/restapi/egressrule/createEgressRule", req, &resp); err != nil {
-		return nil, fmt.Errorf("creating egress rule: %w", err)
+	var resp singleEgressRuleResponse
+	if err := s.client.Post(ctx, "/networks/"+req.NetworkSlug+"/egress-firewall-rules", req, &resp); err != nil {
+		return nil, fmt.Errorf("creating egress rule for network %s: %w", req.NetworkSlug, err)
 	}
-	if len(resp.ListEgressRuleResponse) == 0 {
-		return nil, fmt.Errorf("create egress rule returned empty response")
-	}
-	return &resp.ListEgressRuleResponse[0], nil
+	return &resp.Data, nil
 }
 
-// Delete removes an egress rule by UUID.
-func (s *Service) Delete(ctx context.Context, uuid string) error {
-	if err := s.client.Delete(ctx, "/restapi/egressrule/deleteEgressRule/"+uuid, nil); err != nil {
-		return fmt.Errorf("deleting egress rule %s: %w", uuid, err)
+// Delete removes an egress rule by ID from the given network.
+func (s *Service) Delete(ctx context.Context, networkSlug string, ruleID string) error {
+	path := fmt.Sprintf("/networks/%s/egress-firewall-rules/%s", networkSlug, ruleID)
+	if err := s.client.Delete(ctx, path, nil); err != nil {
+		return fmt.Errorf("deleting egress rule %s for network %s: %w", ruleID, networkSlug, err)
 	}
 	return nil
 }

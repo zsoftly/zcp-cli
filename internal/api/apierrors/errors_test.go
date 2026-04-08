@@ -3,12 +3,65 @@ package apierrors_test
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 )
 
-func TestParseResponseZCPEnvelope(t *testing.T) {
+func TestParseResponseSTKCNSLFormat(t *testing.T) {
+	body, _ := json.Marshal(map[string]interface{}{
+		"status":  "Error",
+		"message": "The given data was invalid.",
+		"errors": map[string]interface{}{
+			"email": []string{"The email field is required."},
+		},
+	})
+
+	err := apierrors.ParseResponse(422, body)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var ae *apierrors.APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+
+	if ae.StatusCode != 422 {
+		t.Errorf("StatusCode = %d, want 422", ae.StatusCode)
+	}
+	if ae.Code != "Error" {
+		t.Errorf("Code = %q, want %q", ae.Code, "Error")
+	}
+	if !strings.Contains(ae.Message, "The given data was invalid.") {
+		t.Errorf("Message = %q, want it to contain %q", ae.Message, "The given data was invalid.")
+	}
+	if !strings.Contains(ae.Message, "email") {
+		t.Errorf("Message = %q, want it to contain field-level errors", ae.Message)
+	}
+}
+
+func TestParseResponseSTKCNSLSimple(t *testing.T) {
+	body, _ := json.Marshal(map[string]interface{}{
+		"status":  "Error",
+		"message": "Unauthenticated.",
+	})
+
+	err := apierrors.ParseResponse(401, body)
+	var ae *apierrors.APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if ae.StatusCode != 401 {
+		t.Errorf("StatusCode = %d, want 401", ae.StatusCode)
+	}
+	if ae.Message != "Unauthenticated." {
+		t.Errorf("Message = %q, want %q", ae.Message, "Unauthenticated.")
+	}
+}
+
+func TestParseResponseLegacyZCPEnvelope(t *testing.T) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"listErrorResponse": map[string]string{
 			"errorCode": "INVALID_CREDENTIALS",

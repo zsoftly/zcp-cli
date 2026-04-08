@@ -1,28 +1,88 @@
-# zcp 0.0.5 Release Notes
+# zcp 0.0.6 Release Notes
 
 ## What's New
 
-### Delete verification
+### API backend migration
 
-Delete commands now verify the resource is actually removed. Previously, the API could
-return success (HTTP 204) while silently failing — the CLI would report "deleted" when
-the resource was still there. Now affected commands check after delete and warn if the
-resource still exists.
+The CLI now communicates with the STKCNSL API backend, replacing the previous STKBILL backend. This is a breaking change for configuration files — existing profiles using `apikey`/`secretkey` must be recreated with `bearer_token`.
 
-Applies to: `vpc delete`, `network delete`, `volume delete`, `security-group delete`
+### Bearer token authentication
 
-### Volume list deduplication
+Authentication now uses a single bearer token instead of separate API key and secret key. Update your profiles:
 
-The API sometimes returns duplicate entries for the same volume. The CLI now deduplicates
-by UUID before displaying results.
+```bash
+zcp profile add default --bearer-token YOUR_TOKEN
+```
 
-### Friendlier error messages
+Config files now use `bearer_token` instead of `apikey`/`secretkey`.
 
-- `snapshot create` on a detached volume now says:
-  `volume must be attached to a running instance before taking a snapshot`
-  instead of the raw CloudStack error.
-- `firewall list` on accounts with no IP addresses now returns an empty table
-  instead of `API error 412: Invalid IpAddress Details`.
+### 15 new command groups
+
+| Command              | Description                                            |
+| -------------------- | ------------------------------------------------------ |
+| `zcp dns`            | DNS domain and record management                       |
+| `zcp project`        | Project management with users and dashboards           |
+| `zcp monitoring`     | Global and per-VM resource monitoring                  |
+| `zcp billing`        | Costs, invoices, subscriptions, coupons, budget alerts |
+| `zcp support`        | Support tickets, replies, feedback, FAQs               |
+| `zcp autoscale`      | VM autoscale groups with policies and conditions       |
+| `zcp dashboard`      | Account service counts overview                        |
+| `zcp plan`           | Service plans for all resource types                   |
+| `zcp store`          | Store items and checkout                               |
+| `zcp marketplace`    | Marketplace app listing                                |
+| `zcp product`        | Product categories and listing                         |
+| `zcp iso`            | ISO image management                                   |
+| `zcp affinity-group` | Affinity group management                              |
+| `zcp backup`         | VM and block storage backups                           |
+| `zcp region`         | Region listing                                         |
+
+### Expanded existing commands
+
+- **instance**: reboot, reset, tags, change-hostname, change-password, change-plan, change-OS, add-network, addons
+- **instance create**: now requires `--blockstorage-plan` flag (e.g. `50-gb-2`, `100gb`)
+- **project**: added `delete` subcommand with confirmation prompt
+- **billing cancel-service**: now requires `--service` flag and supports `--reason`, `--type`
+- **network**: egress firewall rule management
+- **vpc**: ACL management, VPN gateway management
+- **loadbalancer**: rule creation, VM attachment to rules
+- **Discovery**: cloud-providers, currencies, storage-categories, billing-cycles, unit-pricings
+
+### Auto-approve for CI/CD
+
+All destructive commands now respect the global `--auto-approve` (or `-y`) flag, skipping confirmation prompts. Useful for scripting and automation pipelines:
+
+```bash
+zcp -y project delete my-project
+zcp -y billing cancel-service my-vm --service "Virtual Machine"
+```
+
+### RESTful API with pagination
+
+All endpoints now use clean RESTful paths with slug identifiers. List responses include pagination metadata (`current_page`, `per_page`, `total`).
+
+### VM creation example
+
+```bash
+zcp instance create \
+  --name my-vm \
+  --cloud-provider nimbo \
+  --project my-project \
+  --region noida \
+  --template ubuntu-22f \
+  --plan bp-4vc-8gb \
+  --billing-cycle hourly \
+  --storage-category nvme \
+  --blockstorage-plan 50-gb-2 \
+  --ssh-key my-key
+```
+
+---
+
+## Breaking Changes
+
+- **Config format**: `apikey`/`secretkey` replaced by `bearer_token`. Run `zcp profile add` to reconfigure.
+- **Zone commands**: `zcp zone list` still works but `zcp region list` is the new canonical command.
+- **UUID flags**: Flags like `--zone-uuid`, `--uuid` replaced by slug-based identifiers.
 
 ---
 
@@ -57,4 +117,4 @@ Download the binary for your platform from the assets below, make it executable,
 | Windows | amd64        | `zcp-windows-amd64.exe` |
 | Windows | arm64        | `zcp-windows-arm64.exe` |
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.4...0.0.5
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.5...0.0.6
