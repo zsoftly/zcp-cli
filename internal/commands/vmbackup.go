@@ -107,6 +107,12 @@ func newVMBackupCreateCmd() *cobra.Command {
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
+			if at < 0 || at > 23 {
+				return fmt.Errorf("--at must be between 0 and 23 (hour of day)")
+			}
+			if immediate != 0 && immediate != 1 {
+				return fmt.Errorf("--immediate must be 0 or 1")
+			}
 			req := vmbackup.CreateRequest{
 				Interval:      interval,
 				At:            at,

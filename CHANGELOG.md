@@ -10,7 +10,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Added
 
 - **`region list`**: List available regions (replaces dead `zone list`)
-- **`profile-info`**: User profile management (get, update, company details, 2FA, time settings, API access, activity logs)
+- **`profile-info`**: User profile management (get, update, company details, time settings, API enable/disable, login activity, activity logs — 2FA status is shown via `get` but not managed)
 - **`vm-backup`**: VM backup operations (list, create)
 - **`cloud-provider list`**: List available cloud providers
 - **`server list`**: List available servers

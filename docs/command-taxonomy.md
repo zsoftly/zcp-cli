@@ -302,15 +302,15 @@ zcp
 │   ├── list                           List block storage backups
 │   └── create                         Create a block storage backup
 │
-├── profile-info                       User profile management
-│   ├── get                            Show user profile
+├── profile-info                       User profile management (2FA status shown via get, not managed)
+│   ├── get                            Show user profile (includes 2FA status)
 │   ├── update                         Update user profile
-│   ├── company                        Update company details
+│   ├── company                        Update company/billing details
 │   ├── time-settings                  Update time/timezone settings
 │   ├── enable-api                     Enable API access
 │   ├── disable-api                    Disable API access
-│   ├── login-activity                 Show login activity
-│   └── activity-logs                  Show activity logs
+│   ├── login-activity <crn>           Show login activity for a CRN
+│   └── activity-logs <crn>            Show activity logs for a CRN
 │
 ├── vm-backup                          VM backup operations
 │   ├── list                           List VM backups
@@ -397,7 +397,6 @@ All commands use slug-based identifiers.
 | `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                         |
 | `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                   |
 | `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                            |
-| `plan`             | ZCP API (STKCNSL) | Service plans and pricing per type                       |
 | `store`            | ZCP API (STKCNSL) | Store items and checkout                                 |
 | `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                 |
 | `product`          | ZCP API (STKCNSL) | Product categories and catalog                           |

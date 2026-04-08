@@ -135,16 +135,44 @@ func newProfileInfoCompanyCmd() *cobra.Command {
 		Short:   "Update company/billing details",
 		Example: `  zcp profile-info company --billing-name "ZSoftly Inc" --country CA --city Ottawa`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runProfileInfoCompany(cmd, userprofile.UpdateCompanyRequest{
-				BillingName: billingName,
-				Country:     country,
-				State:       state,
-				City:        city,
-				PostalCode:  postalCode,
-				Line1:       line1,
-				Line2:       line2,
-				GST:         gst,
-			})
+			var req userprofile.UpdateCompanyRequest
+			changed := false
+			if cmd.Flags().Changed("billing-name") {
+				req.BillingName = billingName
+				changed = true
+			}
+			if cmd.Flags().Changed("country") {
+				req.Country = country
+				changed = true
+			}
+			if cmd.Flags().Changed("state") {
+				req.State = state
+				changed = true
+			}
+			if cmd.Flags().Changed("city") {
+				req.City = city
+				changed = true
+			}
+			if cmd.Flags().Changed("postal-code") {
+				req.PostalCode = postalCode
+				changed = true
+			}
+			if cmd.Flags().Changed("line1") {
+				req.Line1 = line1
+				changed = true
+			}
+			if cmd.Flags().Changed("line2") {
+				req.Line2 = line2
+				changed = true
+			}
+			if cmd.Flags().Changed("gst") {
+				req.GST = gst
+				changed = true
+			}
+			if !changed {
+				return fmt.Errorf("at least one flag is required (e.g. --billing-name, --country)")
+			}
+			return runProfileInfoCompany(cmd, req)
 		},
 	}
 	cmd.Flags().StringVar(&billingName, "billing-name", "", "Billing name")
@@ -187,13 +215,17 @@ func newProfileInfoTimeSettingsCmd() *cobra.Command {
 		Example: `  zcp profile-info time-settings --timezone "America/Toronto"
   zcp profile-info time-settings --timezone "UTC" --date-format "YYYY-MM-DD HH:mm:ss"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if timezone == "" {
-				return fmt.Errorf("--timezone is required")
+			if !cmd.Flags().Changed("timezone") && !cmd.Flags().Changed("date-format") {
+				return fmt.Errorf("at least one flag is required (--timezone or --date-format)")
 			}
-			return runProfileInfoTimeSettings(cmd, userprofile.TimeSettingsRequest{
-				Timezone:       timezone,
-				DateTimeFormat: dateTimeFormat,
-			})
+			var req userprofile.TimeSettingsRequest
+			if cmd.Flags().Changed("timezone") {
+				req.Timezone = timezone
+			}
+			if cmd.Flags().Changed("date-format") {
+				req.DateTimeFormat = dateTimeFormat
+			}
+			return runProfileInfoTimeSettings(cmd, req)
 		},
 	}
 	cmd.Flags().StringVar(&timezone, "timezone", "", "Timezone (required, e.g. America/Toronto)")
@@ -255,10 +287,15 @@ func runProfileInfoEnableAPI(cmd *cobra.Command) error {
 
 func newProfileInfoDisableAPICmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "disable-api",
-		Short:   "Disable API access for the account",
-		Example: `  zcp profile-info disable-api`,
+		Use:   "disable-api",
+		Short: "Disable API access for the account",
+		Example: `  zcp profile-info disable-api
+  zcp profile-info disable-api -y`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if !confirmAction(cmd, "Disable API access for this account?") {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Cancelled.")
+				return nil
+			}
 			return runProfileInfoDisableAPI(cmd)
 		},
 	}

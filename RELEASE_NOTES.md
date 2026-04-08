@@ -4,16 +4,16 @@
 
 ### 8 new commands
 
-| Command                     | Description                                                                  |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `zcp region list`           | List available regions (replaces `zone list`)                                |
-| `zcp profile-info`          | User profile, company details, 2FA, time settings, API access, activity logs |
-| `zcp vm-backup list/create` | VM backup operations                                                         |
-| `zcp cloud-provider list`   | List available cloud providers                                               |
-| `zcp server list`           | List available servers                                                       |
-| `zcp currency list`         | List available currencies                                                    |
-| `zcp billing-cycle list`    | List available billing cycles                                                |
-| `zcp storage-category list` | List available storage categories                                            |
+| Command                     | Description                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------- |
+| `zcp region list`           | List available regions (replaces `zone list`)                                                  |
+| `zcp profile-info`          | User profile, company details, time settings, API access, activity logs (2FA status via `get`) |
+| `zcp vm-backup list/create` | VM backup operations                                                                           |
+| `zcp cloud-provider list`   | List available cloud providers                                                                 |
+| `zcp server list`           | List available servers                                                                         |
+| `zcp currency list`         | List available currencies                                                                      |
+| `zcp billing-cycle list`    | List available billing cycles                                                                  |
+| `zcp storage-category list` | List available storage categories                                                              |
 
 ### Dead code removed
 
