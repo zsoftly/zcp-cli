@@ -106,7 +106,7 @@ func TestVirtualRouterCreate(t *testing.T) {
 		t.Errorf("vr.Slug = %q, want %q", vr.Slug, "new-router")
 	}
 	if gotBody["vr_name"] != "my-router" {
-		t.Errorf("body[name] = %v, want %q", gotBody["vr_name"], "my-router")
+		t.Errorf("body[vr_name] = %v, want %q", gotBody["vr_name"], "my-router")
 	}
 	if gotBody["network_slug"] != "web-network" {
 		t.Errorf("body[network_slug] = %v, want %q", gotBody["network_slug"], "web-network")

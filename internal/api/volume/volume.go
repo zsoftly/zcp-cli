@@ -4,6 +4,7 @@ package volume
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -45,7 +46,7 @@ type BillingCycle struct {
 // Offering represents the billing/plan offering on a volume.
 type Offering struct {
 	ID            string        `json:"id"`
-	Size          interface{}   `json:"size"`
+	Size          json.Number   `json:"size"`
 	Price         string        `json:"price"`
 	BillingStatus bool          `json:"billing_status"`
 	RenewAt       string        `json:"renew_at"`
@@ -57,7 +58,7 @@ type Volume struct {
 	ID                    string          `json:"id"`
 	BlockstorageID        string          `json:"blockstorage_id"`
 	VirtualMachineID      string          `json:"virtual_machine_id"`
-	Size                  interface{}     `json:"size"`
+	Size                  json.Number     `json:"size"`
 	Name                  string          `json:"name"`
 	Slug                  string          `json:"slug"`
 	Description           *string         `json:"description"`

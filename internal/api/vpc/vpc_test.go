@@ -164,6 +164,24 @@ func TestVPCCreate(t *testing.T) {
 	if gotBody["cidr"] != "10.0.0.1" {
 		t.Errorf("body[cidr] = %v, want %q", gotBody["cidr"], "10.0.0.1")
 	}
+	if gotBody["region"] != "noida" {
+		t.Errorf("body[region] = %v, want %q", gotBody["region"], "noida")
+	}
+	if gotBody["project"] != "default-124" {
+		t.Errorf("body[project] = %v, want %q", gotBody["project"], "default-124")
+	}
+	if gotBody["type"] != "Vpc" {
+		t.Errorf("body[type] = %v, want %q", gotBody["type"], "Vpc")
+	}
+	if gotBody["billing_cycle"] != "hourly" {
+		t.Errorf("body[billing_cycle] = %v, want %q", gotBody["billing_cycle"], "hourly")
+	}
+	if gotBody["plan"] != "vpc-1" {
+		t.Errorf("body[plan] = %v, want %q", gotBody["plan"], "vpc-1")
+	}
+	if gotBody["storage_category"] != "nvme" {
+		t.Errorf("body[storage_category] = %v, want %q", gotBody["storage_category"], "nvme")
+	}
 	if gotBody["size"] != "24" {
 		t.Errorf("body[size] = %v, want %q", gotBody["size"], "24")
 	}

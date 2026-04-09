@@ -13,20 +13,20 @@ zcp vpc create \
   --region noida \
   --project default-124 \
   --plan vpc-1 \
-  --cidr 10.1.0.1 \
+  --network-address 10.1.0.1 \
   --size 16 \
   --billing-cycle hourly \
   --storage-category nvme
 ```
 
-Key: `--cidr` is the network address (not CIDR notation), `--size` is the mask separately.
+Key: `--network-address` is just the IP (not CIDR notation), `--size` is the mask separately.
 
 ### ACL list creation fixed
 
-`zcp vpc acl-create-rule` and `zcp acl create` now correctly create ACL lists:
+`zcp vpc acl-create` and `zcp acl create` now correctly create ACL lists:
 
 ```bash
-zcp vpc acl-create-rule my-vpc --name allow-web --description "Allow HTTP"
+zcp vpc acl-create my-vpc --name allow-web --description "Allow HTTP"
 zcp acl create my-vpc --name private-acl --description "Deny all inbound"
 ```
 

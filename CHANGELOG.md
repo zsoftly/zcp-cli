@@ -24,7 +24,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Changed
 
 - **VPC create flags**: Replaced old `--zone`, `--offering`, `--network-domain`, `--lb-provider` with `--cidr`, `--size`, `--plan`, `--billing-cycle`, `--storage-category`, `--cloud-provider`, `--region`, `--project`
-- **ACL commands**: `zcp acl create` and `zcp vpc acl-create-rule` now take `--name` and `--description` (matching the actual API)
+- **ACL commands**: `zcp acl create` and `zcp vpc acl-create` now take `--name` and `--description` (matching the actual API)
 
 **Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.7...0.0.8
 

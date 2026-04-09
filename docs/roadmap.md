@@ -16,7 +16,7 @@ Features planned, in progress, or blocked on platform support.
 
 ---
 
-## Coming in v0.0.8
+## Planned for next patch
 
 ### CLI improvements (no platform dependency)
 

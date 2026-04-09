@@ -2,12 +2,25 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/volume"
 )
+
+// formatSize normalizes a json.Number size into a clean display string.
+func formatSize(size json.Number) string {
+	s := size.String()
+	if s == "" {
+		return "-"
+	}
+	// Strip trailing .0 for whole numbers (e.g. "50.0" -> "50")
+	s = strings.TrimSuffix(s, ".0")
+	return s
+}
 
 // NewVolumeCmd returns the 'volume' cobra command.
 func NewVolumeCmd() *cobra.Command {
@@ -56,7 +69,7 @@ func newVolumeListCmd() *cobra.Command {
 				rows = append(rows, []string{
 					v.Slug,
 					v.Name,
-					fmt.Sprintf("%v", v.Size),
+					formatSize(v.Size),
 					v.VolumeType,
 					regionName,
 					storageName,
@@ -131,7 +144,7 @@ func newVolumeCreateCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				fmt.Sprintf("%v", vol.Size),
+				formatSize(vol.Size),
 				vol.VolumeType,
 				vol.CreatedAt,
 			}}
@@ -182,7 +195,7 @@ func newVolumeAttachCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				fmt.Sprintf("%v", vol.Size),
+				formatSize(vol.Size),
 				vol.VirtualMachineID,
 			}}
 			return printer.PrintTable(headers, rows)
@@ -217,7 +230,7 @@ func newVolumeDetachCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				fmt.Sprintf("%v", vol.Size),
+				formatSize(vol.Size),
 			}}
 			return printer.PrintTable(headers, rows)
 		},
