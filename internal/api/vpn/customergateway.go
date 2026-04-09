@@ -43,6 +43,9 @@ type CustomerGatewayRequest struct {
 	ForceEncap      bool   `json:"forceencap"`
 	SplitConnection bool   `json:"splitConnection"`
 	DPD             bool   `json:"dpd"`
+	CloudProvider   string `json:"cloud_provider"`
+	Region          string `json:"region"`
+	Project         string `json:"project"`
 }
 
 // CustomerGatewayService provides VPN customer gateway API operations.

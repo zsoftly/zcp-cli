@@ -49,12 +49,15 @@ type EgressRule struct {
 
 // CreateRequest holds parameters for creating a network.
 type CreateRequest struct {
-	Name         string `json:"name"`
-	CategorySlug string `json:"category_slug"`
-	ZoneSlug     string `json:"zone_slug,omitempty"`
-	Gateway      string `json:"gateway,omitempty"`
-	Netmask      string `json:"netmask,omitempty"`
-	Description  string `json:"description,omitempty"`
+	Name          string `json:"name"`
+	CategorySlug  string `json:"category_slug"`
+	ZoneSlug      string `json:"zone_slug,omitempty"`
+	Gateway       string `json:"gateway,omitempty"`
+	Netmask       string `json:"netmask,omitempty"`
+	Description   string `json:"description,omitempty"`
+	CloudProvider string `json:"cloud_provider"`
+	Region        string `json:"region"`
+	Project       string `json:"project"`
 }
 
 // UpdateRequest holds parameters for updating a network.

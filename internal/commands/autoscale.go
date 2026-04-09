@@ -94,13 +94,16 @@ func newAutoscaleCreateCmd() *cobra.Command {
 		cooldownPeriod int
 		zoneSlug       string
 		networkSlug    string
+		cloudProvider  string
+		region         string
+		project        string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new autoscale group",
-		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1
-  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300`,
+		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1 --cloud-provider <slug> --region <slug> --project <slug>
+  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --cloud-provider <slug> --region <slug> --project <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -113,6 +116,15 @@ func newAutoscaleCreateCmd() *cobra.Command {
 			}
 			if zoneSlug == "" {
 				return fmt.Errorf("--zone is required")
+			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
 			}
 			if minInstances < 0 {
 				return fmt.Errorf("--min must be >= 0")
@@ -129,6 +141,9 @@ func newAutoscaleCreateCmd() *cobra.Command {
 				CooldownPeriod: cooldownPeriod,
 				ZoneSlug:       zoneSlug,
 				NetworkSlug:    networkSlug,
+				CloudProvider:  cloudProvider,
+				Region:         region,
+				Project:        project,
 			})
 		},
 	}
@@ -140,6 +155,9 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&cooldownPeriod, "cooldown", 0, "Cooldown period in seconds between scaling actions")
 	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug (required)")
 	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 

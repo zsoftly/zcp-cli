@@ -136,12 +136,13 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 
 func newDNSCreateCmd() *cobra.Command {
 	var name, project, dnsProvider string
+	var cloudProvider, region string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a DNS domain",
-		Example: `  zcp dns create --name example.com --project default-60 --dns-provider powerdns
-  zcp dns create --name example.com --project default-60`,
+		Example: `  zcp dns create --name example.com --project default-60 --dns-provider powerdns --cloud-provider <slug> --region <slug>
+  zcp dns create --name example.com --project default-60 --cloud-provider <slug> --region <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -149,19 +150,29 @@ func newDNSCreateCmd() *cobra.Command {
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
 			if dnsProvider == "" {
 				dnsProvider = "powerdns"
 			}
 			return runDNSCreate(cmd, dns.CreateDomainRequest{
-				Name:        name,
-				Project:     project,
-				DNSProvider: dnsProvider,
+				Name:          name,
+				Project:       project,
+				DNSProvider:   dnsProvider,
+				CloudProvider: cloudProvider,
+				Region:        region,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Domain name (required, e.g. example.com)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required, e.g. default-60)")
 	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS provider (default: powerdns)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	return cmd
 }
 

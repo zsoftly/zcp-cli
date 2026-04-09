@@ -231,7 +231,10 @@ func TestVPNUserCreate(t *testing.T) {
 	defer srv.Close()
 
 	svc := vpn.NewUserService(newClient(srv.URL))
-	result, err := svc.Create(context.Background(), "carol", "p@ssw0rd")
+	result, err := svc.Create(context.Background(), vpn.UserCreateRequest{
+		Username: "carol",
+		Password: "p@ssw0rd",
+	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}

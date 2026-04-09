@@ -18,7 +18,14 @@ type NetworkACL struct {
 	VPCSlug     string `json:"vpcSlug"`
 }
 
-// ACLRuleCreateRequest holds parameters for creating a Network ACL rule.
+// ACLCreateRequest holds parameters for creating a Network ACL list.
+type ACLCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	VPC         string `json:"vpc"`
+}
+
+// ACLRuleCreateRequest holds parameters for creating a rule inside an ACL.
 type ACLRuleCreateRequest struct {
 	Protocol    string `json:"protocol"`
 	CIDRList    string `json:"cidrList,omitempty"`
@@ -77,17 +84,13 @@ func (s *Service) List(ctx context.Context, vpcSlug string) ([]NetworkACL, error
 	return acls, nil
 }
 
-// CreateRule creates a new ACL rule in a VPC.
-func (s *Service) CreateRule(ctx context.Context, vpcSlug string, req ACLRuleCreateRequest) (*ACLRule, error) {
+// Create creates a new ACL list in a VPC.
+func (s *Service) Create(ctx context.Context, vpcSlug string, req ACLCreateRequest) error {
 	var env apiResponse
 	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", req, &env); err != nil {
-		return nil, fmt.Errorf("creating ACL rule in VPC %s: %w", vpcSlug, err)
+		return fmt.Errorf("creating ACL in VPC %s: %w", vpcSlug, err)
 	}
-	var rule ACLRule
-	if err := json.Unmarshal(env.Data, &rule); err != nil {
-		return nil, fmt.Errorf("decoding created ACL rule: %w", err)
-	}
-	return &rule, nil
+	return nil
 }
 
 // ReplaceNetworkACL replaces the ACL on a network by slug.

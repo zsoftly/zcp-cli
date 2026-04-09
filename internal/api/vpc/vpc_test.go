@@ -137,9 +137,15 @@ func TestVPCCreate(t *testing.T) {
 
 	req := vpc.CreateRequest{
 		Name:            "my-vpc",
-		ZoneSlug:        "zone-1",
-		VPCOfferingSlug: "offering-1",
-		CIDR:            "10.0.0.0/8",
+		CloudProvider:   "nimbo",
+		Region:          "noida",
+		Project:         "default-124",
+		Type:            "Vpc",
+		BillingCycle:    "hourly",
+		CIDR:            "10.0.0.1",
+		Size:            "24",
+		Plan:            "vpc-1",
+		StorageCategory: "nvme",
 	}
 
 	v, err := svc.Create(context.Background(), req)
@@ -152,14 +158,14 @@ func TestVPCCreate(t *testing.T) {
 	if gotBody["name"] != "my-vpc" {
 		t.Errorf("body[name] = %v, want %q", gotBody["name"], "my-vpc")
 	}
-	if gotBody["zoneSlug"] != "zone-1" {
-		t.Errorf("body[zoneSlug] = %v, want %q", gotBody["zoneSlug"], "zone-1")
+	if gotBody["cloud_provider"] != "nimbo" {
+		t.Errorf("body[cloud_provider] = %v, want %q", gotBody["cloud_provider"], "nimbo")
 	}
-	if gotBody["vpcOfferingSlug"] != "offering-1" {
-		t.Errorf("body[vpcOfferingSlug] = %v, want %q", gotBody["vpcOfferingSlug"], "offering-1")
+	if gotBody["cidr"] != "10.0.0.1" {
+		t.Errorf("body[cidr] = %v, want %q", gotBody["cidr"], "10.0.0.1")
 	}
-	if gotBody["cidr"] != "10.0.0.0/8" {
-		t.Errorf("body[cidr] = %v, want %q", gotBody["cidr"], "10.0.0.0/8")
+	if gotBody["size"] != "24" {
+		t.Errorf("body[size] = %v, want %q", gotBody["size"], "24")
 	}
 }
 

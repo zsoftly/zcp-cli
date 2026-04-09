@@ -48,26 +48,26 @@ func TestACLList(t *testing.T) {
 	}
 }
 
-func TestACLCreateRule(t *testing.T) {
+func TestACLCreate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
+		if r.URL.Path != "/vpcs/my-vpc/network-acl-list" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "Success",
-			"data":   map[string]interface{}{"slug": "rule-1", "protocol": "tcp", "action": "allow"},
+			"status":  "Success",
+			"message": "Adding network ACL list.",
 		})
 	}))
 	defer srv.Close()
 
 	svc := acl.NewService(newClient(srv.URL))
-	rule, err := svc.CreateRule(context.Background(), "my-vpc", acl.ACLRuleCreateRequest{Protocol: "tcp", Action: "allow"})
+	err := svc.Create(context.Background(), "my-vpc", acl.ACLCreateRequest{Name: "web-acl", VPC: "my-vpc"})
 	if err != nil {
-		t.Fatalf("CreateRule() error = %v", err)
-	}
-	if rule.Slug != "rule-1" {
-		t.Errorf("slug = %q, want %q", rule.Slug, "rule-1")
+		t.Fatalf("Create() error = %v", err)
 	}
 }
 

@@ -56,7 +56,7 @@ func newVolumeListCmd() *cobra.Command {
 				rows = append(rows, []string{
 					v.Slug,
 					v.Name,
-					v.Size,
+					fmt.Sprintf("%v", v.Size),
 					v.VolumeType,
 					regionName,
 					storageName,
@@ -131,7 +131,7 @@ func newVolumeCreateCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				vol.Size,
+				fmt.Sprintf("%v", vol.Size),
 				vol.VolumeType,
 				vol.CreatedAt,
 			}}
@@ -182,7 +182,7 @@ func newVolumeAttachCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				vol.Size,
+				fmt.Sprintf("%v", vol.Size),
 				vol.VirtualMachineID,
 			}}
 			return printer.PrintTable(headers, rows)
@@ -217,7 +217,7 @@ func newVolumeDetachCmd() *cobra.Command {
 			rows := [][]string{{
 				vol.Slug,
 				vol.Name,
-				vol.Size,
+				fmt.Sprintf("%v", vol.Size),
 			}}
 			return printer.PrintTable(headers, rows)
 		},

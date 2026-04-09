@@ -119,47 +119,68 @@ func runVPCGet(cmd *cobra.Command, slug string) error {
 }
 
 func newVPCCreateCmd() *cobra.Command {
-	var zoneSlug, name, offeringSlug, cidr, description, networkDomain, lbProvider string
+	var name, cloudProvider, region, project, billingCycle, cidr, size, plan, storageCategory, description, coupon string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPC",
-		Example: `  zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8
-  zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8 --description "Production VPC"`,
+		Example: `  zcp vpc create --name my-vpc --cloud-provider nimbo --region noida --project default-124 --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
+  zcp vpc create --name my-vpc --cloud-provider nimbo --region noida --project default-124 --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			if offeringSlug == "" {
-				return fmt.Errorf("--offering is required")
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
+			if plan == "" {
+				return fmt.Errorf("--plan is required (see: zcp plan router)")
 			}
 			if cidr == "" {
-				return fmt.Errorf("--cidr is required")
+				return fmt.Errorf("--network-address is required (e.g. 10.1.0.1 — not CIDR notation)")
 			}
-			if !strings.Contains(cidr, "/") {
-				return fmt.Errorf("--cidr must be a valid CIDR (e.g. 10.0.0.0/8)")
+			if size == "" {
+				return fmt.Errorf("--size is required (subnet mask size, e.g. 24)")
 			}
-			if zoneSlug == "" {
-				return fmt.Errorf("--zone is required")
+			if billingCycle == "" {
+				return fmt.Errorf("--billing-cycle is required")
+			}
+			if storageCategory == "" {
+				return fmt.Errorf("--storage-category is required")
 			}
 			return runVPCCreate(cmd, vpc.CreateRequest{
-				Name:                       name,
-				ZoneSlug:                   zoneSlug,
-				VPCOfferingSlug:            offeringSlug,
-				CIDR:                       cidr,
-				Description:                description,
-				NetworkDomain:              networkDomain,
-				PublicLoadBalancerProvider: lbProvider,
+				Name:            name,
+				CloudProvider:   cloudProvider,
+				Region:          region,
+				Project:         project,
+				Type:            "Vpc", // Only valid value for VPC creation
+				BillingCycle:    billingCycle,
+				CIDR:            cidr,
+				Size:            size,
+				Plan:            plan,
+				StorageCategory: storageCategory,
+				Description:     description,
+				Coupon:          coupon,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug (required)")
 	cmd.Flags().StringVar(&name, "name", "", "VPC name (required)")
-	cmd.Flags().StringVar(&offeringSlug, "offering", "", "VPC offering slug (required)")
-	cmd.Flags().StringVar(&cidr, "cidr", "", "CIDR block (required, e.g. 10.0.0.0/8)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug (required, see: zcp plan router)")
+	cmd.Flags().StringVar(&cidr, "network-address", "", "Network address (required, e.g. 10.1.0.1 — not CIDR notation)")
+	cmd.Flags().StringVar(&size, "size", "", "Subnet mask size (required, e.g. 24)")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle: hourly, monthly (required)")
+	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (required)")
 	cmd.Flags().StringVar(&description, "description", "", "VPC description")
-	cmd.Flags().StringVar(&networkDomain, "network-domain", "", "Network domain")
-	cmd.Flags().StringVar(&lbProvider, "lb-provider", "", "Public load balancer provider")
+	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code (optional)")
 	return cmd
 }
 
@@ -372,49 +393,31 @@ func runVPCACLList(cmd *cobra.Command, vpcSlug string) error {
 }
 
 func newVPCACLCreateRuleCmd() *cobra.Command {
-	var protocol, cidrList, trafficType, action string
-	var startPort, endPort, number, icmpCode, icmpType int
+	var name, description string
 
 	cmd := &cobra.Command{
-		Use:   "acl-create-rule <vpc-slug>",
-		Short: "Create a network ACL rule in a VPC",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vpc acl-create-rule <vpc-slug> --protocol tcp --action allow --start-port 80 --end-port 80 --cidr 0.0.0.0/0
-  zcp vpc acl-create-rule <vpc-slug> --protocol icmp --action deny --icmp-type 8 --icmp-code 0`,
+		Use:     "acl-create <vpc-slug>",
+		Short:   "Create a network ACL list in a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp vpc acl-create my-vpc --name allow-web --description "Allow HTTP traffic"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if protocol == "" {
-				return fmt.Errorf("--protocol is required")
+			if name == "" {
+				return fmt.Errorf("--name is required")
 			}
-			if action == "" {
-				return fmt.Errorf("--action is required")
-			}
-			return runVPCACLCreateRule(cmd, args[0], vpc.ACLRuleCreateRequest{
-				Protocol:    protocol,
-				CIDRList:    cidrList,
-				StartPort:   startPort,
-				EndPort:     endPort,
-				TrafficType: trafficType,
-				Action:      action,
-				Number:      number,
-				ICMPCode:    icmpCode,
-				ICMPType:    icmpType,
+			return runVPCACLCreate(cmd, args[0], vpc.ACLListCreateRequest{
+				Name:        name,
+				Description: description,
+				VPC:         args[0],
 			})
 		},
 	}
-	cmd.Flags().StringVar(&protocol, "protocol", "", "Protocol (tcp, udp, icmp, all) (required)")
-	cmd.Flags().StringVar(&cidrList, "cidr", "", "CIDR list (e.g. 0.0.0.0/0)")
-	cmd.Flags().IntVar(&startPort, "start-port", 0, "Start port")
-	cmd.Flags().IntVar(&endPort, "end-port", 0, "End port")
-	cmd.Flags().StringVar(&trafficType, "traffic-type", "", "Traffic type (ingress, egress)")
-	cmd.Flags().StringVar(&action, "action", "", "Action (allow, deny) (required)")
-	cmd.Flags().IntVar(&number, "number", 0, "Rule number (ordering)")
-	cmd.Flags().IntVar(&icmpCode, "icmp-code", 0, "ICMP code")
-	cmd.Flags().IntVar(&icmpType, "icmp-type", 0, "ICMP type")
+	cmd.Flags().StringVar(&name, "name", "", "ACL name (required)")
+	cmd.Flags().StringVar(&description, "description", "", "ACL description")
 	return cmd
 }
 
-func runVPCACLCreateRule(cmd *cobra.Command, vpcSlug string, req vpc.ACLRuleCreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+func runVPCACLCreate(cmd *cobra.Command, vpcSlug string, req vpc.ACLListCreateRequest) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
 	}
@@ -423,23 +426,12 @@ func runVPCACLCreateRule(cmd *cobra.Command, vpcSlug string, req vpc.ACLRuleCrea
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	rule, err := svc.CreateACLRule(ctx, vpcSlug, req)
-	if err != nil {
-		return fmt.Errorf("vpc acl-create-rule: %w", err)
+	if err := svc.CreateACL(ctx, vpcSlug, req); err != nil {
+		return fmt.Errorf("vpc acl-create: %w", err)
 	}
 
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"Slug", rule.Slug},
-		{"Protocol", rule.Protocol},
-		{"Action", rule.Action},
-		{"CIDR List", rule.CIDRList},
-		{"Start Port", fmt.Sprintf("%d", rule.StartPort)},
-		{"End Port", fmt.Sprintf("%d", rule.EndPort)},
-		{"Traffic Type", rule.TrafficType},
-		{"Number", fmt.Sprintf("%d", rule.Number)},
-	}
-	return printer.PrintTable(headers, rows)
+	fmt.Fprintf(cmd.ErrOrStderr(), "ACL %q created in VPC %q.\n", req.Name, vpcSlug)
+	return nil
 }
 
 func newVPCACLReplaceCmd() *cobra.Command {

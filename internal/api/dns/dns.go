@@ -41,9 +41,11 @@ type Record struct {
 
 // CreateDomainRequest holds parameters for creating a DNS domain.
 type CreateDomainRequest struct {
-	Name        string `json:"name"`
-	Project     string `json:"project"`
-	DNSProvider string `json:"dns_provider"`
+	Name          string `json:"name"`
+	Project       string `json:"project"`
+	DNSProvider   string `json:"dns_provider"`
+	CloudProvider string `json:"cloud_provider"`
+	Region        string `json:"region"`
 }
 
 // CreateRecordRequest holds parameters for creating a DNS record.

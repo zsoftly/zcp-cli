@@ -1,59 +1,64 @@
-# zcp 0.0.7 Release Notes
+# zcp 0.0.8 Release Notes
 
 ## What's New
 
-### 8 new commands
+### VPC create fixed
 
-| Command                     | Description                                                                                    |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `zcp region list`           | List available regions (replaces `zone list`)                                                  |
-| `zcp profile-info`          | User profile, company details, time settings, API access, activity logs (2FA status via `get`) |
-| `zcp vm-backup list/create` | VM backup operations                                                                           |
-| `zcp cloud-provider list`   | List available cloud providers                                                                 |
-| `zcp server list`           | List available servers                                                                         |
-| `zcp currency list`         | List available currencies                                                                      |
-| `zcp billing-cycle list`    | List available billing cycles                                                                  |
-| `zcp storage-category list` | List available storage categories                                                              |
+VPC creation now works with the correct payload structure:
 
-### Dead code removed
+```bash
+zcp vpc create \
+  --name my-vpc \
+  --cloud-provider nimbo \
+  --region noida \
+  --project default-124 \
+  --plan vpc-1 \
+  --cidr 10.1.0.1 \
+  --size 16 \
+  --billing-cycle hourly \
+  --storage-category nvme
+```
 
-11 commands and 13 API packages that still pointed at old `/restapi/` endpoints have been removed. These commands were broken since v0.0.6 and would return 403 errors:
+Key: `--cidr` is the network address (not CIDR notation), `--size` is the mask separately.
 
-`zone`, `offering`, `resource`, `host`, `cost`, `usage`, `internal-lb`, `snapshot-policy`, `security-group`, `tag`, `admin`
+### ACL list creation fixed
 
-Use the STKCNSL replacements instead:
+`zcp vpc acl-create-rule` and `zcp acl create` now correctly create ACL lists:
 
-| Old command               | Replacement                 |
-| ------------------------- | --------------------------- |
-| `zcp zone list`           | `zcp region list`           |
-| `zcp offering compute`    | `zcp plan vm`               |
-| `zcp offering storage`    | `zcp plan storage`          |
-| `zcp cost summary`        | `zcp billing costs`         |
-| `zcp usage list`          | `zcp billing monthly-usage` |
-| `zcp tag create`          | `zcp instance tag-create`   |
-| `zcp admin list-accounts` | Not available via API       |
+```bash
+zcp vpc acl-create-rule my-vpc --name allow-web --description "Allow HTTP"
+zcp acl create my-vpc --name private-acl --description "Deny all inbound"
+```
 
-### Auth validate fixed
+### Create commands gain required flags
 
-`zcp auth validate` now correctly hits the STKCNSL region API instead of the dead zone API.
+`--cloud-provider`, `--region`, `--project` added to: network, vpc, virtualrouter, dns, vpn, autoscale create commands.
+
+### Volume Size type fix
+
+Volume list no longer fails when the API returns size as a number.
+
+### Roadmap published
+
+See `docs/roadmap.md` for what's working, what's coming, and what's blocked on the platform.
 
 ---
 
-## 42 total commands
+## Known limitations (blocked on platform)
 
-The CLI now has 42 commands, all backed by the STKCNSL API with zero legacy code remaining.
+These require API changes from the STKCNSL team:
+
+- **No DELETE endpoints** for VPCs, networks, virtual routers, IP addresses, or ACL lists
+- **No ACL rule CRUD** — can create ACL lists but not rules inside them
+- **Network create (isolated)** — `networkofferingid` not resolvable for nimbo/noida
+- **DNS create** — needs admin-side `cloud_provider_setup` provisioning
+- **billing cancel-service for VPCs** — returns "service not found"
+
+See `docs/roadmap.md` for full details.
 
 ---
 
 ## Installation
-
-### Quick Install (Recommended)
-
-**Windows:**
-
-```powershell
-irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
-```
 
 **macOS/Linux/WSL:**
 
@@ -61,19 +66,10 @@ irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | ie
 curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.sh | bash
 ```
 
-### Manual Install
+**Windows:**
 
-Download the binary for your platform from the assets below, make it executable, and move it to your `PATH`.
+```powershell
+irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
+```
 
-## Platforms
-
-| OS      | Architecture | Binary                  |
-| ------- | ------------ | ----------------------- |
-| Linux   | amd64        | `zcp-linux-amd64`       |
-| Linux   | arm64        | `zcp-linux-arm64`       |
-| macOS   | amd64        | `zcp-darwin-amd64`      |
-| macOS   | arm64        | `zcp-darwin-arm64`      |
-| Windows | amd64        | `zcp-windows-amd64.exe` |
-| Windows | arm64        | `zcp-windows-arm64.exe` |
-
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.6...0.0.7
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.7...0.0.8

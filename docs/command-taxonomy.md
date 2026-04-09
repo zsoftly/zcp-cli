@@ -113,7 +113,7 @@ zcp
 │   ├── delete                         Delete a VPC
 │   ├── restart                        Restart a VPC
 │   ├── acl-list                       List ACL rules for a VPC
-│   ├── acl-create-rule                Create an ACL rule in a VPC
+│   ├── acl-create                     Create a network ACL list in a VPC
 │   ├── acl-replace                    Replace the ACL on a VPC network
 │   └── vpn-gateway                    VPN gateway operations within a VPC
 │       ├── list                       List VPN gateways

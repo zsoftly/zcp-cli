@@ -16,7 +16,7 @@ func NewACLCmd() *cobra.Command {
 		Short: "Manage Network ACLs",
 	}
 	cmd.AddCommand(newACLListCmd())
-	cmd.AddCommand(newACLCreateRuleCmd())
+	cmd.AddCommand(newACLCreateCmd())
 	cmd.AddCommand(newACLReplaceCmd())
 	return cmd
 }
@@ -63,50 +63,32 @@ func runACLList(cmd *cobra.Command, vpcSlug string) error {
 	return printer.PrintTable(headers, rows)
 }
 
-func newACLCreateRuleCmd() *cobra.Command {
-	var protocol, cidrList, trafficType, action string
-	var startPort, endPort, number, icmpCode, icmpType int
+func newACLCreateCmd() *cobra.Command {
+	var name, description string
 
 	cmd := &cobra.Command{
-		Use:   "create-rule <vpc-slug>",
-		Short: "Create a network ACL rule in a VPC",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp acl create-rule <vpc-slug> --protocol tcp --action allow --start-port 80 --end-port 80 --cidr 0.0.0.0/0
-  zcp acl create-rule <vpc-slug> --protocol icmp --action deny --icmp-type 8 --icmp-code 0`,
+		Use:     "create <vpc-slug>",
+		Short:   "Create a network ACL in a VPC",
+		Args:    cobra.ExactArgs(1),
+		Example: `  zcp acl create my-vpc --name allow-web --description "Allow HTTP traffic"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if protocol == "" {
-				return fmt.Errorf("--protocol is required")
+			if name == "" {
+				return fmt.Errorf("--name is required")
 			}
-			if action == "" {
-				return fmt.Errorf("--action is required")
-			}
-			return runACLCreateRule(cmd, args[0], acl.ACLRuleCreateRequest{
-				Protocol:    protocol,
-				CIDRList:    cidrList,
-				StartPort:   startPort,
-				EndPort:     endPort,
-				TrafficType: trafficType,
-				Action:      action,
-				Number:      number,
-				ICMPCode:    icmpCode,
-				ICMPType:    icmpType,
+			return runACLCreate(cmd, args[0], acl.ACLCreateRequest{
+				Name:        name,
+				Description: description,
+				VPC:         args[0],
 			})
 		},
 	}
-	cmd.Flags().StringVar(&protocol, "protocol", "", "Protocol (tcp, udp, icmp, all) (required)")
-	cmd.Flags().StringVar(&cidrList, "cidr", "", "CIDR list (e.g. 0.0.0.0/0)")
-	cmd.Flags().IntVar(&startPort, "start-port", 0, "Start port")
-	cmd.Flags().IntVar(&endPort, "end-port", 0, "End port")
-	cmd.Flags().StringVar(&trafficType, "traffic-type", "", "Traffic type (ingress, egress)")
-	cmd.Flags().StringVar(&action, "action", "", "Action (allow, deny) (required)")
-	cmd.Flags().IntVar(&number, "number", 0, "Rule number (ordering)")
-	cmd.Flags().IntVar(&icmpCode, "icmp-code", 0, "ICMP code")
-	cmd.Flags().IntVar(&icmpType, "icmp-type", 0, "ICMP type")
+	cmd.Flags().StringVar(&name, "name", "", "ACL name (required)")
+	cmd.Flags().StringVar(&description, "description", "", "ACL description")
 	return cmd
 }
 
-func runACLCreateRule(cmd *cobra.Command, vpcSlug string, req acl.ACLRuleCreateRequest) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
+func runACLCreate(cmd *cobra.Command, vpcSlug string, req acl.ACLCreateRequest) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
 	}
@@ -115,23 +97,12 @@ func runACLCreateRule(cmd *cobra.Command, vpcSlug string, req acl.ACLRuleCreateR
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	rule, err := svc.CreateRule(ctx, vpcSlug, req)
-	if err != nil {
-		return fmt.Errorf("acl create-rule: %w", err)
+	if err := svc.Create(ctx, vpcSlug, req); err != nil {
+		return fmt.Errorf("acl create: %w", err)
 	}
 
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"Slug", rule.Slug},
-		{"Protocol", rule.Protocol},
-		{"Action", rule.Action},
-		{"CIDR List", rule.CIDRList},
-		{"Start Port", fmt.Sprintf("%d", rule.StartPort)},
-		{"End Port", fmt.Sprintf("%d", rule.EndPort)},
-		{"Traffic Type", rule.TrafficType},
-		{"Number", fmt.Sprintf("%d", rule.Number)},
-	}
-	return printer.PrintTable(headers, rows)
+	fmt.Fprintf(cmd.ErrOrStderr(), "ACL %q created in VPC %q.\n", req.Name, vpcSlug)
+	return nil
 }
 
 func newACLReplaceCmd() *cobra.Command {

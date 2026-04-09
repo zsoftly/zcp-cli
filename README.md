@@ -288,8 +288,12 @@ zcp vm-snapshot revert <slug>
 # Networks
 zcp network list
 zcp network categories
-zcp network create --name my-net --category <slug>
+zcp network create --name my-net --category <slug> --cloud-provider nimbo --region noida --project default-124
 zcp network update <slug> --name "New Name"
+
+# VPC tier networks
+zcp network create --name public-tier --cloud-provider nimbo --region noida --project default-124 \
+  --vpc <vpc-slug> --type Vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --acl-id <acl-id>
 
 # Public IP addresses
 zcp ip list
@@ -321,13 +325,20 @@ zcp portforward create \
 ```bash
 # VPCs
 zcp vpc list
-zcp vpc create --zone <slug> --name my-vpc --offering <slug> --cidr 10.0.0.0/8
-zcp vpc delete <slug>
+zcp vpc create \
+  --name my-vpc \
+  --cloud-provider nimbo \
+  --region noida \
+  --project default-124 \
+  --plan vpc-1 \
+  --network-address 10.1.0.1 \
+  --size 16 \
+  --billing-cycle hourly \
+  --storage-category nvme
 
-# Network ACLs
-zcp acl list
-zcp acl create --vpc <slug> --name my-acl
-zcp acl delete <slug>
+# Network ACL lists
+zcp acl list <vpc-slug>
+zcp acl create <vpc-slug> --name my-acl --description "Allow web traffic"
 
 # Public load balancers
 zcp loadbalancer list
@@ -362,7 +373,7 @@ zcp dns list
 zcp dns show <slug>
 
 # Create a domain
-zcp dns create --name example.com --project my-project
+zcp dns create --name example.com --project my-project --cloud-provider nimbo --region noida --dns-provider powerdns
 
 # Create a record
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
@@ -388,7 +399,7 @@ zcp backup delete <slug>
 ```bash
 zcp autoscale list
 zcp autoscale get <slug>
-zcp autoscale create --name my-policy --min 1 --max 5
+zcp autoscale create --name my-policy --min 1 --max 5 --cloud-provider nimbo --region noida --project default-124
 zcp autoscale delete <slug>
 ```
 
