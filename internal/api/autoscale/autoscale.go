@@ -74,6 +74,9 @@ type CreateRequest struct {
 	CooldownPeriod int    `json:"cooldownPeriod,omitempty"`
 	ZoneSlug       string `json:"zoneSlug"`
 	NetworkSlug    string `json:"networkSlug,omitempty"`
+	CloudProvider  string `json:"cloud_provider"`
+	Region         string `json:"region"`
+	Project        string `json:"project"`
 }
 
 // ChangePlanRequest holds parameters for changing an autoscale group's plan.

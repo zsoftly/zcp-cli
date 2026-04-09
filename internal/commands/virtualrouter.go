@@ -70,13 +70,14 @@ func runVirtualRouterList(cmd *cobra.Command) error {
 }
 
 func newVirtualRouterCreateCmd() *cobra.Command {
-	var name, networkSlug, planSlug, zoneSlug string
+	var name, networkSlug, planSlug string
+	var cloudProvider, region, project string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a virtual router",
-		Example: `  zcp virtual-router create --name my-router --network <slug>
-  zcp vr create --name my-router --network <slug> --plan <slug>`,
+		Example: `  zcp virtual-router create --name my-router --network <slug> --cloud-provider nimbo --region noida --project default-124
+  zcp virtual-router create --name my-router --network <slug> --plan <slug> --cloud-provider nimbo --region noida --project default-124`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -84,18 +85,31 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
 			return runVirtualRouterCreate(cmd, virtualrouter.CreateRequest{
-				Name:        name,
-				NetworkSlug: networkSlug,
-				PlanSlug:    planSlug,
-				ZoneSlug:    zoneSlug,
+				Name:          name,
+				NetworkSlug:   networkSlug,
+				PlanSlug:      planSlug,
+				CloudProvider: cloudProvider,
+				Region:        region,
+				Project:       project,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Virtual router name (required)")
 	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
 	cmd.Flags().StringVar(&planSlug, "plan", "", "Virtual router plan slug")
-	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 

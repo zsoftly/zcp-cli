@@ -108,12 +108,13 @@ func newVPNCGCreateCmd() *cobra.Command {
 		ikeEncryption, ikeHash, ikeVersion             string
 		espEncryption, espHash                         string
 		forceEncap, splitConnection, dpd               bool
+		cloudProvider, region, project                 string
 	)
 
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a new VPN customer gateway",
-		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1`,
+		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 --cloud-provider <slug> --region <slug> --project <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -133,6 +134,15 @@ func newVPNCGCreateCmd() *cobra.Command {
 			if espPolicy == "" {
 				return fmt.Errorf("--esp-policy is required")
 			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
 			return runVPNCGCreate(cmd, vpn.CustomerGatewayRequest{
 				Name:            name,
 				Gateway:         gateway,
@@ -150,12 +160,18 @@ func newVPNCGCreateCmd() *cobra.Command {
 				ForceEncap:      forceEncap,
 				SplitConnection: splitConnection,
 				DPD:             dpd,
+				CloudProvider:   cloudProvider,
+				Region:          region,
+				Project:         project,
 			})
 		},
 	}
 	addCustomerGatewayFlags(cmd, &name, &gateway, &cidr, &psk, &ikePolicy, &espPolicy,
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &espEncryption, &espHash,
 		&forceEncap, &splitConnection, &dpd)
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 
@@ -357,15 +373,25 @@ func runVPNUserList(cmd *cobra.Command) error {
 
 func newVPNUserCreateCmd() *cobra.Command {
 	var username, password string
+	var cloudProvider, region, project string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPN user",
-		Example: `  zcp vpn user create --username alice
-  zcp vpn user create --username alice --password secret`,
+		Example: `  zcp vpn user create --username alice --cloud-provider <slug> --region <slug> --project <slug>
+  zcp vpn user create --username alice --password secret --cloud-provider <slug> --region <slug> --project <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if username == "" {
 				return fmt.Errorf("--username is required")
+			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
 			}
 			if password == "" {
 				// Prompt securely for password
@@ -385,15 +411,24 @@ func newVPNUserCreateCmd() *cobra.Command {
 					return fmt.Errorf("password cannot be empty")
 				}
 			}
-			return runVPNUserCreate(cmd, username, password)
+			return runVPNUserCreate(cmd, vpn.UserCreateRequest{
+				Username:      username,
+				Password:      password,
+				CloudProvider: cloudProvider,
+				Region:        region,
+				Project:       project,
+			})
 		},
 	}
 	cmd.Flags().StringVar(&username, "username", "", "VPN username (required)")
 	cmd.Flags().StringVar(&password, "password", "", "VPN password (prompted if not provided)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 
-func runVPNUserCreate(cmd *cobra.Command, username, password string) error {
+func runVPNUserCreate(cmd *cobra.Command, req vpn.UserCreateRequest) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -403,7 +438,7 @@ func runVPNUserCreate(cmd *cobra.Command, username, password string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	u, err := svc.Create(ctx, username, password)
+	u, err := svc.Create(ctx, req)
 	if err != nil {
 		return fmt.Errorf("vpn user create: %w", err)
 	}

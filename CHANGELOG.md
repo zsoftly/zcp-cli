@@ -5,6 +5,31 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2026-04-09
+
+### Fixed
+
+- **VPC create**: Correct payload structure — `cidr` is the network address (e.g. `10.1.0.1`), `size` is the mask (e.g. `16`), requires `type=Vpc`, `billing_cycle`, `plan` (from router plans), `storage_category`
+- **ACL create**: Fixed to create ACL lists (name, description, vpc) instead of incorrectly sending protocol/port rule fields
+- **Volume Size type**: Fixed `string` to `interface{}` — API returns number, not string
+- **JSON tags**: Fixed camelCase to snake_case for `cloud_provider` across vpc, vpn, autoscale request structs
+- **VPN user create**: Updated to accept `UserCreateRequest` struct with cloud_provider, region, project
+
+### Added
+
+- **VPC tier/subnet creation**: Confirmed working via `POST /networks` with `type=Vpc`, `gateway`, `netmask`, `acl_id`
+- **`--cloud-provider`, `--region`, `--project` flags**: Added to network, vpc, virtualrouter, dns, vpn, autoscale create commands
+- **`docs/roadmap.md`**: Feature roadmap documenting what works, what's coming, and what's blocked on platform
+
+### Changed
+
+- **VPC create flags**: Replaced old `--zone`, `--offering`, `--network-domain`, `--lb-provider` with `--cidr`, `--size`, `--plan`, `--billing-cycle`, `--storage-category`, `--cloud-provider`, `--region`, `--project`
+- **ACL commands**: `zcp acl create` and `zcp vpc acl-create` now take `--name` and `--description` (matching the actual API)
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.7...0.0.8
+
+---
+
 ## [0.0.7] - 2026-04-08
 
 ### Added

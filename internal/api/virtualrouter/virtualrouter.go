@@ -28,10 +28,12 @@ type VirtualRouter struct {
 
 // CreateRequest holds parameters for creating a virtual router.
 type CreateRequest struct {
-	Name        string `json:"name"`
-	NetworkSlug string `json:"network_slug"`
-	PlanSlug    string `json:"plan_slug,omitempty"`
-	ZoneSlug    string `json:"zone_slug,omitempty"`
+	Name          string `json:"vr_name"`
+	NetworkSlug   string `json:"network_slug"`
+	PlanSlug      string `json:"plan,omitempty"`
+	CloudProvider string `json:"cloud_provider"`
+	Region        string `json:"region"`
+	Project       string `json:"project"`
 }
 
 type listVirtualRouterResponse struct {

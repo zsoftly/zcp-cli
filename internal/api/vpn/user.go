@@ -18,8 +18,11 @@ type User struct {
 
 // UserCreateRequest holds parameters for creating a VPN user.
 type UserCreateRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	CloudProvider string `json:"cloud_provider"`
+	Region        string `json:"region"`
+	Project       string `json:"project"`
 }
 
 // apiResponse is the STKCNSL response envelope.
@@ -51,14 +54,10 @@ func (s *UserService) List(ctx context.Context) ([]User, error) {
 	return users, nil
 }
 
-// Create adds a new VPN user with the given username and password.
-func (s *UserService) Create(ctx context.Context, username, password string) (*User, error) {
-	body := UserCreateRequest{
-		Username: username,
-		Password: password,
-	}
+// Create adds a new VPN user with the given request parameters.
+func (s *UserService) Create(ctx context.Context, req UserCreateRequest) (*User, error) {
 	var env apiResponse
-	if err := s.client.Post(ctx, "/vpn-users", body, &env); err != nil {
+	if err := s.client.Post(ctx, "/vpn-users", req, &env); err != nil {
 		return nil, fmt.Errorf("creating VPN user: %w", err)
 	}
 	var u User

@@ -23,13 +23,18 @@ type VPC struct {
 
 // CreateRequest holds parameters for creating a VPC.
 type CreateRequest struct {
-	Name                       string `json:"name"`
-	ZoneSlug                   string `json:"zoneSlug"`
-	VPCOfferingSlug            string `json:"vpcOfferingSlug"`
-	CIDR                       string `json:"cidr"`
-	Description                string `json:"description,omitempty"`
-	NetworkDomain              string `json:"networkDomain,omitempty"`
-	PublicLoadBalancerProvider string `json:"publicLoadBalancerProvider,omitempty"`
+	Name            string `json:"name"`
+	CloudProvider   string `json:"cloud_provider"`
+	Region          string `json:"region"`
+	Project         string `json:"project"`
+	Type            string `json:"type"`
+	BillingCycle    string `json:"billing_cycle"`
+	CIDR            string `json:"cidr"`
+	Size            string `json:"size"`
+	Plan            string `json:"plan"`
+	StorageCategory string `json:"storage_category"`
+	Description     string `json:"description,omitempty"`
+	Coupon          string `json:"coupon,omitempty"`
 }
 
 // UpdateRequest holds parameters for updating a VPC.
@@ -46,17 +51,11 @@ type NetworkACL struct {
 	Status      string `json:"status"`
 }
 
-// ACLRuleCreateRequest holds parameters for creating a network ACL rule.
-type ACLRuleCreateRequest struct {
-	Protocol    string `json:"protocol"`
-	CIDRList    string `json:"cidrList,omitempty"`
-	StartPort   int    `json:"startPort,omitempty"`
-	EndPort     int    `json:"endPort,omitempty"`
-	TrafficType string `json:"trafficType,omitempty"`
-	Action      string `json:"action"`
-	Number      int    `json:"number,omitempty"`
-	ICMPCode    int    `json:"icmpCode,omitempty"`
-	ICMPType    int    `json:"icmpType,omitempty"`
+// ACLListCreateRequest holds parameters for creating a Network ACL list.
+type ACLListCreateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	VPC         string `json:"vpc"`
 }
 
 // ACLRule represents a single ACL rule.
@@ -193,17 +192,13 @@ func (s *Service) ListACLs(ctx context.Context, vpcSlug string) ([]NetworkACL, e
 	return acls, nil
 }
 
-// CreateACLRule creates a new ACL rule in a VPC.
-func (s *Service) CreateACLRule(ctx context.Context, vpcSlug string, req ACLRuleCreateRequest) (*ACLRule, error) {
+// CreateACL creates a new ACL list in a VPC.
+func (s *Service) CreateACL(ctx context.Context, vpcSlug string, req ACLListCreateRequest) error {
 	var env apiResponse
 	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", req, &env); err != nil {
-		return nil, fmt.Errorf("creating ACL rule in VPC %s: %w", vpcSlug, err)
+		return fmt.Errorf("creating ACL in VPC %s: %w", vpcSlug, err)
 	}
-	var rule ACLRule
-	if err := json.Unmarshal(env.Data, &rule); err != nil {
-		return nil, fmt.Errorf("decoding created ACL rule: %w", err)
-	}
-	return &rule, nil
+	return nil
 }
 
 // ReplaceNetworkACL replaces the ACL on a network by slug.

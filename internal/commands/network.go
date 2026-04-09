@@ -68,12 +68,13 @@ func runNetworkList(cmd *cobra.Command) error {
 
 func newNetworkCreateCmd() *cobra.Command {
 	var name, categorySlug, zoneSlug, gateway, netmask, description string
+	var cloudProvider, region, project string
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new isolated network",
-		Example: `  zcp network create --name my-net --category <slug>
-  zcp network create --name my-net --category <slug> --gateway 10.1.1.1 --netmask 255.255.255.0`,
+		Example: `  zcp network create --name my-net --category <slug> --cloud-provider <slug> --region <slug> --project <slug>
+  zcp network create --name my-net --category <slug> --gateway 10.1.1.1 --netmask 255.255.255.0 --cloud-provider <slug> --region <slug> --project <slug>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -81,13 +82,25 @@ func newNetworkCreateCmd() *cobra.Command {
 			if categorySlug == "" {
 				return fmt.Errorf("--category is required")
 			}
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
 			return runNetworkCreate(cmd, network.CreateRequest{
-				Name:         name,
-				CategorySlug: categorySlug,
-				ZoneSlug:     zoneSlug,
-				Gateway:      gateway,
-				Netmask:      netmask,
-				Description:  description,
+				Name:          name,
+				CategorySlug:  categorySlug,
+				ZoneSlug:      zoneSlug,
+				Gateway:       gateway,
+				Netmask:       netmask,
+				Description:   description,
+				CloudProvider: cloudProvider,
+				Region:        region,
+				Project:       project,
 			})
 		},
 	}
@@ -97,6 +110,9 @@ func newNetworkCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP")
 	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask (e.g. 255.255.255.0)")
 	cmd.Flags().StringVar(&description, "description", "", "Network description")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 
