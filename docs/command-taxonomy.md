@@ -1,7 +1,7 @@
 # ZCP CLI Command Taxonomy (v0.0.6)
 
 **CLI name**: `zcp`
-**Base URL**: `https://portal.webberstop.com/backend/api`
+**Base URL**: `https://api.zcp.zsoftly.ca`
 **Authentication**: Bearer token (`--bearer-token` during profile add)
 
 ---
@@ -351,14 +351,14 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 ## Identifier Conventions
 
 v0.0.6 uses **slug-based identifiers** for most resources. Slugs are human-readable
-strings assigned by the API (e.g., `my-vm-123`, `root-4153`, `example-com-1`).
+strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
 | Context         | Flag / Argument                   | Example                                  |
 | --------------- | --------------------------------- | ---------------------------------------- |
 | VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`             |
-| Volume          | `--volume`                        | `zcp snapshot create --volume root-4153` |
+| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234` |
 | DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`             |
-| Project         | `--project`                       | `--project default-60`                   |
+| Project         | `--project`                       | `--project my-project`                   |
 | Region          | `--region`                        | `--region yow-1`                         |
 | VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`               |
 | IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`      |

@@ -5,6 +5,33 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9] - 2026-04-14
+
+### Added
+
+- **Environment variable overrides**: `ZCP_PROJECT`, `ZCP_REGION`, `ZCP_CLOUD_PROVIDER`, `ZCP_OUTPUT`, `ZCP_DEBUG` — reduces repetitive flags in CI/CD and scripting
+- **Zero-config mode**: CLI can now operate with only `ZCP_BEARER_TOKEN` and `ZCP_API_URL` env vars — no config file or profile required
+- **`ZCP_PROFILE` env var**: Selects the active profile without `--profile` flag
+- **`ZCP_BEARER_TOKEN` env var**: Overrides profile credentials at runtime
+- **`ZCP_API_URL` env var**: Overrides the API base URL at runtime
+- **Env var tests**: 14 new tests covering all resolution helpers and config env overrides
+
+### Fixed
+
+- **Kubernetes create**: Restored missing `--billing-cycle` validation (was accidentally removed)
+- **Kubernetes create**: Fixed resolve order — `resolveRegion/resolveProject/resolveCloudProvider` now called before validation checks so env vars are applied correctly
+- **All create commands**: Consistent resolve order — env var resolution always runs before required-field validation across all 18 command files
+
+### Changed
+
+- **`config.ResolveProfile`**: Now checks `ZCP_PROFILE` env var before falling back to `active_profile` in config file
+- **`config.ActiveAPIURL`**: Now checks `ZCP_API_URL` env var before falling back to profile URL
+- **Documentation**: Updated `docs/configuration.md` and `README.md` with all new environment variables and CI/CD usage examples
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.8...0.0.9
+
+---
+
 ## [0.0.8] - 2026-04-09
 
 ### Fixed

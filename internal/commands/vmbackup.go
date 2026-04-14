@@ -86,8 +86,8 @@ func newVMBackupCreateCmd() *cobra.Command {
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project default-60
-  zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project default-60`,
+		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project
+  zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
@@ -104,6 +104,7 @@ func newVMBackupCreateCmd() *cobra.Command {
 			if psudoService == "" {
 				return fmt.Errorf("--psudo-service is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}

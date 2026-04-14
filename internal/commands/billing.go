@@ -637,7 +637,7 @@ func newBillingCancelServiceCmd() *cobra.Command {
 		Use:   "cancel-service <subscription-slug>",
 		Short: "Submit a cancellation request for a service",
 		Example: `  zcp billing cancel-service demo-prj-vm --service "Virtual Machine" --reason not_needed_anymore
-  zcp billing cancel-service root-4153 --service "Block Storage" --reason not_needed_anymore --type Immediate`,
+  zcp billing cancel-service my-volume --service "Block Storage" --reason not_needed_anymore --type Immediate`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if serviceName == "" {

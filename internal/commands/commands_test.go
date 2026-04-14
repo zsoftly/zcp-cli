@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -36,6 +37,100 @@ func execCmd(t *testing.T, cmd *cobra.Command, args ...string) (stdout, stderr s
 
 	err = root.Execute()
 	return outBuf.String(), errBuf.String(), err
+}
+
+// ─── Environment variable resolution ────────────────────────────────────────
+
+func TestResolveProjectFlagTakesPrecedence(t *testing.T) {
+	os.Setenv("ZCP_PROJECT", "env-project")
+	defer os.Unsetenv("ZCP_PROJECT")
+
+	result := resolveProject("flag-project")
+	if result != "flag-project" {
+		t.Errorf("resolveProject = %q, want %q", result, "flag-project")
+	}
+}
+
+func TestResolveProjectFallsBackToEnv(t *testing.T) {
+	os.Setenv("ZCP_PROJECT", "env-project")
+	defer os.Unsetenv("ZCP_PROJECT")
+
+	result := resolveProject("")
+	if result != "env-project" {
+		t.Errorf("resolveProject = %q, want %q", result, "env-project")
+	}
+}
+
+func TestResolveProjectEmptyWhenNeitherSet(t *testing.T) {
+	os.Unsetenv("ZCP_PROJECT")
+
+	result := resolveProject("")
+	if result != "" {
+		t.Errorf("resolveProject = %q, want empty", result)
+	}
+}
+
+func TestResolveRegionFlagTakesPrecedence(t *testing.T) {
+	os.Setenv("ZCP_REGION", "env-region")
+	defer os.Unsetenv("ZCP_REGION")
+
+	result := resolveRegion("flag-region")
+	if result != "flag-region" {
+		t.Errorf("resolveRegion = %q, want %q", result, "flag-region")
+	}
+}
+
+func TestResolveRegionFallsBackToEnv(t *testing.T) {
+	os.Setenv("ZCP_REGION", "env-region")
+	defer os.Unsetenv("ZCP_REGION")
+
+	result := resolveRegion("")
+	if result != "env-region" {
+		t.Errorf("resolveRegion = %q, want %q", result, "env-region")
+	}
+}
+
+func TestResolveCloudProviderFlagTakesPrecedence(t *testing.T) {
+	os.Setenv("ZCP_CLOUD_PROVIDER", "env-cp")
+	defer os.Unsetenv("ZCP_CLOUD_PROVIDER")
+
+	result := resolveCloudProvider("flag-cp")
+	if result != "flag-cp" {
+		t.Errorf("resolveCloudProvider = %q, want %q", result, "flag-cp")
+	}
+}
+
+func TestResolveCloudProviderFallsBackToEnv(t *testing.T) {
+	os.Setenv("ZCP_CLOUD_PROVIDER", "env-cp")
+	defer os.Unsetenv("ZCP_CLOUD_PROVIDER")
+
+	result := resolveCloudProvider("")
+	if result != "env-cp" {
+		t.Errorf("resolveCloudProvider = %q, want %q", result, "env-cp")
+	}
+}
+
+// ─── Kubernetes billing-cycle validation ────────────────────────────────────
+
+func TestK8sCreateRequiresBillingCycle(t *testing.T) {
+	cmd := NewKubernetesCmd()
+	root := newTestRoot()
+	root.AddCommand(cmd)
+
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs([]string{"kubernetes", "create",
+		"--name", "test", "--version", "v1.28.4", "--plan", "k8s-1",
+		"--cloud-provider", "nimbo", "--region", "noida", "--project", "default",
+		"--workers", "1", "--ssh-key", "mykey"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected error when --billing-cycle is missing")
+	}
+	if !strings.Contains(err.Error(), "--billing-cycle is required") {
+		t.Errorf("error = %q, want '--billing-cycle is required'", err)
+	}
 }
 
 // ─── Finding 4: company rejects all-empty, sends only changed fields ────────

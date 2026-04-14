@@ -13,7 +13,7 @@ import (
 
 const (
 	// DefaultAPIURL is the default ZCP API base URL.
-	DefaultAPIURL = "https://portal.webberstop.com/backend/api"
+	DefaultAPIURL = "https://api.zcp.zsoftly.ca"
 	// DefaultTimeout is the default HTTP request timeout in seconds.
 	DefaultTimeout = 30
 )
@@ -114,33 +114,52 @@ func Save(cfg *Config) error {
 }
 
 // ResolveProfile returns the Profile to use for a request.
-// It prefers profileName if provided, else cfg.ActiveProfile.
-// Returns an error if no profile is configured or credentials are missing.
+// It prefers profileName if provided, else ZCP_PROFILE env var, else cfg.ActiveProfile.
+// It also applies ZCP_BEARER_TOKEN and ZCP_API_URL environment variable overrides.
+// Returns an error if no profile is configured or credentials are missing (unless overridden by env).
 func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 	name := profileName
 	if name == "" {
-		name = cfg.ActiveProfile
+		name = os.Getenv("ZCP_PROFILE")
 	}
 	if name == "" {
-		return nil, errors.New("no active profile configured — run: zcp profile add")
+		name = cfg.ActiveProfile
 	}
 
-	p, ok := cfg.Profiles[name]
-	if !ok {
-		return nil, fmt.Errorf("profile %q not found — run: zcp profile list", name)
+	// Start with a copy of the profile if it exists
+	var p Profile
+	if name != "" {
+		if prof, ok := cfg.Profiles[name]; ok {
+			p = prof
+		}
 	}
+
+	// Override with environment variables
+	if envToken := os.Getenv("ZCP_BEARER_TOKEN"); envToken != "" {
+		p.BearerToken = envToken
+	}
+	if envURL := os.Getenv("ZCP_API_URL"); envURL != "" {
+		p.APIURL = envURL
+	}
+
 	if p.BearerToken == "" {
-		return nil, fmt.Errorf("profile %q is missing credentials — run: zcp profile add", name)
+		if name == "" {
+			return nil, errors.New("no active profile configured and ZCP_BEARER_TOKEN not set — run: zcp profile add")
+		}
+		return nil, fmt.Errorf("profile %q is missing credentials and ZCP_BEARER_TOKEN not set — run: zcp profile add", name)
 	}
 
 	return &p, nil
 }
 
 // ActiveAPIURL returns the resolved API URL for the given profile, applying overrides.
-// Order of precedence: flagURL > profile APIURL > DefaultAPIURL
+// Order of precedence: flagURL > ZCP_API_URL env > profile APIURL > DefaultAPIURL
 func ActiveAPIURL(profile *Profile, flagURL string) string {
 	if flagURL != "" {
 		return flagURL
+	}
+	if envURL := os.Getenv("ZCP_API_URL"); envURL != "" {
+		return envURL
 	}
 	if profile != nil && profile.APIURL != "" {
 		return profile.APIURL

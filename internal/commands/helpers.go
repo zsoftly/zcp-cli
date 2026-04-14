@@ -27,6 +27,14 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 	pager, _ := cmd.Root().PersistentFlags().GetBool("pager")
 
+	// Apply environment variable overrides for global flags
+	if envOutput := os.Getenv("ZCP_OUTPUT"); envOutput != "" {
+		outputFmt = envOutput
+	}
+	if os.Getenv("ZCP_DEBUG") == "true" {
+		debugFlag = true
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("loading config: %w", err)
@@ -63,6 +71,30 @@ func resolveZone(profile *config.Profile, flagZone string) string {
 		return profile.DefaultZone
 	}
 	return ""
+}
+
+// resolveProject returns flagProject if set, otherwise the ZCP_PROJECT env var.
+func resolveProject(flagProject string) string {
+	if flagProject != "" {
+		return flagProject
+	}
+	return os.Getenv("ZCP_PROJECT")
+}
+
+// resolveRegion returns flagRegion if set, otherwise the ZCP_REGION env var.
+func resolveRegion(flagRegion string) string {
+	if flagRegion != "" {
+		return flagRegion
+	}
+	return os.Getenv("ZCP_REGION")
+}
+
+// resolveCloudProvider returns flagCloudProvider if set, otherwise the ZCP_CLOUD_PROVIDER env var.
+func resolveCloudProvider(flagCloudProvider string) string {
+	if flagCloudProvider != "" {
+		return flagCloudProvider
+	}
+	return os.Getenv("ZCP_CLOUD_PROVIDER")
 }
 
 // errNoZone is the standard error shown when --zone is missing and no default is set.

@@ -90,18 +90,21 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
-		Example: `  zcp volume create --name my-disk --project default-73 --cloud-provider nimbo --region noida --billing-cycle hourly --storage-category nvme --plan 50-gb-2
-  zcp volume create --name my-disk --project default-73 --cloud-provider nimbo --region noida --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
+		Example: `  zcp volume create --name my-disk --project my-project --cloud-provider zcp --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
+  zcp volume create --name my-disk --project my-project --cloud-provider zcp --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
