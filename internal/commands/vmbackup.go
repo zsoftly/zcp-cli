@@ -89,9 +89,11 @@ func newVMBackupCreateCmd() *cobra.Command {
 		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project
   zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}

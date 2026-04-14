@@ -126,11 +126,13 @@ func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 		name = cfg.ActiveProfile
 	}
 
-	// Start with a copy of the profile if it exists
+	// Look up the named profile if one was resolved
 	var p Profile
+	var profileFound bool
 	if name != "" {
 		if prof, ok := cfg.Profiles[name]; ok {
 			p = prof
+			profileFound = true
 		}
 	}
 
@@ -142,6 +144,12 @@ func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 		p.APIURL = envURL
 	}
 
+	// Validate: profile not found (and no env override to save us)
+	if name != "" && !profileFound && p.BearerToken == "" {
+		return nil, fmt.Errorf("profile %q not found — run: zcp profile list", name)
+	}
+
+	// Validate: credentials missing
 	if p.BearerToken == "" {
 		if name == "" {
 			return nil, errors.New("no active profile configured and ZCP_BEARER_TOKEN not set — run: zcp profile add")

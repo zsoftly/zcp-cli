@@ -973,15 +973,17 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")
 			}
-			project = resolveProject(project)
-			if project == "" {
-				return fmt.Errorf("--project is required")
+			cloudProvider = resolveCloudProvider(cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
-			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+			project = resolveProject(project)
+			if project == "" {
+				return fmt.Errorf("--project is required")
 			}
 			if addonSlug == "" {
 				return fmt.Errorf("--addon-slug is required")

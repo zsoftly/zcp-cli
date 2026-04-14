@@ -4,6 +4,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,7 +32,7 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	if envOutput := os.Getenv("ZCP_OUTPUT"); envOutput != "" {
 		outputFmt = envOutput
 	}
-	if os.Getenv("ZCP_DEBUG") == "true" {
+	if v := strings.ToLower(os.Getenv("ZCP_DEBUG")); v == "true" || v == "1" || v == "yes" {
 		debugFlag = true
 	}
 

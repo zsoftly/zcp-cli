@@ -32,16 +32,16 @@ zcp region list
 
 ### All new environment variables
 
-| Variable             | Overrides               | Example                          |
-| -------------------- | ----------------------- | -------------------------------- |
-| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`  | `export ZCP_BEARER_TOKEN=abc123` |
-| `ZCP_API_URL`        | Profile `api_url`       | `export ZCP_API_URL=https://...` |
-| `ZCP_PROFILE`        | `--profile` flag        | `export ZCP_PROFILE=staging`     |
-| `ZCP_PROJECT`        | `--project` flag        | `export ZCP_PROJECT=my-project`  |
-| `ZCP_REGION`         | `--region` flag         | `export ZCP_REGION=yow-1`        |
-| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag | `export ZCP_CLOUD_PROVIDER=zcp`  |
-| `ZCP_OUTPUT`         | `--output` flag         | `export ZCP_OUTPUT=json`         |
-| `ZCP_DEBUG`          | `--debug` flag          | `export ZCP_DEBUG=true`          |
+| Variable             | Overrides                                 | Example                          |
+| -------------------- | ----------------------------------------- | -------------------------------- |
+| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`                    | `export ZCP_BEARER_TOKEN=abc123` |
+| `ZCP_API_URL`        | Profile `api_url`                         | `export ZCP_API_URL=https://...` |
+| `ZCP_PROFILE`        | Active profile (when `--profile` not set) | `export ZCP_PROFILE=staging`     |
+| `ZCP_PROJECT`        | `--project` flag                          | `export ZCP_PROJECT=my-project`  |
+| `ZCP_REGION`         | `--region` flag                           | `export ZCP_REGION=yow-1`        |
+| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag                   | `export ZCP_CLOUD_PROVIDER=zcp`  |
+| `ZCP_OUTPUT`         | `--output` flag                           | `export ZCP_OUTPUT=json`         |
+| `ZCP_DEBUG`          | `--debug` flag                            | `export ZCP_DEBUG=true`          |
 
 Precedence: CLI flag > environment variable > profile config > default.
 

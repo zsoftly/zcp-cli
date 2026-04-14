@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/zsoftly/zcp-cli/internal/config"
@@ -86,17 +87,24 @@ func TestResolveProfile(t *testing.T) {
 		name        string
 		profileName string
 		wantErr     bool
+		errContains string
 	}{
-		{"active profile", "", false},
-		{"explicit profile", "prod", false},
-		{"missing profile", "dev", true},
+		{"active profile", "", false, ""},
+		{"explicit profile", "prod", false, ""},
+		{"missing profile", "dev", true, "not found"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ZCP_BEARER_TOKEN", "") // clear env so profile token is used
 			p, err := config.ResolveProfile(cfg, tt.profileName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ResolveProfile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && tt.errContains != "" && err != nil {
+				if !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error = %q, want containing %q", err, tt.errContains)
+				}
 			}
 			if !tt.wantErr && p == nil {
 				t.Error("expected non-nil Profile")
@@ -139,6 +147,7 @@ func TestResolveProfileEnvTokenOverridesProfile(t *testing.T) {
 
 func TestResolveProfileEnvProfile(t *testing.T) {
 	t.Setenv("ZCP_PROFILE", "staging")
+	t.Setenv("ZCP_BEARER_TOKEN", "") // clear so profile token is used
 	cfg := &config.Config{
 		ActiveProfile: "prod",
 		Profiles: map[string]config.Profile{

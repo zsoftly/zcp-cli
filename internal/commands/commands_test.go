@@ -90,6 +90,15 @@ func TestResolveRegionFallsBackToEnv(t *testing.T) {
 	}
 }
 
+func TestResolveRegionEmptyWhenNeitherSet(t *testing.T) {
+	os.Unsetenv("ZCP_REGION")
+
+	result := resolveRegion("")
+	if result != "" {
+		t.Errorf("resolveRegion = %q, want empty", result)
+	}
+}
+
 func TestResolveCloudProviderFlagTakesPrecedence(t *testing.T) {
 	os.Setenv("ZCP_CLOUD_PROVIDER", "env-cp")
 	defer os.Unsetenv("ZCP_CLOUD_PROVIDER")
@@ -107,6 +116,15 @@ func TestResolveCloudProviderFallsBackToEnv(t *testing.T) {
 	result := resolveCloudProvider("")
 	if result != "env-cp" {
 		t.Errorf("resolveCloudProvider = %q, want %q", result, "env-cp")
+	}
+}
+
+func TestResolveCloudProviderEmptyWhenNeitherSet(t *testing.T) {
+	os.Unsetenv("ZCP_CLOUD_PROVIDER")
+
+	result := resolveCloudProvider("")
+	if result != "" {
+		t.Errorf("resolveCloudProvider = %q, want empty", result)
 	}
 }
 
