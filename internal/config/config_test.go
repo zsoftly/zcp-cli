@@ -97,6 +97,7 @@ func TestResolveProfile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("ZCP_BEARER_TOKEN", "") // clear env so profile token is used
+			t.Setenv("ZCP_PROFILE", "")      // prevent ambient leak
 			p, err := config.ResolveProfile(cfg, tt.profileName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ResolveProfile() error = %v, wantErr %v", err, tt.wantErr)
@@ -130,6 +131,7 @@ func TestResolveProfileEnvToken(t *testing.T) {
 
 func TestResolveProfileEnvTokenOverridesProfile(t *testing.T) {
 	t.Setenv("ZCP_BEARER_TOKEN", "env-token")
+	t.Setenv("ZCP_PROFILE", "") // prevent ambient leak
 	cfg := &config.Config{
 		ActiveProfile: "prod",
 		Profiles: map[string]config.Profile{
@@ -139,6 +141,9 @@ func TestResolveProfileEnvTokenOverridesProfile(t *testing.T) {
 	p, err := config.ResolveProfile(cfg, "")
 	if err != nil {
 		t.Fatalf("ResolveProfile() error = %v", err)
+	}
+	if p.Name != "prod" {
+		t.Errorf("Name = %q, want %q (should resolve prod profile)", p.Name, "prod")
 	}
 	if p.BearerToken != "env-token" {
 		t.Errorf("BearerToken = %q, want env override %q", p.BearerToken, "env-token")
