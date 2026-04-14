@@ -103,18 +103,21 @@ func newLBCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --cloud-provider nimbo --project default-33 --region ixg-belagavi --network d-net-test --plan load-balancer --billing-cycle hourly --acquire-new-ip
-  zcp loadbalancer create --name my-lb --cloud-provider nimbo --project default-33 --region ixg-belagavi --network d-net-test --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
+		Example: `  zcp loadbalancer create --name my-lb --cloud-provider zcp --project my-project --region mtl-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
+  zcp loadbalancer create --name my-lb --cloud-provider zcp --project my-project --region mtl-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
@@ -290,18 +293,21 @@ func newLBAttachVMCmd() *cobra.Command {
 		Use:   "attach-vm <lb-slug> <rule-id>",
 		Short: "Attach VMs to a load balancer rule",
 		Args:  cobra.ExactArgs(2),
-		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --cloud-provider nimbo --region ixg-belagavi --project default-33
-  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --cloud-provider nimbo --region ixg-belagavi --project default-33 --yes`,
+		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --cloud-provider zcp --region mtl-1 --project my-project
+  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --cloud-provider zcp --region mtl-1 --project my-project --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(vmSlugs) == 0 {
 				return fmt.Errorf("at least one --vm is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}

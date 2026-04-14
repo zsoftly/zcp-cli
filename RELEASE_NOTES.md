@@ -1,60 +1,53 @@
-# zcp 0.0.8 Release Notes
+# zcp 0.0.9 Release Notes
 
 ## What's New
 
-### VPC create fixed
+### Environment variable support
 
-VPC creation now works with the correct payload structure:
-
-```bash
-zcp vpc create \
-  --name my-vpc \
-  --cloud-provider nimbo \
-  --region noida \
-  --project default-124 \
-  --plan vpc-1 \
-  --network-address 10.1.0.1 \
-  --size 16 \
-  --billing-cycle hourly \
-  --storage-category nvme
-```
-
-Key: `--network-address` is just the IP (not CIDR notation), `--size` is the mask separately.
-
-### ACL list creation fixed
-
-`zcp vpc acl-create` and `zcp acl create` now correctly create ACL lists:
+All create commands now respect environment variables for the three most commonly repeated flags. Set them once and every command picks them up:
 
 ```bash
-zcp vpc acl-create my-vpc --name allow-web --description "Allow HTTP"
-zcp acl create my-vpc --name private-acl --description "Deny all inbound"
+export ZCP_CLOUD_PROVIDER=zcp
+export ZCP_REGION=yow-1
+export ZCP_PROJECT=my-project
+
+# Before: every command needed all 3 flags
+zcp instance create --name my-vm --cloud-provider zcp --region yow-1 --project my-project --template ubuntu-22f --plan bp-4vc-8gb --billing-cycle hourly --storage-category nvme --blockstorage-plan 50-gb-2
+
+# Now: just the resource-specific flags
+zcp instance create --name my-vm --template ubuntu-22f --plan bp-4vc-8gb --billing-cycle hourly --storage-category nvme --blockstorage-plan 50-gb-2
 ```
 
-### Create commands gain required flags
+Works across all create commands: instance, volume, vpc, network, kubernetes, dns, loadbalancer, autoscale, snapshot, vm-snapshot, vm-backup, virtual-router, vpn, iso, affinity-group, template, backup.
 
-`--cloud-provider`, `--region`, `--project` added to: network, vpc, virtualrouter, dns, vpn, autoscale create commands.
+### Zero-config mode
 
-### Volume Size type fix
+The CLI can now run with just environment variables — no config file needed:
 
-Volume list no longer fails when the API returns size as a number.
+```bash
+export ZCP_BEARER_TOKEN=your-token
+export ZCP_API_URL=https://api.zcp.zsoftly.ca
+zcp region list
+```
 
-### Roadmap published
+### All new environment variables
 
-See `docs/roadmap.md` for what's working, what's coming, and what's blocked on the platform.
+| Variable             | Overrides                                 | Example                          |
+| -------------------- | ----------------------------------------- | -------------------------------- |
+| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`                    | `export ZCP_BEARER_TOKEN=abc123` |
+| `ZCP_API_URL`        | Profile `api_url`                         | `export ZCP_API_URL=https://...` |
+| `ZCP_PROFILE`        | Active profile (when `--profile` not set) | `export ZCP_PROFILE=staging`     |
+| `ZCP_PROJECT`        | `--project` flag                          | `export ZCP_PROJECT=my-project`  |
+| `ZCP_REGION`         | `--region` flag                           | `export ZCP_REGION=yow-1`        |
+| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag                   | `export ZCP_CLOUD_PROVIDER=zcp`  |
+| `ZCP_OUTPUT`         | `--output` flag                           | `export ZCP_OUTPUT=json`         |
+| `ZCP_DEBUG`          | `--debug` flag                            | `export ZCP_DEBUG=true`          |
 
----
+Precedence: CLI flag > environment variable > profile config > default.
 
-## Known limitations (blocked on platform)
+### Bug fix: Kubernetes create
 
-These require API changes from the STKCNSL team:
-
-- **No DELETE endpoints** for VPCs, networks, virtual routers, IP addresses, or ACL lists
-- **No ACL rule CRUD** — can create ACL lists but not rules inside them
-- **Network create (isolated)** — `networkofferingid` not resolvable for nimbo/noida
-- **DNS create** — needs admin-side `cloud_provider_setup` provisioning
-- **billing cancel-service for VPCs** — returns "service not found"
-
-See `docs/roadmap.md` for full details.
+`--billing-cycle` validation was accidentally removed in v0.0.8. Restored — the API requires it (confirmed via Postman collection).
 
 ---
 
@@ -72,4 +65,4 @@ curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.s
 irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
 ```
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.7...0.0.8
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.8...0.0.9

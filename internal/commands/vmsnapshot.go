@@ -79,6 +79,9 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")
 			}
+			project = resolveProject(project)
+			region = resolveRegion(region)
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err

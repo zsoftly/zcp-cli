@@ -71,22 +71,33 @@ https://api.zcp.zsoftly.ca
 
 ## Environment Variable Overrides
 
-The following environment variables are evaluated at runtime and take precedence over the corresponding config file values.
+The following environment variables are evaluated at runtime and take precedence over the corresponding config file values and global flags.
 
-| Variable           | Overrides                           | Description                                       |
-| ------------------ | ----------------------------------- | ------------------------------------------------- |
-| `ZCP_PROFILE`      | `--profile` flag / active profile   | Profile name to use for the current invocation.   |
-| `ZCP_BEARER_TOKEN` | Profile `bearer_token`              | Bearer token, bypassing the config file entirely. |
-| `ZCP_API_URL`      | Profile `api_url` / default URL     | API base URL override.                            |
-| `XDG_CONFIG_HOME`  | Config file directory (Linux/macOS) | Overrides the base directory for the config file. |
+| Variable             | Overrides                           | Description                                       |
+| -------------------- | ----------------------------------- | ------------------------------------------------- |
+| `ZCP_PROFILE`        | `--profile` flag / active profile   | Profile name to use for the current invocation.   |
+| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token, bypassing the config file entirely. |
+| `ZCP_API_URL`        | Profile `api_url` / default URL     | API base URL override.                            |
+| `ZCP_PROJECT`        | `--project` flag                    | Default project slug for all resource commands.   |
+| `ZCP_REGION`         | `--region` flag                     | Default region slug for all resource commands.    |
+| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag             | Default cloud provider slug (e.g., `zcp`).        |
+| `ZCP_OUTPUT`         | `--output` / `-o` flag              | Default output format (`table`, `json`, `yaml`).  |
+| `ZCP_DEBUG`          | `--debug` flag                      | Set to `true` to enable debug output (stderr).    |
+| `XDG_CONFIG_HOME`    | Config file directory (Linux/macOS) | Overrides the base directory for the config file. |
 
-Environment variables are useful for CI/CD pipelines where you do not want credentials stored in a file on disk.
+Environment variables are useful for CI/CD pipelines and scripting where you do not want to pass repetitive flags or store credentials in a file on disk.
 
 Example usage in a pipeline:
 
 ```bash
 export ZCP_BEARER_TOKEN=ci-bearer-token
-zcp region list --output json
+export ZCP_PROJECT=prod-project
+export ZCP_REGION=yow-1
+export ZCP_CLOUD_PROVIDER=zcp
+export ZCP_OUTPUT=json
+
+# Create a volume without passing repetitive flags
+zcp volume create --name my-disk --plan 50-gb-2 --billing-cycle hourly
 ```
 
 ---

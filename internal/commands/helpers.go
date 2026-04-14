@@ -4,6 +4,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -26,6 +27,14 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	debugFlag, _ := cmd.Root().PersistentFlags().GetBool("debug")
 	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 	pager, _ := cmd.Root().PersistentFlags().GetBool("pager")
+
+	// Apply environment variable overrides for global flags
+	if envOutput := os.Getenv("ZCP_OUTPUT"); envOutput != "" {
+		outputFmt = envOutput
+	}
+	if v := strings.ToLower(os.Getenv("ZCP_DEBUG")); v == "true" || v == "1" || v == "yes" {
+		debugFlag = true
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -63,6 +72,30 @@ func resolveZone(profile *config.Profile, flagZone string) string {
 		return profile.DefaultZone
 	}
 	return ""
+}
+
+// resolveProject returns flagProject if set, otherwise the ZCP_PROJECT env var.
+func resolveProject(flagProject string) string {
+	if flagProject != "" {
+		return flagProject
+	}
+	return os.Getenv("ZCP_PROJECT")
+}
+
+// resolveRegion returns flagRegion if set, otherwise the ZCP_REGION env var.
+func resolveRegion(flagRegion string) string {
+	if flagRegion != "" {
+		return flagRegion
+	}
+	return os.Getenv("ZCP_REGION")
+}
+
+// resolveCloudProvider returns flagCloudProvider if set, otherwise the ZCP_CLOUD_PROVIDER env var.
+func resolveCloudProvider(flagCloudProvider string) string {
+	if flagCloudProvider != "" {
+		return flagCloudProvider
+	}
+	return os.Getenv("ZCP_CLOUD_PROVIDER")
 }
 
 // errNoZone is the standard error shown when --zone is missing and no default is set.

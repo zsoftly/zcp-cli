@@ -99,8 +99,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.28.4 --plan k8s-plan-1 --region noida --project default-59 --cloud-provider nimbo --billing-cycle monthly --workers 3 --ssh-key mykey
-  zcp kubernetes create --name ha-cluster --version v1.28.4 --plan k8s-plan-1 --region noida --project default-59 --cloud-provider nimbo --billing-cycle monthly --workers 3 --control-nodes 3 --ha --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.28.4 --plan k8s-plan-1 --region yow-1 --project my-project --cloud-provider zcp --billing-cycle monthly --workers 3 --ssh-key mykey
+  zcp kubernetes create --name ha-cluster --version v1.28.4 --plan k8s-plan-1 --region yow-1 --project my-project --cloud-provider zcp --billing-cycle monthly --workers 3 --control-nodes 3 --ha --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -111,18 +111,22 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
-			}
-			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
 			}
+
 			if nodeSize < 1 {
 				return fmt.Errorf("--workers must be >= 1")
 			}

@@ -129,6 +129,20 @@ zcp profile rename staging prod
 zcp profile delete old-profile
 ```
 
+### Environment Variables
+
+You can override configuration and flags using environment variables:
+
+- `ZCP_BEARER_TOKEN`: Overrides profile credentials.
+- `ZCP_API_URL`: Overrides the API base URL.
+- `ZCP_PROJECT`: Sets the default project slug.
+- `ZCP_REGION`: Sets the default region slug.
+- `ZCP_CLOUD_PROVIDER`: Sets the default cloud provider.
+- `ZCP_OUTPUT`: Sets the default output format (`json`, `yaml`, `table`).
+- `ZCP_DEBUG`: Set to `true` to enable verbose debug output.
+
+See [docs/configuration.md](docs/configuration.md) for the full list and usage examples.
+
 ---
 
 ## Commands Reference
@@ -183,9 +197,9 @@ zcp instance get <slug>
 # Create — use --wait to block until the instance is Running
 zcp instance create \
   --name my-vm \
-  --cloud-provider nimbo \
+  --cloud-provider zcp \
   --project my-project \
-  --region noida \
+  --region yow-1 \
   --template ubuntu-22f \
   --plan bp-4vc-8gb \
   --billing-cycle hourly \
@@ -248,8 +262,8 @@ zcp volume list
 zcp volume create \
   --name my-disk \
   --project my-project \
-  --cloud-provider nimbo \
-  --region noida \
+  --cloud-provider zcp \
+  --region yow-1 \
   --billing-cycle hourly \
   --storage-category nvme \
   --plan 50-gb-2
@@ -263,8 +277,8 @@ zcp snapshot create \
   --volume <slug> \
   --name my-snapshot \
   --plan snapshot-per-gb \
-  --cloud-provider nimbo \
-  --region noida \
+  --cloud-provider zcp \
+  --region yow-1 \
   --billing-cycle hourly \
   --project my-project
 zcp snapshot revert <snapshot-slug> --volume <volume-slug>
@@ -277,8 +291,8 @@ zcp vm-snapshot create \
   --plan basic \
   --billing-cycle hourly \
   --project my-project \
-  --cloud-provider nimbo \
-  --region noida
+  --cloud-provider zcp \
+  --region yow-1
 zcp vm-snapshot revert <slug>
 ```
 
@@ -288,11 +302,11 @@ zcp vm-snapshot revert <slug>
 # Networks
 zcp network list
 zcp network categories
-zcp network create --name my-net --category <slug> --cloud-provider nimbo --region noida --project default-124
+zcp network create --name my-net --category <slug> --cloud-provider zcp --region yow-1 --project my-project
 zcp network update <slug> --name "New Name"
 
 # VPC tier networks
-zcp network create --name public-tier --cloud-provider nimbo --region noida --project default-124 \
+zcp network create --name public-tier --cloud-provider zcp --region yow-1 --project my-project \
   --vpc <vpc-slug> --type Vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --acl-id <acl-id>
 
 # Public IP addresses
@@ -327,9 +341,9 @@ zcp portforward create \
 zcp vpc list
 zcp vpc create \
   --name my-vpc \
-  --cloud-provider nimbo \
-  --region noida \
-  --project default-124 \
+  --cloud-provider zcp \
+  --region yow-1 \
+  --project my-project \
   --plan vpc-1 \
   --network-address 10.1.0.1 \
   --size 16 \
@@ -373,7 +387,7 @@ zcp dns list
 zcp dns show <slug>
 
 # Create a domain
-zcp dns create --name example.com --project my-project --cloud-provider nimbo --region noida --dns-provider powerdns
+zcp dns create --name example.com --project my-project --cloud-provider zcp --region yow-1 --dns-provider dns-provider
 
 # Create a record
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
@@ -399,7 +413,7 @@ zcp backup delete <slug>
 ```bash
 zcp autoscale list
 zcp autoscale get <slug>
-zcp autoscale create --name my-policy --min 1 --max 5 --cloud-provider nimbo --region noida --project default-124
+zcp autoscale create --name my-policy --min 1 --max 5 --cloud-provider zcp --region yow-1 --project my-project
 zcp autoscale delete <slug>
 ```
 
@@ -438,9 +452,9 @@ zcp kubernetes create \
   --name my-cluster \
   --version v1.28.4 \
   --plan k8s-plan-1 \
-  --region noida \
-  --project default-59 \
-  --cloud-provider nimbo \
+  --region yow-1 \
+  --project my-project \
+  --cloud-provider zcp \
   --billing-cycle monthly \
   --workers 3 \
   --ssh-key mykey
@@ -450,9 +464,9 @@ zcp kubernetes create \
   --name ha-cluster \
   --version v1.28.4 \
   --plan k8s-plan-1 \
-  --region noida \
-  --project default-59 \
-  --cloud-provider nimbo \
+  --region yow-1 \
+  --project my-project \
+  --cloud-provider zcp \
   --billing-cycle monthly \
   --workers 3 \
   --control-nodes 3 \

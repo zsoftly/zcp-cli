@@ -25,7 +25,7 @@ Features planned, in progress, or blocked on platform support.
 - [ ] `portforward create` — add `--public-end-port` and `--private-end-port` flags (API requires them)
 - [ ] `instance change-hostname` — fix request body field name (`vm_label` instead of `label`)
 - [ ] `region` command — add `use` subcommand to set default region in profile
-- [ ] Default `--cloud-provider`, `--region`, `--project` from profile config to reduce flag repetition
+- [x] Default `--cloud-provider`, `--region`, `--project` via `ZCP_CLOUD_PROVIDER`, `ZCP_REGION`, `ZCP_PROJECT` env vars (v0.0.9)
 
 ### Blocked on STKCNSL platform
 
@@ -50,11 +50,11 @@ The UI has "Add Rule" with Number, CIDR, Action, Protocol, Traffic Type fields, 
 - [ ] `DELETE /vpcs/{slug}/network-acl-list/{acl_id}/rules/{rule_id}` — delete ACL rule
 - [ ] `GET /vpcs/{slug}/network-acl-list/{acl_id}/rules` — list ACL rules
 
-#### Network create (isolated) — noida region
+#### Network create (isolated) — target region
 
-`POST /networks` returns `missing parameter networkofferingid` for the nimbo/noida region. The API doesn't expose the network offering field. Likely a region configuration issue.
+`POST /networks` returns `missing parameter networkofferingid` for the the target region region. The API doesn't expose the network offering field. Likely a region configuration issue.
 
-- [ ] Network offering mapping for nimbo/noida
+- [ ] Network offering mapping for the target region
 
 #### DNS provisioning
 

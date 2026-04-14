@@ -76,8 +76,8 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a virtual router",
-		Example: `  zcp virtual-router create --name my-router --network <slug> --cloud-provider nimbo --region noida --project default-124
-  zcp virtual-router create --name my-router --network <slug> --plan <slug> --cloud-provider nimbo --region noida --project default-124`,
+		Example: `  zcp virtual-router create --name my-router --network <slug> --cloud-provider zcp --region yow-1 --project my-project
+  zcp virtual-router create --name my-router --network <slug> --plan <slug> --cloud-provider zcp --region yow-1 --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -85,12 +85,15 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}

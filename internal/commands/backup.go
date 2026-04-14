@@ -65,8 +65,8 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",
-		Example: `  zcp backup create --volume root-4153 --interval dailyAt --at 1 --immediate 1 --cloud-provider nimbo --region noida --billing-cycle hourly --plan backup-1 --project default-73
-  zcp backup create --volume root-4153 --interval dailyAt --at 1 --immediate 0 --cloud-provider nimbo --region noida --billing-cycle hourly --plan backup-1 --project default-73`,
+		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project
+  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -74,9 +74,11 @@ func newBackupCreateCmd() *cobra.Command {
 			if interval == "" {
 				return fmt.Errorf("--interval is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
@@ -86,6 +88,7 @@ func newBackupCreateCmd() *cobra.Command {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}

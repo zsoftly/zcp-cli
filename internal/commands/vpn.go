@@ -134,12 +134,15 @@ func newVPNCGCreateCmd() *cobra.Command {
 			if espPolicy == "" {
 				return fmt.Errorf("--esp-policy is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
@@ -384,12 +387,15 @@ func newVPNUserCreateCmd() *cobra.Command {
 			if username == "" {
 				return fmt.Errorf("--username is required")
 			}
+			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("--cloud-provider is required")
 			}
+			region = resolveRegion(region)
 			if region == "" {
 				return fmt.Errorf("--region is required")
 			}
+			project = resolveProject(project)
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
