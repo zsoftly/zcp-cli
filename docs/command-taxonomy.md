@@ -1,7 +1,7 @@
 # ZCP CLI Command Taxonomy (v0.0.6)
 
 **CLI name**: `zcp`
-**Base URL**: `https://api.zcp.zsoftly.ca`
+**Base URL**: `https://api.zcp.zsoftly.ca/api`
 **Authentication**: Bearer token (`--bearer-token` during profile add)
 
 ---

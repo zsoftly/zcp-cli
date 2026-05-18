@@ -26,7 +26,7 @@ The CLI can now run with just environment variables — no config file needed:
 
 ```bash
 export ZCP_BEARER_TOKEN=your-token
-export ZCP_API_URL=https://api.zcp.zsoftly.ca
+export ZCP_API_URL=https://api.zcp.zsoftly.ca/api
 zcp region list
 ```
 

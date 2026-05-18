@@ -18,7 +18,7 @@ ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on t
 ### Quick Install — Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zsoftly/zcp-cli/main/scripts/install.sh | bash
+curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.sh | bash
 ```
 
 The script installs `zcp` to `/usr/local/bin`. You may be prompted for `sudo` access.
@@ -26,7 +26,7 @@ The script installs `zcp` to `/usr/local/bin`. You may be prompted for `sudo` ac
 ### PowerShell — Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/zsoftly/zcp-cli/main/scripts/install.ps1 | iex
+irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
 ```
 
 ### Manual Download

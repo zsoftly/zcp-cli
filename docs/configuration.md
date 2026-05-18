@@ -64,7 +64,7 @@ Each profile supports the following fields:
 The default API URL when `api_url` is blank or omitted is:
 
 ```
-https://api.zcp.zsoftly.ca
+https://api.zcp.zsoftly.ca/api
 ```
 
 ---

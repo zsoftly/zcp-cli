@@ -35,6 +35,16 @@ Get started:
   zcp region list           List available regions
   zcp instance list        List your instances
 
+Environment variables:
+  ZCP_BEARER_TOKEN    Bearer token for zero-config or CI use
+  ZCP_API_URL         API base URL override
+  ZCP_PROFILE         Profile name when --profile is not provided
+  ZCP_PROJECT         Default project slug for create commands
+  ZCP_REGION          Default region slug for create commands
+  ZCP_CLOUD_PROVIDER  Default cloud provider slug for create commands
+  ZCP_OUTPUT          Default output format: table, json, or yaml
+  ZCP_DEBUG           Enable debug output when true, 1, or yes
+
 Documentation: https://docs.zsoftly.com/zcp-cli`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -110,6 +120,7 @@ func init() {
 	rootCmd.AddCommand(commands.NewCurrencyCmd())
 	rootCmd.AddCommand(commands.NewBillingCycleCmd())
 	rootCmd.AddCommand(commands.NewStorageCategoryCmd())
+	rootCmd.AddCommand(commands.NewObjectStorageCmd())
 
 	// Flag completions — static values, no network calls
 	rootCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

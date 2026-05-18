@@ -13,7 +13,7 @@ import (
 
 const (
 	// DefaultAPIURL is the default ZCP API base URL.
-	DefaultAPIURL = "https://api.zcp.zsoftly.ca"
+	DefaultAPIURL = "https://api.zcp.zsoftly.ca/api"
 	// DefaultTimeout is the default HTTP request timeout in seconds.
 	DefaultTimeout = 30
 )
