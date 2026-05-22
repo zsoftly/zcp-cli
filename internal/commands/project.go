@@ -250,20 +250,15 @@ func runProjectDashboard(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	services, err := svc.Dashboard(ctx, slug)
+	counts, err := svc.Dashboard(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("project dashboard: %w", err)
 	}
 
-	headers := []string{"NAME", "TYPE", "STATUS", "COUNT"}
-	rows := make([][]string, 0, len(services))
-	for _, s := range services {
-		rows = append(rows, []string{
-			s.Name,
-			s.Type,
-			s.Status,
-			strconv.Itoa(s.Count),
-		})
+	headers := []string{"SERVICE", "COUNT"}
+	rows := make([][]string, 0, len(counts))
+	for name, count := range counts {
+		rows = append(rows, []string{name, strconv.Itoa(count)})
 	}
 	return printer.PrintTable(headers, rows)
 }

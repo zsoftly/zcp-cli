@@ -160,15 +160,15 @@ type StorageCategory struct {
 
 // ActivityLog represents a VM activity log entry.
 type ActivityLog struct {
-	ID          string `json:"id"`
-	Category    string `json:"category"`
-	Action      string `json:"action"`
-	Status      string `json:"status"`
-	Error       string `json:"error"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	Project     string `json:"project"`
+	ID          json.Number `json:"id"`
+	Category    string      `json:"category"`
+	Action      string      `json:"action"`
+	Status      string      `json:"status"`
+	Error       string      `json:"error"`
+	Description string      `json:"description"`
+	CreatedAt   string      `json:"created_at"`
+	UpdatedAt   string      `json:"updated_at"`
+	Project     string      `json:"project"`
 }
 
 // Addon represents a VM addon.
@@ -210,6 +210,7 @@ type CreateRequest struct {
 	StorageCategory      string      `json:"storage_category,omitempty"`
 	ComputeCategory      string      `json:"compute_category,omitempty"`
 	BlockstoragePlan     string      `json:"blockstorage_plan,omitempty"`
+	NetworkPlan          string      `json:"network_plan,omitempty"`
 	IsVNF                bool        `json:"is_vnf"`
 	IsVMPasswordRequired bool        `json:"is_vm_password_required"`
 	IsVMSSHRequired      bool        `json:"is_vm_ssh_required"`

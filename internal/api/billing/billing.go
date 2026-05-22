@@ -339,10 +339,11 @@ func (s *Service) ListCancelRequests(ctx context.Context) (json.RawMessage, erro
 
 // CancelServiceRequest holds parameters for service cancellation.
 type CancelServiceRequest struct {
-	ServiceName string `json:"service_name"`
-	Reason      string `json:"reason"`
-	Type        string `json:"type"`
-	Description string `json:"description,omitempty"`
+	ServiceName    string `json:"service_name"`
+	Reason         string `json:"reason"`
+	Type           string `json:"type"`
+	Description    string `json:"description,omitempty"`
+	DeletePublicIP *bool  `json:"delete_public_ip,omitempty"`
 }
 
 // CancelService submits a cancellation request for a service by subscription slug.

@@ -79,21 +79,22 @@ func runK8sClusterList(cmd *cobra.Command) error {
 
 func newK8sClusterCreateCmd() *cobra.Command {
 	var (
-		name            string
-		version         string
-		nodeSize        int
-		controlNodes    int
-		cloudProvider   string
-		region          string
-		project         string
-		billingCycle    string
-		enableHA        bool
-		plan            string
-		storageCategory string
-		sshKey          string
-		authMethod      string
-		username        string
-		password        string
+		name               string
+		version            string
+		nodeSize           int
+		controlNodes       int
+		cloudProvider      string
+		cloudProviderSetup string
+		region             string
+		project            string
+		billingCycle       string
+		enableHA           bool
+		plan               string
+		storageCategory    string
+		sshKey             string
+		authMethod         string
+		username           string
+		password           string
 	)
 
 	cmd := &cobra.Command{
@@ -137,27 +138,29 @@ func newK8sClusterCreateCmd() *cobra.Command {
 				fmt.Fprintf(os.Stderr, "WARNING: --ha is set but --control-nodes is %d; HA clusters typically require >= 3 control nodes\n", controlNodes)
 			}
 			return runK8sClusterCreate(cmd, kubernetes.CreateRequest{
-				Name:            name,
-				Version:         version,
-				NodeSize:        nodeSize,
-				ControlNodes:    controlNodes,
-				CloudProvider:   cloudProvider,
-				Region:          region,
-				Project:         project,
-				BillingCycle:    billingCycle,
-				EnableHA:        enableHA,
-				Networks:        []string{},
-				Plan:            plan,
-				WithPoolCard:    false,
-				IsCustomPlan:    false,
-				CustomPlan:      nil,
-				VirtualMachine:  "",
-				Coupon:          nil,
-				StorageCategory: storageCategory,
-				SSHKey:          sshKey,
-				AuthMethod:      authMethod,
-				Username:        username,
-				Password:        password,
+				Name:               name,
+				Version:            version,
+				NodeSize:           nodeSize,
+				WorkerNodeSize:     nodeSize,
+				ControlNodes:       controlNodes,
+				CloudProvider:      cloudProvider,
+				CloudProviderSetup: cloudProviderSetup,
+				Region:             region,
+				Project:            project,
+				BillingCycle:       billingCycle,
+				EnableHA:           enableHA,
+				Networks:           []string{},
+				Plan:               plan,
+				WithPoolCard:       false,
+				IsCustomPlan:       false,
+				CustomPlan:         nil,
+				VirtualMachine:     "",
+				Coupon:             nil,
+				StorageCategory:    storageCategory,
+				SSHKey:             sshKey,
+				AuthMethod:         authMethod,
+				Username:           username,
+				Password:           password,
 			})
 		},
 	}
@@ -166,6 +169,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&nodeSize, "workers", 0, "Number of worker nodes (required, >= 1)")
 	cmd.Flags().IntVar(&controlNodes, "control-nodes", 1, "Number of control plane nodes (default 1)")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProviderSetup, "cloud-provider-setup", "", "Cloud provider setup slug, e.g. zcp-apc (required for quota resolution)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly, monthly (required)")

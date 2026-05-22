@@ -191,6 +191,7 @@ func newInstanceCreateCmd() *cobra.Command {
 		storageCategory  string
 		computeCategory  string
 		blockstoragePlan string
+		networkPlan      string
 		wait             bool
 	)
 
@@ -259,6 +260,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				StorageCategory:  storageCategory,
 				ComputeCategory:  computeCategory,
 				BlockstoragePlan: blockstoragePlan,
+				NetworkPlan:      networkPlan,
 			}
 			return runInstanceCreate(cmd, req, wait)
 		},
@@ -276,6 +278,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (optional)")
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")
 	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug, e.g. 50-gb-2 (required)")
+	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. inet-yow, inet-yul — see: zcp plan network)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	return cmd
 }
@@ -533,7 +536,7 @@ func runInstanceLogs(cmd *cobra.Command, slug string) error {
 	rows := make([][]string, 0, len(logs))
 	for _, l := range logs {
 		rows = append(rows, []string{
-			l.ID,
+			l.ID.String(),
 			l.Action,
 			l.Status,
 			l.Description,

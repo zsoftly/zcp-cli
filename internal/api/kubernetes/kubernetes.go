@@ -71,27 +71,29 @@ type Project struct {
 
 // CreateRequest holds parameters for creating a Kubernetes cluster.
 type CreateRequest struct {
-	Name            string      `json:"name"`
-	Version         string      `json:"version"`
-	NodeSize        int         `json:"node_size"`
-	ControlNodes    int         `json:"control_nodes"`
-	CloudProvider   string      `json:"cloud_provider"`
-	Region          string      `json:"region"`
-	Project         string      `json:"project"`
-	BillingCycle    string      `json:"billing_cycle"`
-	EnableHA        bool        `json:"enable_ha"`
-	Networks        []string    `json:"networks"`
-	Plan            string      `json:"plan"`
-	WithPoolCard    bool        `json:"with_pool_card"`
-	IsCustomPlan    bool        `json:"is_custom_plan"`
-	CustomPlan      interface{} `json:"custom_plan"`
-	VirtualMachine  string      `json:"virtual_machine"`
-	Coupon          *string     `json:"coupon"`
-	StorageCategory string      `json:"storage_category"`
-	SSHKey          string      `json:"ssh_key"`
-	AuthMethod      string      `json:"authMethod"`
-	Username        string      `json:"username"`
-	Password        string      `json:"password"`
+	Name               string      `json:"name"`
+	Version            string      `json:"version"`
+	NodeSize           int         `json:"node_size"`
+	WorkerNodeSize     int         `json:"worker_node_size"`
+	ControlNodes       int         `json:"control_nodes"`
+	CloudProvider      string      `json:"cloud_provider"`
+	CloudProviderSetup string      `json:"cloud_provider_setup,omitempty"`
+	Region             string      `json:"region"`
+	Project            string      `json:"project"`
+	BillingCycle       string      `json:"billing_cycle"`
+	EnableHA           bool        `json:"enable_ha"`
+	Networks           []string    `json:"networks"`
+	Plan               string      `json:"plan"`
+	WithPoolCard       bool        `json:"with_pool_card"`
+	IsCustomPlan       bool        `json:"is_custom_plan"`
+	CustomPlan         interface{} `json:"custom_plan"`
+	VirtualMachine     string      `json:"virtual_machine"`
+	Coupon             *string     `json:"coupon"`
+	StorageCategory    string      `json:"storage_category"`
+	SSHKey             string      `json:"ssh_key"`
+	AuthMethod         string      `json:"authMethod"`
+	Username           string      `json:"username"`
+	Password           string      `json:"password"`
 }
 
 // UpgradeRequest holds parameters for upgrading (changing plan of) a Kubernetes cluster.

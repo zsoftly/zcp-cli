@@ -633,6 +633,7 @@ func runBillingCancelRequests(cmd *cobra.Command) error {
 
 func newBillingCancelServiceCmd() *cobra.Command {
 	var serviceName, reason, cancelType, description string
+	var deletePublicIP bool
 	cmd := &cobra.Command{
 		Use:   "cancel-service <subscription-slug>",
 		Short: "Submit a cancellation request for a service",
@@ -649,17 +650,18 @@ func newBillingCancelServiceCmd() *cobra.Command {
 			if cancelType == "" {
 				cancelType = "Immediate"
 			}
-			return runBillingCancelService(cmd, args[0], serviceName, reason, cancelType, description)
+			return runBillingCancelService(cmd, args[0], serviceName, reason, cancelType, description, deletePublicIP)
 		},
 	}
 	cmd.Flags().StringVar(&serviceName, "service", "", "Service type (e.g. 'Virtual Machine', 'Block Storage', 'IP Address', 'Object Storage')")
 	cmd.Flags().StringVar(&reason, "reason", "not_needed_anymore", "Reason: limit_expenses, not_needed_anymore, better_offer, not_satisfied, switch_product, other")
 	cmd.Flags().StringVar(&cancelType, "type", "Immediate", "Cancel type: Immediate or 'End of billing period'")
 	cmd.Flags().StringVar(&description, "description", "", "Additional description (optional)")
+	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Delete associated public IP addresses (required when VM has public IPs)")
 	return cmd
 }
 
-func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, cancelType, description string) error {
+func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, cancelType, description string, deletePublicIP bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -670,10 +672,11 @@ func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, canc
 	defer cancel()
 
 	req := billing.CancelServiceRequest{
-		ServiceName: serviceName,
-		Reason:      reason,
-		Type:        cancelType,
-		Description: description,
+		ServiceName:    serviceName,
+		Reason:         reason,
+		Type:           cancelType,
+		Description:    description,
+		DeletePublicIP: &deletePublicIP,
 	}
 	if err := svc.CancelService(ctx, slug, req); err != nil {
 		return fmt.Errorf("billing cancel-service: %w", err)
