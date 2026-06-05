@@ -68,7 +68,8 @@ do_read() {
     backup)           run_case "backup list"              -- zcp backup list ;;
     vm-backup)        run_case "vm-backup list"           -- zcp vm-backup list ;;
     loadbalancer)     run_case "loadbalancer list"        -- zcp loadbalancer list ;;
-    object-storage)   run_case "object-storage list"      -- zcp object-storage list ;;
+    object-storage)   run_case "object-storage list"      -- zcp object-storage list
+                      _read_objectstorage ;;
     iso)              run_case "iso list"                 -- zcp iso list --timeout 60 ;;
     kubernetes)       run_case "kubernetes list"          -- zcp kubernetes list ;;
     autoscale)        run_case "autoscale list"           -- zcp autoscale list ;;
@@ -103,6 +104,25 @@ _read_acl() {
   vpc="$(zcp vpc list -o json 2>/dev/null | jq -r '(.[]//.data[]) | .slug' 2>/dev/null | head -1)"
   if [[ -z "$vpc" || "$vpc" == "null" ]]; then _mark_skip "acl list (no VPC available)"; return; fi
   run_case "acl list $vpc" -- zcp acl list "$vpc"
+}
+# object-storage sub-commands need an existing instance (and optionally a bucket).
+_read_objectstorage() {
+  local store bucket
+  store="$(zcp object-storage list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' 2>/dev/null | head -1)"
+  if [[ -z "$store" || "$store" == "null" ]]; then
+    _mark_skip "object-storage bucket list (no store available)"
+    _mark_skip "object-storage credentials (no store available)"
+    _mark_skip "object-storage object list (no store available)"
+    return
+  fi
+  run_case "object-storage bucket list $store" -- zcp object-storage bucket list "$store"
+  run_case "object-storage credentials $store"  -- zcp object-storage credentials "$store"
+  bucket="$(zcp object-storage bucket list "$store" -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' 2>/dev/null | head -1)"
+  if [[ -z "$bucket" || "$bucket" == "null" ]]; then
+    _mark_skip "object-storage object list (no bucket in $store)"
+    return
+  fi
+  run_case "object-storage object list $store/$bucket" -- zcp object-storage object list "$store" "$bucket"
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -361,7 +381,7 @@ lc_loadbalancer() {
 }
 
 lc_objectstorage() {
-  local osr out s
+  local osr out s bkt tmpfile
   osr="$(api_get '/regions' | jq -r '.data[]|select((.cloud_provider.slug//"")=="ceph")|.slug' | head -1)"
   [[ -z "$osr" ]] && osr="$(det_region)"
   capture out -- zcp object-storage create --name "$(rname os)" --storage-gb 60 \
@@ -369,7 +389,38 @@ lc_objectstorage() {
     --billing-cycle "$(det_billing_cycle)" -o json
   s="$(_jq_slug <<<"$out")"
   [[ -z "$s" ]] && s="$(zcp object-storage list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-  _lc_result "object-storage" "$s" && defer object-storage "$s"
+  _lc_result "object-storage" "$s" || return
+  defer object-storage "$s"
+
+  # bucket lifecycle
+  bkt="smoke-bucket-$$"
+  capture out -- zcp object-storage bucket create "$s" --name "$bkt" -o json \
+    || { _mark_fail "object-storage bucket create"; return; }
+  _mark_pass "object-storage bucket create → $bkt"
+
+  # object put/list/delete round-trip
+  tmpfile="$(mktemp /tmp/zcp-smoke-XXXXXX.txt)"
+  echo "smoke test $(date)" > "$tmpfile"
+
+  capture out -- zcp object-storage object put "$s" "$bkt" "$tmpfile" --key smoke-test.txt -y \
+    || { _mark_fail "object-storage object put"; rm -f "$tmpfile"; return; }
+  _mark_pass "object-storage object put"
+
+  capture out -- zcp object-storage object list "$s" "$bkt" -o json
+  if echo "$out" | jq -e '(.[]//.data[]) | select(.key == "smoke-test.txt")' >/dev/null 2>&1; then
+    _mark_pass "object-storage object list (smoke-test.txt present)"
+  else
+    _mark_fail "object-storage object list (smoke-test.txt not found)"
+  fi
+
+  capture out -- zcp object-storage object delete "$s" "$bkt" smoke-test.txt -y \
+    || { _mark_fail "object-storage object delete"; rm -f "$tmpfile"; return; }
+  _mark_pass "object-storage object delete"
+  rm -f "$tmpfile"
+
+  capture out -- zcp object-storage bucket delete "$s" "$bkt" -y \
+    || { _mark_fail "object-storage bucket delete"; return; }
+  _mark_pass "object-storage bucket delete"
 }
 
 lc_iso() {

@@ -9,7 +9,7 @@ The official command-line interface for the ZSoftly Cloud Platform
 
 ## Overview
 
-ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
+ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, object storage, S3-compatible buckets, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
 
 ---
 
@@ -481,6 +481,53 @@ zcp kubernetes upgrade <slug> --plan k8s-plan-2
 # To cancel/delete a cluster, use billing cancel-service:
 zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
 ```
+
+### Object Storage
+
+```bash
+# List and inspect
+zcp object-storage list
+zcp object-storage get <slug>
+
+# Create an object storage instance
+zcp object-storage create \
+  --name my-store \
+  --project my-project \
+  --cloud-provider zcp \
+  --region yow-1 \
+  --billing-cycle hourly \
+  --storage-category nvme \
+  --plan os-100gb
+
+# Resize (change allocated GB)
+zcp object-storage resize <slug> --size 200
+
+# Show S3 credentials (access key + secret)
+zcp object-storage credentials <slug>
+
+# Delete an object storage instance
+zcp object-storage delete <slug>
+
+# Buckets
+zcp object-storage bucket list <slug>
+zcp object-storage bucket get <slug> <bucket-slug>
+zcp object-storage bucket create <slug> --name my-bucket
+zcp object-storage bucket set-acl <slug> <bucket-slug> --acl public-read
+zcp object-storage bucket delete <slug> <bucket-slug>
+
+# Objects — list and inspect via ZCP REST API
+zcp object-storage object list <slug> <bucket-slug>
+zcp object-storage object get <slug> <bucket-slug> <key>
+
+# Objects — upload and delete via S3 protocol
+zcp object-storage object put <slug> <bucket-name> --file ./photo.jpg
+zcp object-storage object put <slug> <bucket-name> --file ./report.pdf --key reports/2026/q2.pdf --content-type application/pdf
+zcp object-storage object delete <slug> <bucket-name> <key>
+```
+
+Object `put` and `delete` use the S3 protocol (AWS Signature V4) against the region's S3 endpoint. The CLI derives credentials from the same `object-storage get` response, so no separate S3 configuration is needed.
+
+ACL values for `bucket set-acl`: `private`, `public-read`, `public-read-write`, `authenticated-read`.
 
 ### Billing and Admin
 

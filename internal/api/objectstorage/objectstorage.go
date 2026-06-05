@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"path/filepath"
+	"strings"
 
+	"github.com/minio/minio-go/v7"
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
@@ -159,15 +162,32 @@ type ACLUpdateRequest struct {
 }
 
 // Object represents an object stored in a bucket.
+// Size is a quoted string in the live API (e.g. "38644").
+// Permission is "Private" or "Public".
 type Object struct {
-	Key          string      `json:"key"`
-	Name         string      `json:"name"`
-	Size         json.Number `json:"size"`
-	ContentType  string      `json:"content_type"`
-	LastModified string      `json:"last_modified"`
-	IsPublic     bool        `json:"is_public"`
-	ETag         string      `json:"etag"`
-	URL          string      `json:"url"`
+	Key          string `json:"key"`
+	Name         string `json:"name"`
+	Size         string `json:"size"`
+	LastModified string `json:"last_modified"`
+	Permission   string `json:"permission"`
+}
+
+// IsPublic reports whether the object has public read permission.
+func (o Object) IsPublic() bool {
+	return strings.EqualFold(o.Permission, "public")
+}
+
+// ObjectListPagination holds the cursor token for the next page.
+type ObjectListPagination struct {
+	NextToken *string `json:"next_token"`
+}
+
+// ObjectListData is the inner data envelope for the object list API response.
+type ObjectListData struct {
+	CurrentPrefix string               `json:"current_prefix"`
+	Directories   []string             `json:"directories"`
+	Files         []Object             `json:"files"`
+	Pagination    ObjectListPagination `json:"pagination"`
 }
 
 // listResponse is the paginated API envelope for object storage instances.
@@ -202,20 +222,12 @@ type bucketSingleResponse struct {
 	Data    Bucket `json:"data"`
 }
 
-// objectListResponse is the paginated API envelope for objects.
+// objectListResponse is the API envelope for the object list endpoint.
+// The live API wraps files inside data.files[], not data[].
 type objectListResponse struct {
-	Status      string   `json:"status"`
-	Message     string   `json:"message"`
-	CurrentPage int      `json:"current_page"`
-	Data        []Object `json:"data"`
-	Total       int      `json:"total"`
-}
-
-// objectSingleResponse wraps a single object in an API envelope.
-type objectSingleResponse struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	Data    Object `json:"data"`
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Data    ObjectListData `json:"data"`
 }
 
 // Service provides object storage API operations.
@@ -339,22 +351,85 @@ func (s *Service) SetBucketACL(ctx context.Context, slug, bucketSlug, acl string
 	return &resp.Data, nil
 }
 
-// ListObjects returns all objects in a bucket.
+// ListObjects returns all objects in a bucket, fetching all pages automatically.
+// A seen-token guard prevents infinite loops from buggy next_token responses.
 func (s *Service) ListObjects(ctx context.Context, slug, bucketSlug string) ([]Object, error) {
-	var resp objectListResponse
 	path := fmt.Sprintf("/object-storages/%s/buckets/%s/objects", slug, bucketSlug)
-	if err := s.client.Get(ctx, path, nil, &resp); err != nil {
-		return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
+	var all []Object
+	seen := map[string]bool{}
+
+	q := url.Values{}
+	for {
+		var resp objectListResponse
+		if err := s.client.Get(ctx, path, q, &resp); err != nil {
+			return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
+		}
+		all = append(all, resp.Data.Files...)
+
+		token := resp.Data.Pagination.NextToken
+		if token == nil || *token == "" || seen[*token] {
+			break
+		}
+		seen[*token] = true
+		q = url.Values{"next_token": {*token}}
 	}
-	return resp.Data, nil
+	return all, nil
 }
 
-// GetObject returns a single object by key from a bucket.
+// GetObject returns a single object's metadata by key.
+// The live API's GET /objects/{key} returns only the key string, so this
+// fetches the full list and filters to avoid a useless second round-trip.
 func (s *Service) GetObject(ctx context.Context, slug, bucketSlug, objectKey string) (*Object, error) {
-	var resp objectSingleResponse
-	path := fmt.Sprintf("/object-storages/%s/buckets/%s/objects/%s", slug, bucketSlug, url.PathEscape(objectKey))
-	if err := s.client.Get(ctx, path, nil, &resp); err != nil {
+	objects, err := s.ListObjects(ctx, slug, bucketSlug)
+	if err != nil {
 		return nil, fmt.Errorf("getting object %s in %s/%s: %w", objectKey, slug, bucketSlug, err)
 	}
-	return &resp.Data, nil
+	for i := range objects {
+		if objects[i].Key == objectKey {
+			return &objects[i], nil
+		}
+	}
+	return nil, fmt.Errorf("object %q not found in bucket %s/%s", objectKey, slug, bucketSlug)
+}
+
+// PutObject uploads a local file to a bucket via the S3 protocol.
+// objectKey defaults to the base name of localPath when empty.
+// contentType is auto-detected from the file extension when empty.
+func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, objectKey, contentType string) (int64, error) {
+	store, err := s.Get(ctx, slug)
+	if err != nil {
+		return 0, err
+	}
+	mc, err := NewS3Client(store)
+	if err != nil {
+		return 0, err
+	}
+	if objectKey == "" {
+		objectKey = filepath.Base(localPath)
+	}
+	opts := minio.PutObjectOptions{}
+	if contentType != "" {
+		opts.ContentType = contentType
+	}
+	info, err := mc.FPutObject(ctx, bucketName, objectKey, localPath, opts)
+	if err != nil {
+		return 0, fmt.Errorf("uploading %q to %s/%s: %w", localPath, bucketName, objectKey, err)
+	}
+	return info.Size, nil
+}
+
+// DeleteObject removes an object from a bucket via the S3 protocol.
+func (s *Service) DeleteObject(ctx context.Context, slug, bucketName, objectKey string) error {
+	store, err := s.Get(ctx, slug)
+	if err != nil {
+		return err
+	}
+	mc, err := NewS3Client(store)
+	if err != nil {
+		return err
+	}
+	if err := mc.RemoveObject(ctx, bucketName, objectKey, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("deleting %q from %s: %w", objectKey, bucketName, err)
+	}
+	return nil
 }

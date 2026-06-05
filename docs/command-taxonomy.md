@@ -179,6 +179,25 @@ zcp
 │   ├── stop                           Stop a running cluster
 │   └── upgrade                        Upgrade a Kubernetes cluster version
 │
+├── object-storage (alias: os)         Object storage operations
+│   ├── list                           List object storage instances
+│   ├── get                            Get details for a single object storage instance
+│   ├── create                         Create a new object storage instance
+│   ├── resize                         Resize (change storage allocation) of an instance
+│   ├── delete                         Delete an object storage instance (prompts for confirmation)
+│   ├── credentials                    Show S3 access key and secret for an instance
+│   ├── bucket                         Bucket operations within an instance
+│   │   ├── list                       List buckets
+│   │   ├── get                        Get bucket details
+│   │   ├── create                     Create a bucket
+│   │   ├── set-acl                    Set bucket ACL (private/public-read/public-read-write/authenticated-read)
+│   │   └── delete                     Delete a bucket (prompts for confirmation)
+│   └── object                         Object operations within a bucket
+│       ├── list                       List objects in a bucket (all pages, auto-paginated)
+│       ├── get                        Get object metadata (key, size, permission, last modified)
+│       ├── put                        Upload a local file to a bucket via S3 protocol
+│       └── delete                     Delete an object from a bucket via S3 protocol
+│
 ├── dns                                DNS domain and record operations
 │   ├── list                           List DNS domains
 │   ├── show                           Show DNS domain details and records
@@ -370,46 +389,47 @@ All commands use slug-based identifiers.
 
 ## CLI Group to API Path Mapping
 
-| CLI Group          | API Source        | Notes                                                    |
-| ------------------ | ----------------- | -------------------------------------------------------- |
-| `region`           | ZCP API (STKCNSL) | Region listing                                           |
-| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                     |
-| `template`         | ZCP API (STKCNSL) | Public and account templates                             |
-| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                        |
-| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                       |
-| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                  |
-| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                       |
-| `network`          | ZCP API (STKCNSL) | Isolated networks                                        |
-| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                 |
-| `acl`              | ZCP API (STKCNSL) | Network ACLs                                             |
-| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                              |
-| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                           |
-| `egress`           | ZCP API (STKCNSL) | Egress rules                                             |
-| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                    |
-| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                 |
-| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                       |
-| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                             |
-| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                      |
-| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                  |
-| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                   |
-| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                |
-| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget |
-| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                         |
-| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                   |
-| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                            |
-| `store`            | ZCP API (STKCNSL) | Store items and checkout                                 |
-| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                 |
-| `product`          | ZCP API (STKCNSL) | Product categories and catalog                           |
-| `iso`              | ZCP API (STKCNSL) | ISO image management                                     |
-| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                            |
-| `backup`           | ZCP API (STKCNSL) | Block storage backups                                    |
-| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                               |
-| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access    |
-| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                   |
-| `server`           | ZCP API (STKCNSL) | Server listing                                           |
-| `currency`         | ZCP API (STKCNSL) | Currency listing                                         |
-| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                    |
-| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                 |
+| CLI Group          | API Source        | Notes                                                              |
+| ------------------ | ----------------- | ------------------------------------------------------------------ |
+| `region`           | ZCP API (STKCNSL) | Region listing                                                     |
+| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                               |
+| `template`         | ZCP API (STKCNSL) | Public and account templates                                       |
+| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                                  |
+| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                                 |
+| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                            |
+| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                                 |
+| `network`          | ZCP API (STKCNSL) | Isolated networks                                                  |
+| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                           |
+| `acl`              | ZCP API (STKCNSL) | Network ACLs                                                       |
+| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                                        |
+| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                                     |
+| `egress`           | ZCP API (STKCNSL) | Egress rules                                                       |
+| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                              |
+| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                           |
+| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                                 |
+| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                                       |
+| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                                |
+| `object-storage`   | ZCP REST API + S3 | REST for instance/bucket CRUD; S3 (minio-go) for object put/delete |
+| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                            |
+| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                             |
+| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                          |
+| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget           |
+| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                                   |
+| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                             |
+| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                                      |
+| `store`            | ZCP API (STKCNSL) | Store items and checkout                                           |
+| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                           |
+| `product`          | ZCP API (STKCNSL) | Product categories and catalog                                     |
+| `iso`              | ZCP API (STKCNSL) | ISO image management                                               |
+| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                                      |
+| `backup`           | ZCP API (STKCNSL) | Block storage backups                                              |
+| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                                         |
+| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access              |
+| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                             |
+| `server`           | ZCP API (STKCNSL) | Server listing                                                     |
+| `currency`         | ZCP API (STKCNSL) | Currency listing                                                   |
+| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                              |
+| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                           |
 
 ---
 

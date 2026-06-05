@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -349,10 +350,12 @@ func newOSBucketCmd() *cobra.Command {
 func newOSObjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "object",
-		Short: "List and inspect objects in a bucket (read-only; use S3 API for upload/delete)",
+		Short: "Manage objects in a bucket",
 	}
 	cmd.AddCommand(newOSObjectListCmd())
 	cmd.AddCommand(newOSObjectGetCmd())
+	cmd.AddCommand(newOSObjectPutCmd())
+	cmd.AddCommand(newOSObjectDeleteCmd())
 	return cmd
 }
 
@@ -563,18 +566,13 @@ func newOSObjectListCmd() *cobra.Command {
 				return fmt.Errorf("object-storage object list: %w", err)
 			}
 
-			headers := []string{"KEY", "SIZE", "CONTENT-TYPE", "PUBLIC", "LAST MODIFIED"}
+			headers := []string{"KEY", "SIZE", "PERMISSION", "LAST MODIFIED"}
 			rows := make([][]string, 0, len(objects))
 			for _, o := range objects {
-				isPublic := "no"
-				if o.IsPublic {
-					isPublic = "yes"
-				}
 				rows = append(rows, []string{
 					o.Key,
-					o.Size.String(),
-					o.ContentType,
-					isPublic,
+					o.Size,
+					o.Permission,
 					o.LastModified,
 				})
 			}
@@ -603,22 +601,95 @@ func newOSObjectGetCmd() *cobra.Command {
 				return fmt.Errorf("object-storage object get: %w", err)
 			}
 
-			isPublic := "no"
-			if obj.IsPublic {
-				isPublic = "yes"
-			}
 			headers := []string{"FIELD", "VALUE"}
 			rows := [][]string{
 				{"Key", obj.Key},
 				{"Name", obj.Name},
-				{"Size", obj.Size.String()},
-				{"Content-Type", obj.ContentType},
-				{"Public", isPublic},
-				{"ETag", obj.ETag},
-				{"URL", obj.URL},
+				{"Size", obj.Size},
+				{"Permission", obj.Permission},
 				{"Last Modified", obj.LastModified},
 			}
 			return printer.PrintTable(headers, rows)
+		},
+	}
+}
+
+func newOSObjectPutCmd() *cobra.Command {
+	var (
+		key         string
+		contentType string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "put <storage-slug> <bucket-slug> <local-file>",
+		Short: "Upload a local file to a bucket",
+		Args:  cobra.ExactArgs(3),
+		Example: `  zcp object-storage object put my-storage-1 my-bucket ./report.pdf
+  zcp object-storage object put my-storage-1 my-bucket ./logo.png --key images/logo.png
+  zcp object-storage object put my-storage-1 my-bucket ./data.bin --content-type application/octet-stream`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			storageSlug, bucketSlug, localFile := args[0], args[1], args[2]
+
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			size, err := svc.PutObject(ctx, storageSlug, bucketSlug, localFile, key, contentType)
+			if err != nil {
+				return fmt.Errorf("object-storage object put: %w", err)
+			}
+
+			effectiveKey := key
+			if effectiveKey == "" {
+				effectiveKey = filepath.Base(localFile)
+			}
+			fmt.Fprintf(os.Stdout, "Uploaded %q to %s/%s (%d bytes)\n", localFile, bucketSlug, effectiveKey, size)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&key, "key", "", "Remote object key (defaults to the local filename)")
+	cmd.Flags().StringVar(&contentType, "content-type", "", "Content-Type header (auto-detected from extension when omitted)")
+	return cmd
+}
+
+func newOSObjectDeleteCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "delete <storage-slug> <bucket-slug> <object-key>",
+		Short: "Delete an object from a bucket",
+		Args:  cobra.ExactArgs(3),
+		Example: `  zcp object-storage object delete my-storage-1 my-bucket report.pdf
+  zcp object-storage object delete my-storage-1 my-bucket images/logo.png -y`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			storageSlug, bucketSlug, objectKey := args[0], args[1], args[2]
+
+			if !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "Delete object %q from bucket %q? [y/N]: ", objectKey, bucketSlug)
+				var answer string
+				fmt.Scanln(&answer)
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stdout, "Aborted.")
+					return nil
+				}
+			}
+
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			if err := svc.DeleteObject(ctx, storageSlug, bucketSlug, objectKey); err != nil {
+				return fmt.Errorf("object-storage object delete: %w", err)
+			}
+
+			fmt.Fprintf(os.Stdout, "Deleted %q from bucket %q.\n", objectKey, bucketSlug)
+			return nil
 		},
 	}
 }

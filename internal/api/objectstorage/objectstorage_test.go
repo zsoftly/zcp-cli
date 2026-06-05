@@ -3,8 +3,12 @@ package objectstorage_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -48,16 +52,9 @@ type bucketSingleResponse struct {
 }
 
 type objectListResponse struct {
-	Status  string                 `json:"status"`
-	Message string                 `json:"message"`
-	Data    []objectstorage.Object `json:"data"`
-	Total   int                    `json:"total"`
-}
-
-type objectSingleResponse struct {
-	Status  string               `json:"status"`
-	Message string               `json:"message"`
-	Data    objectstorage.Object `json:"data"`
+	Status  string                       `json:"status"`
+	Message string                       `json:"message"`
+	Data    objectstorage.ObjectListData `json:"data"`
 }
 
 func TestList(t *testing.T) {
@@ -380,9 +377,9 @@ func TestSetBucketACL(t *testing.T) {
 }
 
 func TestListObjects(t *testing.T) {
-	expected := []objectstorage.Object{
-		{Key: "file.txt", Name: "file.txt", ContentType: "text/plain"},
-		{Key: "images/logo.png", Name: "logo.png", ContentType: "image/png"},
+	files := []objectstorage.Object{
+		{Key: "file.txt", Name: "file.txt", Size: "1024", Permission: "Private"},
+		{Key: "images/logo.png", Name: "logo.png", Size: "38644", Permission: "Public"},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +388,11 @@ func TestListObjects(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(objectListResponse{Status: "Success", Message: "OK", Data: expected, Total: 2})
+		json.NewEncoder(w).Encode(objectListResponse{
+			Status:  "Success",
+			Message: "OK",
+			Data:    objectstorage.ObjectListData{Files: files},
+		})
 	}))
 	defer srv.Close()
 
@@ -406,21 +407,27 @@ func TestListObjects(t *testing.T) {
 	if objects[0].Key != "file.txt" {
 		t.Errorf("objects[0].Key = %q, want file.txt", objects[0].Key)
 	}
-	if objects[1].ContentType != "image/png" {
-		t.Errorf("objects[1].ContentType = %q, want image/png", objects[1].ContentType)
+	if objects[0].Size != "1024" {
+		t.Errorf("objects[0].Size = %q, want 1024", objects[0].Size)
+	}
+	if objects[1].IsPublic() != true {
+		t.Errorf("objects[1].IsPublic() = false, want true (permission=%q)", objects[1].Permission)
 	}
 }
 
 func TestGetObject(t *testing.T) {
-	expected := objectstorage.Object{Key: "file.txt", Name: "file.txt", ContentType: "text/plain", URL: "https://s3.example.com/my-bucket/file.txt"}
+	files := []objectstorage.Object{
+		{Key: "other.txt", Name: "other.txt", Size: "100", Permission: "Private"},
+		{Key: "file.txt", Name: "file.txt", Size: "1024", Permission: "Private"},
+	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/object-storages/my-storage-1/buckets/my-bucket/objects/file.txt" {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(objectSingleResponse{Status: "Success", Message: "OK", Data: expected})
+		json.NewEncoder(w).Encode(objectListResponse{
+			Status:  "Success",
+			Message: "OK",
+			Data:    objectstorage.ObjectListData{Files: files},
+		})
 	}))
 	defer srv.Close()
 
@@ -432,8 +439,25 @@ func TestGetObject(t *testing.T) {
 	if obj.Key != "file.txt" {
 		t.Errorf("obj.Key = %q, want file.txt", obj.Key)
 	}
-	if obj.URL != "https://s3.example.com/my-bucket/file.txt" {
-		t.Errorf("obj.URL = %q, want https://s3.example.com/my-bucket/file.txt", obj.URL)
+	if obj.Size != "1024" {
+		t.Errorf("obj.Size = %q, want 1024", obj.Size)
+	}
+}
+
+func TestGetObject_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(objectListResponse{
+			Status: "Success",
+			Data:   objectstorage.ObjectListData{Files: []objectstorage.Object{}},
+		})
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	_, err := svc.GetObject(context.Background(), "my-storage-1", "my-bucket", "missing.txt")
+	if err == nil {
+		t.Fatal("expected error for missing object, got nil")
 	}
 }
 
@@ -499,5 +523,146 @@ func TestCredentialsDecoding(t *testing.T) {
 	}
 	if store.S3Endpoint() != "https://s3.yul-1.zsoftly.ca" {
 		t.Errorf("S3Endpoint() = %q, want https://s3.yul-1.zsoftly.ca", store.S3Endpoint())
+	}
+}
+
+// newS3TestPair spins up two httptest servers: one for the management API and
+// one acting as an S3-compatible endpoint. The management API Get response
+// points at the S3 server so that NewS3Client connects to it.
+//
+// s3Handler receives actual S3 wire requests. minio-go always sends
+// GET /?location= before any bucket operation; the helper wraps s3Handler
+// to answer that preflight automatically so individual tests don't need to.
+func newS3TestPair(t *testing.T, s3Handler http.Handler) (mgmt *httptest.Server, s3srv *httptest.Server) {
+	t.Helper()
+
+	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body) //nolint: errcheck
+		// minio-go always resolves the bucket region before operating on it.
+		if r.Method == http.MethodGet && r.URL.RawQuery == "location=" {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><LocationConstraint></LocationConstraint>`)
+			return
+		}
+		s3Handler.ServeHTTP(w, r)
+	})
+
+	s3srv = httptest.NewServer(wrapped)
+
+	mgmt = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		store := objectstorage.ObjectStorage{
+			ID:        "os-1",
+			Slug:      "my-storage-1",
+			Name:      "my-storage",
+			Status:    "Active",
+			APIKey:    "testkey",
+			APISecret: "testsecret",
+			Region: &objectstorage.Region{
+				ID:   "r-1",
+				Slug: "yul-1",
+				Name: "YUL-1",
+				CloudProviderSetup: &objectstorage.RegionCloudProviderSetup{
+					Config: objectstorage.RegionSetupConfig{
+						S3Endpoint: s3srv.URL,
+					},
+				},
+			},
+		}
+		json.NewEncoder(w).Encode(singleResponse{Status: "Success", Data: store})
+	}))
+
+	t.Cleanup(func() {
+		mgmt.Close()
+		s3srv.Close()
+	})
+	return mgmt, s3srv
+}
+
+func TestPutObject(t *testing.T) {
+	var gotMethod, gotPath string
+
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.Header().Set("ETag", `"abc123"`)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+
+	f, err := os.CreateTemp(t.TempDir(), "upload-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("hello zcp")
+	f.Write(content)
+	f.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	size, err := svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "")
+	if err != nil {
+		t.Fatalf("PutObject() error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("S3 method = %q, want PUT", gotMethod)
+	}
+	if gotPath != "/my-bucket/hello.txt" {
+		t.Errorf("S3 path = %q, want /my-bucket/hello.txt", gotPath)
+	}
+	if size != int64(len(content)) {
+		t.Errorf("returned size = %d, want %d", size, len(content))
+	}
+}
+
+func TestPutObject_DefaultKey(t *testing.T) {
+	var gotPath string
+
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("ETag", `"abc123"`)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+
+	f, err := os.CreateTemp(t.TempDir(), "myfile-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("content")
+	f.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	_, err = svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "", "")
+	if err != nil {
+		t.Fatalf("PutObject() error = %v", err)
+	}
+	wantPath := fmt.Sprintf("/my-bucket/%s", filepath.Base(f.Name()))
+	if gotPath != wantPath {
+		t.Errorf("S3 path = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestDeleteObject(t *testing.T) {
+	var gotMethod, gotPath string
+
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	err := svc.DeleteObject(context.Background(), "my-storage-1", "my-bucket", "report.pdf")
+	if err != nil {
+		t.Fatalf("DeleteObject() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("S3 method = %q, want DELETE", gotMethod)
+	}
+	if gotPath != "/my-bucket/report.pdf" {
+		t.Errorf("S3 path = %q, want /my-bucket/report.pdf", gotPath)
 	}
 }
