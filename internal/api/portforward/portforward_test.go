@@ -86,3 +86,54 @@ func TestDelete(t *testing.T) {
 		t.Fatalf("Delete() error = %v", err)
 	}
 }
+
+// TestListVMRefString verifies that virtual_machine returned as a plain string
+// slug (older API shape) decodes without error and populates Slug.
+func TestListVMRefString(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"pf-3","protocol":"tcp","public_start_port":"9090","private_start_port":"90","virtual_machine":"old-vm-slug","state":"Active"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	svc := portforward.NewService(newClient(srv.URL))
+	rules, err := svc.List(context.Background(), "1.2.3.4")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("got %d rules, want 1", len(rules))
+	}
+	if rules[0].VirtualMachine.Slug != "old-vm-slug" {
+		t.Errorf("VirtualMachine.Slug = %q, want %q", rules[0].VirtualMachine.Slug, "old-vm-slug")
+	}
+}
+
+// TestListVMRefObject verifies that a list response where virtual_machine is a
+// nested object (the real API shape) decodes without error and exposes the slug.
+func TestListVMRefObject(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"pf-2","protocol":"tcp","public_start_port":"8080","private_start_port":"80","virtual_machine":{"id":"vm-uuid","slug":"my-vm","name":"My VM"},"state":"Active"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	svc := portforward.NewService(newClient(srv.URL))
+	rules, err := svc.List(context.Background(), "1.2.3.4")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("got %d rules, want 1", len(rules))
+	}
+	if rules[0].VirtualMachine.Slug != "my-vm" {
+		t.Errorf("VirtualMachine.Slug = %q, want %q", rules[0].VirtualMachine.Slug, "my-vm")
+	}
+	if rules[0].VirtualMachine.Name != "My VM" {
+		t.Errorf("VirtualMachine.Name = %q, want %q", rules[0].VirtualMachine.Name, "My VM")
+	}
+}

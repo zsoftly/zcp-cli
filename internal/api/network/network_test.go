@@ -28,7 +28,7 @@ func makeNetwork(slug, name string) network.Network {
 		ID:          "1",
 		Slug:        slug,
 		Name:        name,
-		Status:      "Active",
+		Status:      true,
 		NetworkType: "Isolated",
 		Gateway:     "10.0.0.1",
 		CIDR:        "10.0.0.0/24",
@@ -266,6 +266,81 @@ func TestCreateEgressRule(t *testing.T) {
 	}
 	if gotBody["protocol"] != "tcp" {
 		t.Errorf("body[protocol] = %v, want %q", gotBody["protocol"], "tcp")
+	}
+}
+
+// TestNetworkListBoolStatus verifies that a network list response with boolean
+// status (as returned by the live API) decodes without error.
+func TestNetworkListBoolStatus(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"abc","slug":"test-net","name":"Test Net","status":true,"type":"Isolated","gateway":"10.0.0.1","cidr":"10.0.0.0/24","zone_slug":"yow-1","is_default":false}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if !result[0].Status {
+		t.Errorf("result[0].Status = false, want true")
+	}
+	if result[0].NetworkType != "Isolated" {
+		t.Errorf("result[0].NetworkType = %q, want %q", result[0].NetworkType, "Isolated")
+	}
+}
+
+// TestNetworkListStringStatus verifies that "status":"Active" (older API shape)
+// decodes as Status=true.
+func TestNetworkListStringStatus(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"old","slug":"old-net","name":"Old Net","status":"Active","type":"Isolated"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if !result[0].Status {
+		t.Errorf("result[0].Status = false, want true (decoded from string %q)", "Active")
+	}
+}
+
+// TestNetworkListNetworkTypeKey verifies that "network_type":"Isolated" (older
+// API key name) populates NetworkType correctly.
+func TestNetworkListNetworkTypeKey(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"old2","slug":"old-net2","name":"Old Net 2","status":true,"network_type":"Shared"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if result[0].NetworkType != "Shared" {
+		t.Errorf("NetworkType = %q, want %q", result[0].NetworkType, "Shared")
 	}
 }
 

@@ -63,7 +63,7 @@ func runDNSList(cmd *cobra.Command) error {
 			d.Slug,
 			d.Name,
 			d.DNSProvider,
-			d.Status,
+			strconv.FormatBool(d.Status),
 			d.CreatedAt,
 		})
 	}
@@ -105,7 +105,7 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
 		{"DNS Provider", domain.DNSProvider},
-		{"Status", domain.Status},
+		{"Status", strconv.FormatBool(domain.Status)},
 		{"Created", domain.CreatedAt},
 		{"Updated", domain.UpdatedAt},
 	}
@@ -199,7 +199,7 @@ func runDNSCreate(cmd *cobra.Command, req dns.CreateDomainRequest) error {
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
 		{"DNS Provider", domain.DNSProvider},
-		{"Status", domain.Status},
+		{"Status", strconv.FormatBool(domain.Status)},
 		{"Created", domain.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)

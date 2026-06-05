@@ -1,0 +1,114 @@
+name: Live Smoke Tests
+
+# Runs the REAL zcp binary against the REAL ZCP API so that breakage in any
+# service's read or create/destroy path is caught before/at release.
+#
+# Requires repo secrets:
+#   ZCP_SMOKE_BEARER_TOKEN  (required)  API token for a disposable smoke account
+#   ZCP_SMOKE_API_URL       (optional)  API base URL override
+# Optional repo variables (vars.*): ZCP_SMOKE_REGION, ZCP_SMOKE_PROJECT, etc.
+#
+# Depth by trigger:
+#   pull_request → read-only sweep of AFFECTED services (fast, no resources)
+#   tag / nightly → full create→destroy LIFECYCLE of all services (real resources)
+#   manual       → you choose services + lifecycle
+
+on:
+  push:
+    tags: ['[0-9]*']
+  pull_request:
+    branches: [main, 'release/*']
+    paths:
+      - 'internal/api/**'
+      - 'internal/commands/**'
+      - 'cmd/zcp/**'
+      - 'internal/httpclient/**'
+      - 'tests/smoke/**'
+  workflow_dispatch:
+    inputs:
+      services:
+        description: 'Comma-separated services, or "all"'
+        default: 'all'
+      lifecycle:
+        description: 'Run create/destroy lifecycle (real resources)'
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC nightly
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: false   # never interrupt a run mid-teardown
+
+jobs:
+  # Gate: only proceed if the smoke token secret is configured (skips on forks).
+  preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+      services: ${{ steps.scope.outputs.services }}
+      lifecycle: ${{ steps.scope.outputs.lifecycle }}
+    steps:
+      - id: gate
+        env:
+          TOKEN: ${{ secrets.ZCP_SMOKE_BEARER_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else echo "enabled=false" >> "$GITHUB_OUTPUT"; echo "::warning::ZCP_SMOKE_BEARER_TOKEN not set — skipping live smoke."; fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with: { fetch-depth: 0 }
+
+      - id: scope
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          chmod +x tests/smoke/affected.sh
+          case "${{ github.event_name }}" in
+            pull_request)
+              SVCS="$(tests/smoke/affected.sh "origin/${{ github.base_ref }}")"
+              echo "lifecycle=false" >> "$GITHUB_OUTPUT" ;;       # PRs: read-only, safe
+            workflow_dispatch)
+              SVCS="${{ github.event.inputs.services }}"
+              echo "lifecycle=${{ github.event.inputs.lifecycle }}" >> "$GITHUB_OUTPUT" ;;
+            *)  # tag push or nightly schedule
+              SVCS="all"
+              echo "lifecycle=true" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "services=${SVCS:-all}" >> "$GITHUB_OUTPUT"
+          echo "Selected services: ${SVCS:-all}"
+
+  smoke:
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.26.1', cache: true }
+
+      - name: Build zcp binary
+        run: make build
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run smoke suite
+        env:
+          ZCP_BEARER_TOKEN: ${{ secrets.ZCP_SMOKE_BEARER_TOKEN }}
+          ZCP_API_URL: ${{ secrets.ZCP_SMOKE_API_URL }}
+          ZCP_SMOKE_REGION: ${{ vars.ZCP_SMOKE_REGION }}
+          ZCP_SMOKE_PROJECT: ${{ vars.ZCP_SMOKE_PROJECT }}
+          ZCP_SMOKE_CLOUD_PROVIDER: ${{ vars.ZCP_SMOKE_CLOUD_PROVIDER }}
+        run: |
+          if [ "${{ needs.preflight.outputs.services }}" = "all" ]; then
+            ARGS=(--bin ./bin/zcp)
+          else
+            ARGS=(--bin ./bin/zcp --only "${{ needs.preflight.outputs.services }}")
+          fi
+          if [ "${{ needs.preflight.outputs.lifecycle }}" = "true" ]; then ARGS+=(--lifecycle); else ARGS+=(--read-only); fi
+          echo "smoke.sh ${ARGS[*]}"
+          bash tests/smoke/smoke.sh "${ARGS[@]}"

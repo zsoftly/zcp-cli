@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -59,7 +60,7 @@ func runNetworkList(cmd *cobra.Command) error {
 			n.NetworkType,
 			n.CIDR,
 			n.Gateway,
-			n.Status,
+			strconv.FormatBool(n.Status),
 			n.ZoneSlug,
 		})
 	}
@@ -141,7 +142,7 @@ func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest) error {
 		{"Type", n.NetworkType},
 		{"CIDR", n.CIDR},
 		{"Gateway", n.Gateway},
-		{"Status", n.Status},
+		{"Status", strconv.FormatBool(n.Status)},
 		{"Zone", n.ZoneSlug},
 	}
 	return printer.PrintTable(headers, rows)
@@ -193,7 +194,7 @@ func runNetworkUpdate(cmd *cobra.Command, slug string, req network.UpdateRequest
 		{"Type", n.NetworkType},
 		{"CIDR", n.CIDR},
 		{"Gateway", n.Gateway},
-		{"Status", n.Status},
+		{"Status", strconv.FormatBool(n.Status)},
 	}
 	return printer.PrintTable(headers, rows)
 }

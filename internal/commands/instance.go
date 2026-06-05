@@ -192,6 +192,9 @@ func newInstanceCreateCmd() *cobra.Command {
 		computeCategory  string
 		blockstoragePlan string
 		networkPlan      string
+		cpu              int
+		memory           int
+		disk             int
 		wait             bool
 	)
 
@@ -239,6 +242,20 @@ func newInstanceCreateCmd() *cobra.Command {
 				sshKeyPtr = &sshKey
 			}
 
+			var customPlan *instance.CustomPlan
+			if cpu > 0 || memory > 0 || disk > 0 {
+				customPlan = &instance.CustomPlan{}
+				if cpu > 0 {
+					customPlan.CPU = strconv.Itoa(cpu)
+				}
+				if memory > 0 {
+					customPlan.Memory = strconv.Itoa(memory)
+				}
+				if disk > 0 {
+					customPlan.Storage = strconv.Itoa(disk)
+				}
+			}
+
 			req := instance.CreateRequest{
 				Name:             name,
 				CloudProvider:    cloudProvider,
@@ -253,6 +270,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				BillingCycle:     billingCycle,
 				SSHKey:           sshKeyPtr,
 				Plan:             plan,
+				CustomPlan:       customPlan,
 				OSFamily:         "Linux",
 				TemplateType:     "Operating System",
 				Hostname:         h,
@@ -279,6 +297,9 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")
 	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug, e.g. 50-gb-2 (required)")
 	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. inet-yow, inet-yul — see: zcp plan network)")
+	cmd.Flags().IntVar(&cpu, "cpu", 0, "Number of vCPUs for a custom plan (e.g. 2)")
+	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in MB for a custom plan (e.g. 2048)")
+	cmd.Flags().IntVar(&disk, "disk", 0, "Root disk size in GB for a custom plan (e.g. 50)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	return cmd
 }

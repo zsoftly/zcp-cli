@@ -86,7 +86,7 @@ func runPortForwardList(cmd *cobra.Command, ipSlug string) error {
 			r.Protocol,
 			publicPort,
 			privatePort,
-			r.VirtualMachine,
+			r.VirtualMachine.Slug,
 			r.State,
 		})
 	}
@@ -172,7 +172,7 @@ func runPortForwardCreate(cmd *cobra.Command, ipSlug string, req portforward.Cre
 		{"Protocol", rule.Protocol},
 		{"Public Port", formatPFPortsInt(rule.PublicStartPort, rule.PublicEndPort)},
 		{"Private Port", formatPFPortsInt(rule.PrivateStartPort, rule.PrivateEndPort)},
-		{"VM", rule.VirtualMachine},
+		{"VM", rule.VirtualMachine.Slug},
 		{"State", rule.State},
 	}
 	return printer.PrintTable(headers, rows)

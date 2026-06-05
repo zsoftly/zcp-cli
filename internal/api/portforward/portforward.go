@@ -3,10 +3,38 @@ package portforward
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
+
+// VMRef is a minimal VM object embedded in list responses.
+type VMRef struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+// UnmarshalJSON accepts either a plain string slug or a full object, so that
+// both the current API shape {"id":...,"slug":...,"name":...} and any older
+// deployment that returns just "vm-slug" are handled without error.
+func (v *VMRef) UnmarshalJSON(b []byte) error {
+	// Try object first (the current API shape).
+	type vmRefAlias VMRef
+	var obj vmRefAlias
+	if err := json.Unmarshal(b, &obj); err == nil {
+		*v = VMRef(obj)
+		return nil
+	}
+	// Fall back to plain string slug.
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	v.Slug = s
+	return nil
+}
 
 // PortForwardRule represents a ZCP port forwarding rule from the STKCNSL API.
 type PortForwardRule struct {
@@ -17,7 +45,7 @@ type PortForwardRule struct {
 	PublicEndPort    string `json:"public_end_port"`
 	PrivateStartPort string `json:"private_start_port"`
 	PrivateEndPort   string `json:"private_end_port"`
-	VirtualMachine   string `json:"virtual_machine"`
+	VirtualMachine   VMRef  `json:"virtual_machine"`
 	State            string `json:"state"`
 	CreatedAt        string `json:"created_at"`
 	UpdatedAt        string `json:"updated_at"`

@@ -17,7 +17,7 @@ type ISO struct {
 	Description          string           `json:"description"`
 	ISOURL               string           `json:"url"`
 	State                string           `json:"state"`
-	Status               string           `json:"status"`
+	Status               bool             `json:"status"`
 	PasswordEnabled      bool             `json:"password_enabled"`
 	IsExtractable        bool             `json:"is_extractable"`
 	IsBootable           bool             `json:"is_bootable"`

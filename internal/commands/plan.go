@@ -58,11 +58,12 @@ func newPlanVMCmd() *cobra.Command {
 				return fmt.Errorf("plan vm: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "CPU", "MEMORY", "STORAGE", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "CPU", "MEMORY", "STORAGE", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.Attribute.FormattedCPU.String(),
 					p.Attribute.FormattedMemory,
@@ -109,7 +110,7 @@ func newPlanRouterCmd() *cobra.Command {
 					p.Name,
 					p.Attribute.CPU.String(),
 					p.Attribute.FormattedMemory,
-					p.Attribute.NetworkRate,
+					p.Attribute.NetworkRate.String(),
 					formatPrice(p.HourlyPrice),
 					formatPrice(p.MonthlyPrice),
 					strconv.FormatBool(p.Status),

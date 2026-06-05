@@ -3,6 +3,7 @@ package billing_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -71,6 +72,30 @@ func TestGetBalance(t *testing.T) {
 	}
 	if bal.Deposited != 5000.0 {
 		t.Errorf("Deposited = %v, want 5000", bal.Deposited)
+	}
+}
+
+// TestGetBalanceStringFields verifies that balance fields returned as quoted
+// strings (the real API shape) decode correctly into FlexFloat.
+func TestGetBalanceStringFields(t *testing.T) {
+	payload := `{"status":"Success","message":"OK","data":{"available_balance":"869.92","available_net_balance":"805.90","deposited":"1054.18","charged":"184.26","due":"0.00","current_usage":"54.25","hourly_usage":"54.25","current_hourly_rate":"0.1025","all_time_usage":"334.01","estimated_hourly_usage":"117.00","current_month_usage":"54.25","available_free_credits":"0.00","free_credit_balance":"0.00","total_payouts":"0.00","unpaid_invoices":"0.00","deposited_payments":"0.00","subscription_amount":"0.00","usage":"149.75"}}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := billing.NewService(newClient(srv.URL))
+	bal, err := svc.GetBalance(context.Background())
+	if err != nil {
+		t.Fatalf("GetBalance() error = %v", err)
+	}
+	if float64(bal.AvailableBalance) != 869.92 {
+		t.Errorf("AvailableBalance = %v, want 869.92", bal.AvailableBalance)
+	}
+	if float64(bal.CurrentHourlyRate) != 0.1025 {
+		t.Errorf("CurrentHourlyRate = %v, want 0.1025", bal.CurrentHourlyRate)
 	}
 }
 
@@ -286,7 +311,7 @@ func TestListActiveSubscriptions(t *testing.T) {
 			Product:            "Virtual Machine",
 			ProductDisplayName: "Instances",
 			Price:              "9.40",
-			TotalUsage:         "554.54",
+			TotalUsage:         554.54,
 		},
 	}
 
@@ -313,6 +338,33 @@ func TestListActiveSubscriptions(t *testing.T) {
 	}
 	if result[0].Product != "Virtual Machine" {
 		t.Errorf("result[0].Product = %q, want %q", result[0].Product, "Virtual Machine")
+	}
+}
+
+// TestListActiveSubscriptionsDecodeNumber verifies that total_usage returned as
+// a bare JSON number (not a quoted string) decodes without error.
+func TestListActiveSubscriptionsDecodeNumber(t *testing.T) {
+	payload := `{"status":"Success","message":"Ok","current_page":1,"total":1,"last_page":1,"data":[{"id":"sub-2","name":"test-vm","product":"Virtual Machine","product_display_name":"Instances","price":"9.40","total_usage":12.34,"total_usage_with_tax":14.19,"billing_cycle":{},"project":{}}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := billing.NewService(newClient(srv.URL))
+	result, _, err := svc.ListActiveSubscriptions(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("ListActiveSubscriptions() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("ListActiveSubscriptions() returned %d items, want 1", len(result))
+	}
+	if result[0].TotalUsage.String() != "12.34" {
+		t.Errorf("TotalUsage = %q, want %q", result[0].TotalUsage.String(), "12.34")
+	}
+	if result[0].TotalUsageWithTax.String() != "14.19" {
+		t.Errorf("TotalUsageWithTax = %q, want %q", result[0].TotalUsageWithTax.String(), "14.19")
 	}
 }
 

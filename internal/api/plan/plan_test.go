@@ -197,3 +197,33 @@ func TestListAPIError(t *testing.T) {
 		t.Fatal("expected error for 401, got nil")
 	}
 }
+
+// TestNetworkRateAsNumber verifies that a plan with network_rate as a bare JSON
+// number (as returned by the Virtual Router plan endpoint) decodes without error.
+func TestNetworkRateAsNumber(t *testing.T) {
+	payload := `{"status":"Success","message":"OK","data":[{"id":"vr-1","name":"VR-1GB","slug":"vr-1gb","attribute":{"cpu":1,"memory":1024,"network_rate":200,"formatted_memory":"1.0 (GB)","formatted_cpu":1},"status":true,"is_custom":false,"hourly_price":1.5,"monthly_price":550,"prices":[],"tag":[]}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	client := httpclient.New(httpclient.Options{
+		BaseURL:     srv.URL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
+	})
+
+	svc := plan.NewService(client)
+	plans, err := svc.List(context.Background(), plan.ServiceVirtualRouter)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("got %d plans, want 1", len(plans))
+	}
+	if plans[0].Attribute.NetworkRate.String() != "200" {
+		t.Errorf("NetworkRate = %q, want %q", plans[0].Attribute.NetworkRate.String(), "200")
+	}
+}

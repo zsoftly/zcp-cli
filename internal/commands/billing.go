@@ -470,7 +470,7 @@ func runBillingSubscriptionsActive(cmd *cobra.Command, page int) error {
 			sub.Name,
 			sub.ProductDisplayName,
 			sub.Price,
-			sub.TotalUsage,
+			sub.TotalUsage.String(),
 			sub.BillingCycle.Name,
 			sub.Project.Name,
 			sub.RenewAt,
@@ -521,7 +521,7 @@ func runBillingSubscriptionsInactive(cmd *cobra.Command, page int) error {
 			sub.Name,
 			sub.ProductDisplayName,
 			sub.Price,
-			sub.TotalUsage,
+			sub.TotalUsage.String(),
 			sub.BillingCycle.Name,
 			sub.Project.Name,
 		})

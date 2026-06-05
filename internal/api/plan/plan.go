@@ -6,9 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
+
+// FlexNumber decodes from a JSON number OR a quoted numeric string, storing the
+// raw digits for display. The live API may return 200 or "200" for the same field.
+type FlexNumber string
+
+func (n *FlexNumber) UnmarshalJSON(b []byte) error {
+	*n = FlexNumber(strings.Trim(string(b), `"`))
+	return nil
+}
+
+func (n FlexNumber) String() string {
+	if n == "" {
+		return "0"
+	}
+	return string(n)
+}
 
 // ServiceType identifies a STKCNSL service for plan lookups.
 type ServiceType string
@@ -42,7 +59,7 @@ type Attribute struct {
 	FormattedCPU        json.Number `json:"formatted_cpu"`
 	ComputeOfferingID   string      `json:"compute_offering_id"`
 	DiskOfferingID      string      `json:"disk_offering_id"`
-	NetworkRate         string      `json:"network_rate"`
+	NetworkRate         FlexNumber  `json:"network_rate"`
 	VPCOfferingID       string      `json:"vpc_offering_id"`
 	FormattedMemoryUnit string      `json:"formatted_memory_unit"`
 	FormattedSizeUnit   string      `json:"formatted_size_unit"`
