@@ -169,7 +169,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&nodeSize, "workers", 0, "Number of worker nodes (required, >= 1)")
 	cmd.Flags().IntVar(&controlNodes, "control-nodes", 1, "Number of control plane nodes (default 1)")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
-	cmd.Flags().StringVar(&cloudProviderSetup, "cloud-provider-setup", "", "Cloud provider setup slug, e.g. zcp-apc (required for quota resolution)")
+	cmd.Flags().StringVar(&cloudProviderSetup, "cloud-provider-setup", "", "Cloud provider setup slug, e.g. default-setup")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly, monthly (required)")

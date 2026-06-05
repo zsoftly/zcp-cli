@@ -47,6 +47,19 @@ type bucketSingleResponse struct {
 	Data    objectstorage.Bucket `json:"data"`
 }
 
+type objectListResponse struct {
+	Status  string                 `json:"status"`
+	Message string                 `json:"message"`
+	Data    []objectstorage.Object `json:"data"`
+	Total   int                    `json:"total"`
+}
+
+type objectSingleResponse struct {
+	Status  string               `json:"status"`
+	Message string               `json:"message"`
+	Data    objectstorage.Object `json:"data"`
+}
+
 func TestList(t *testing.T) {
 	expected := []objectstorage.ObjectStorage{
 		{ID: "os-1", Name: "my-storage", Slug: "my-storage-1", Status: "Active"},
@@ -300,5 +313,191 @@ func TestDeleteBucket(t *testing.T) {
 	}
 	if gotPath != "/object-storages/my-storage-1/buckets/my-bucket" {
 		t.Errorf("path = %q, want /object-storages/my-storage-1/buckets/my-bucket", gotPath)
+	}
+}
+
+func TestUpdateBucket(t *testing.T) {
+	expected := objectstorage.Bucket{ID: "b-1", Name: "my-bucket", Slug: "my-bucket"}
+
+	var gotBody map[string]interface{}
+	var gotPath, gotMethod string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotMethod = r.Method
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bucketSingleResponse{Status: "Success", Message: "OK", Data: expected})
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	req := objectstorage.BucketUpdateRequest{ACL: "public-read"}
+	bucket, err := svc.UpdateBucket(context.Background(), "my-storage-1", "my-bucket", req)
+	if err != nil {
+		t.Fatalf("UpdateBucket() error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT", gotMethod)
+	}
+	if gotPath != "/object-storages/my-storage-1/buckets/my-bucket" {
+		t.Errorf("path = %q, want /object-storages/my-storage-1/buckets/my-bucket", gotPath)
+	}
+	if gotBody["acl"] != "public-read" {
+		t.Errorf("body acl = %v, want public-read", gotBody["acl"])
+	}
+	if bucket.ID != "b-1" {
+		t.Errorf("bucket.ID = %q, want b-1", bucket.ID)
+	}
+}
+
+func TestSetBucketACL(t *testing.T) {
+	expected := objectstorage.Bucket{ID: "b-1", Name: "my-bucket", Slug: "my-bucket"}
+
+	var gotBody map[string]interface{}
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bucketSingleResponse{Status: "Success", Message: "OK", Data: expected})
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	bucket, err := svc.SetBucketACL(context.Background(), "my-storage-1", "my-bucket", "private")
+	if err != nil {
+		t.Fatalf("SetBucketACL() error = %v", err)
+	}
+	if gotPath != "/object-storages/my-storage-1/buckets/my-bucket/acl" {
+		t.Errorf("path = %q, want /object-storages/my-storage-1/buckets/my-bucket/acl", gotPath)
+	}
+	if gotBody["acl"] != "private" {
+		t.Errorf("body acl = %v, want private", gotBody["acl"])
+	}
+	if bucket.ID != "b-1" {
+		t.Errorf("bucket.ID = %q, want b-1", bucket.ID)
+	}
+}
+
+func TestListObjects(t *testing.T) {
+	expected := []objectstorage.Object{
+		{Key: "file.txt", Name: "file.txt", ContentType: "text/plain"},
+		{Key: "images/logo.png", Name: "logo.png", ContentType: "image/png"},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/object-storages/my-storage-1/buckets/my-bucket/objects" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(objectListResponse{Status: "Success", Message: "OK", Data: expected, Total: 2})
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	objects, err := svc.ListObjects(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("ListObjects() error = %v", err)
+	}
+	if len(objects) != 2 {
+		t.Fatalf("ListObjects() returned %d items, want 2", len(objects))
+	}
+	if objects[0].Key != "file.txt" {
+		t.Errorf("objects[0].Key = %q, want file.txt", objects[0].Key)
+	}
+	if objects[1].ContentType != "image/png" {
+		t.Errorf("objects[1].ContentType = %q, want image/png", objects[1].ContentType)
+	}
+}
+
+func TestGetObject(t *testing.T) {
+	expected := objectstorage.Object{Key: "file.txt", Name: "file.txt", ContentType: "text/plain", URL: "https://s3.example.com/my-bucket/file.txt"}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/object-storages/my-storage-1/buckets/my-bucket/objects/file.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(objectSingleResponse{Status: "Success", Message: "OK", Data: expected})
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	obj, err := svc.GetObject(context.Background(), "my-storage-1", "my-bucket", "file.txt")
+	if err != nil {
+		t.Fatalf("GetObject() error = %v", err)
+	}
+	if obj.Key != "file.txt" {
+		t.Errorf("obj.Key = %q, want file.txt", obj.Key)
+	}
+	if obj.URL != "https://s3.example.com/my-bucket/file.txt" {
+		t.Errorf("obj.URL = %q, want https://s3.example.com/my-bucket/file.txt", obj.URL)
+	}
+}
+
+func TestS3EndpointFromRegion(t *testing.T) {
+	setup := &objectstorage.RegionCloudProviderSetup{
+		Config: objectstorage.RegionSetupConfig{
+			S3Endpoint: "https://s3.yul-1.zsoftly.ca",
+		},
+	}
+	store := objectstorage.ObjectStorage{
+		Region: &objectstorage.Region{
+			CloudProviderSetup: setup,
+		},
+	}
+
+	if got := store.S3Endpoint(); got != "https://s3.yul-1.zsoftly.ca" {
+		t.Errorf("S3Endpoint() = %q, want https://s3.yul-1.zsoftly.ca", got)
+	}
+}
+
+func TestS3EndpointNilRegion(t *testing.T) {
+	store := objectstorage.ObjectStorage{}
+	if got := store.S3Endpoint(); got != "" {
+		t.Errorf("S3Endpoint() with nil region = %q, want empty string", got)
+	}
+}
+
+func TestCredentialsDecoding(t *testing.T) {
+	payload := `{
+		"status": "Success",
+		"message": "OK",
+		"data": {
+			"id": "os-1",
+			"slug": "my-storage-1",
+			"name": "my-storage",
+			"status": "Active",
+			"api_key": "AKIAIOSFODNN7EXAMPLE",
+			"api_secret": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"region": {
+				"id": "r-1",
+				"name": "YUL-1",
+				"slug": "yul-1",
+				"cloud_provider_setup": {
+					"config": {
+						"s3_endpoint": "https://s3.yul-1.zsoftly.ca",
+						"s3_fallback_endpoint": "http://10.18.20.21:7480"
+					}
+				}
+			}
+		}
+	}`
+
+	var resp singleResponse
+	if err := json.Unmarshal([]byte(payload), &resp); err != nil {
+		t.Fatalf("Unmarshal error = %v", err)
+	}
+	store := resp.Data
+	if store.APIKey != "AKIAIOSFODNN7EXAMPLE" {
+		t.Errorf("APIKey = %q, want AKIAIOSFODNN7EXAMPLE", store.APIKey)
+	}
+	if store.APISecret != "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" {
+		t.Errorf("APISecret = %q, want wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", store.APISecret)
+	}
+	if store.S3Endpoint() != "https://s3.yul-1.zsoftly.ca" {
+		t.Errorf("S3Endpoint() = %q, want https://s3.yul-1.zsoftly.ca", store.S3Endpoint())
 	}
 }

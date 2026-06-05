@@ -26,6 +26,7 @@ func NewObjectStorageCmd() *cobra.Command {
 	cmd.AddCommand(newOSCreateCmd())
 	cmd.AddCommand(newOSDeleteCmd())
 	cmd.AddCommand(newOSResizeCmd())
+	cmd.AddCommand(newOSCredentialsCmd())
 	cmd.AddCommand(newOSBucketCmd())
 	cmd.AddCommand(newOSObjectCmd())
 	return cmd
@@ -109,7 +110,9 @@ func newOSGetCmd() *cobra.Command {
 				{"Status", store.Status},
 				{"Size (GB)", store.Size.String()},
 				{"Used (GB)", store.UsedSpace.String()},
-				{"S3 Endpoint", store.S3Endpoint},
+				{"S3 Endpoint", store.S3Endpoint()},
+				{"Access Key", store.APIKey},
+				{"Secret Key", store.APISecret},
 				{"Region", regionName},
 				{"Project", projectName},
 				{"Created", store.CreatedAt},
@@ -147,6 +150,9 @@ func newOSCreateCmd() *cobra.Command {
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
+			}
+			if storageGB < 0 {
+				return fmt.Errorf("--storage-gb cannot be negative")
 			}
 			if plan == "" && storageGB == 0 {
 				return fmt.Errorf("either --plan or --storage-gb is required")
@@ -212,6 +218,38 @@ func newOSCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&storageGB, "storage-gb", 0, "Custom storage size in GB, minimum 60 (mutually exclusive with --plan)")
 	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code")
 	return cmd
+}
+
+func newOSCredentialsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "credentials <slug>",
+		Short: "Show S3 credentials for an object storage instance",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp object-storage credentials my-storage-1
+  zcp object-storage credentials my-storage-1 --output json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			store, err := svc.Get(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("object-storage credentials: %w", err)
+			}
+
+			headers := []string{"FIELD", "VALUE"}
+			rows := [][]string{
+				{"S3 Endpoint", store.S3Endpoint()},
+				{"Access Key", store.APIKey},
+				{"Secret Key", store.APISecret},
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
 }
 
 func newOSDeleteCmd() *cobra.Command {

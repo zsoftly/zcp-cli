@@ -657,7 +657,7 @@ func newBillingCancelServiceCmd() *cobra.Command {
 	cmd.Flags().StringVar(&reason, "reason", "not_needed_anymore", "Reason: limit_expenses, not_needed_anymore, better_offer, not_satisfied, switch_product, other")
 	cmd.Flags().StringVar(&cancelType, "type", "Immediate", "Cancel type: Immediate or 'End of billing period'")
 	cmd.Flags().StringVar(&description, "description", "", "Additional description (optional)")
-	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Delete associated public IP addresses (required when VM has public IPs)")
+	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", false, "Delete associated public IP addresses (required when VM has public IPs)")
 	return cmd
 }
 
@@ -672,11 +672,14 @@ func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, canc
 	defer cancel()
 
 	req := billing.CancelServiceRequest{
-		ServiceName:    serviceName,
-		Reason:         reason,
-		Type:           cancelType,
-		Description:    description,
-		DeletePublicIP: &deletePublicIP,
+		ServiceName: serviceName,
+		Reason:      reason,
+		Type:        cancelType,
+		Description: description,
+	}
+	if cmd.Flags().Changed("delete-public-ip") {
+		bp := deletePublicIP
+		req.DeletePublicIP = &bp
 	}
 	if err := svc.CancelService(ctx, slug, req); err != nil {
 		return fmt.Errorf("billing cancel-service: %w", err)

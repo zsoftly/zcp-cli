@@ -10,12 +10,30 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
+// RegionSetupConfig holds the cloud-provider-setup configuration embedded in a region.
+type RegionSetupConfig struct {
+	S3Endpoint         string `json:"s3_endpoint"`
+	S3FallbackEndpoint string `json:"s3_fallback_endpoint"`
+}
+
+// RegionCloudProviderSetup holds the setup embedded in a region response.
+type RegionCloudProviderSetup struct {
+	Config RegionSetupConfig `json:"config"`
+}
+
 // Region represents the region where the object storage is deployed.
 type Region struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Slug    string `json:"slug"`
-	Country string `json:"country"`
+	ID                 string                    `json:"id"`
+	Name               string                    `json:"name"`
+	Slug               string                    `json:"slug"`
+	Country            string                    `json:"country"`
+	CloudProviderSetup *RegionCloudProviderSetup `json:"cloud_provider_setup"`
+}
+
+// OSStats holds object-count and byte-total stats for a storage instance.
+type OSStats struct {
+	TotalFiles int `json:"total_files"`
+	TotalSize  int `json:"total_size"`
 }
 
 // CloudProvider represents the cloud provider backing the object storage.
@@ -57,9 +75,14 @@ type ObjectStorage struct {
 	Status               string         `json:"status"`
 	Size                 json.Number    `json:"size"`
 	UsedSpace            json.Number    `json:"used_space"`
-	S3Endpoint           string         `json:"s3_endpoint"`
+	StorageUsage         json.Number    `json:"storage_usage"`
+	AllTimeConsumption   float64        `json:"all_time_consumption"`
 	ServiceName          string         `json:"service_name"`
 	ServiceDisplayName   string         `json:"service_display_name"`
+	APIKey               string         `json:"api_key"`
+	APISecret            string         `json:"api_secret"`
+	IsAutoscale          bool           `json:"is_autoscale"`
+	Stats                *OSStats       `json:"stats"`
 	ProjectID            string         `json:"project_id"`
 	RegionID             string         `json:"region_id"`
 	CloudProviderID      string         `json:"cloud_provider_id"`
@@ -73,6 +96,15 @@ type ObjectStorage struct {
 	CloudProvider        *CloudProvider `json:"cloud_provider"`
 	Project              *Project       `json:"project"`
 	Offering             *Offering      `json:"offering"`
+}
+
+// S3Endpoint returns the S3 endpoint URL, resolved from the nested region
+// cloud-provider-setup config (the live API does not expose it as a top-level field).
+func (o *ObjectStorage) S3Endpoint() string {
+	if o.Region != nil && o.Region.CloudProviderSetup != nil {
+		return o.Region.CloudProviderSetup.Config.S3Endpoint
+	}
+	return ""
 }
 
 // Bucket represents an object storage bucket.
