@@ -216,15 +216,3 @@ func formatFWPorts(start, end string) string {
 	}
 	return start + "-" + end
 }
-
-// formatPorts returns a human-readable ports string from start/end port string values.
-// Retained for backward compatibility with other commands that may reference it.
-func formatPorts(start, end string) string {
-	if start == "" && end == "" {
-		return "all"
-	}
-	if end == "" || end == start {
-		return start
-	}
-	return start + "-" + end
-}

@@ -21,16 +21,6 @@ func validatePortForwardProtocol(protocol string) error {
 	return nil
 }
 
-func validatePortNumber(port int, flagName string) error {
-	if port == 0 {
-		return nil
-	}
-	if port < 1 || port > 65535 {
-		return fmt.Errorf("%s must be a number between 1 and 65535", flagName)
-	}
-	return nil
-}
-
 // NewPortForwardCmd returns the 'portforward' cobra command.
 func NewPortForwardCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -227,18 +217,6 @@ func runPortForwardDelete(cmd *cobra.Command, ipSlug, ruleID string, yes bool) e
 
 	printer.Fprintf("Port forwarding rule %q deleted.\n", ruleID)
 	return nil
-}
-
-// formatPFPorts returns a human-readable port range string for port forwarding rules (string args).
-// Retained for backward compatibility with other commands that may reference it.
-func formatPFPorts(start, end string) string {
-	if start == "" {
-		return ""
-	}
-	if end == "" || end == start {
-		return start
-	}
-	return start + "-" + end
 }
 
 // formatPFPortsInt returns a human-readable port range string for port forwarding rules (int args).

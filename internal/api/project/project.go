@@ -66,8 +66,13 @@ type AddUserRequest struct {
 	Role  string `json:"role,omitempty"`
 }
 
-// DashboardCounts maps service name to resource count on the project dashboard.
-type DashboardCounts map[string]int
+// DashboardService represents one service category on the project dashboard.
+type DashboardService struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Count  int    `json:"count"`
+}
 
 // Service provides Project API operations.
 type Service struct {
@@ -132,17 +137,17 @@ func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*
 	return &p, nil
 }
 
-// Dashboard returns a map of service name → count for a project's dashboard.
-func (s *Service) Dashboard(ctx context.Context, slug string) (DashboardCounts, error) {
+// Dashboard returns the service breakdown for a project's dashboard.
+func (s *Service) Dashboard(ctx context.Context, slug string) ([]DashboardService, error) {
 	var raw json.RawMessage
 	if err := s.client.Get(ctx, "/projects/dashboard/"+slug+"/services", nil, &raw); err != nil {
 		return nil, fmt.Errorf("getting project dashboard %s: %w", slug, err)
 	}
-	var counts DashboardCounts
-	if err := decode(raw, &counts); err != nil {
+	var services []DashboardService
+	if err := decode(raw, &services); err != nil {
 		return nil, fmt.Errorf("decoding dashboard services: %w", err)
 	}
-	return counts, nil
+	return services, nil
 }
 
 // ListIcons returns all available project icons.
