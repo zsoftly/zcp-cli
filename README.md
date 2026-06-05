@@ -3,7 +3,7 @@
 The official command-line interface for the ZSoftly Cloud Platform
 
 [![CI](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml/badge.svg)](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml)
-![Go](https://img.shields.io/badge/Go-1.26.1-blue)
+![Go](https://img.shields.io/badge/Go-1.26.4-blue)
 
 ---
 
@@ -49,7 +49,7 @@ make build
 # Binary is written to bin/zcp
 ```
 
-Requirements: Go 1.26.1+, GNU Make.
+Requirements: Go 1.26.4+, GNU Make.
 
 ---
 
@@ -683,7 +683,7 @@ zcp completion powershell | Out-String | Invoke-Expression
 
 ### Requirements
 
-- Go 1.26.1 (toolchain, as specified in `go.mod`)
+- Go 1.26.4 (toolchain, as specified in `go.mod`)
 - GNU Make
 - Git
 
