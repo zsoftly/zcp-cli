@@ -96,3 +96,11 @@ func (s *Service) Create(ctx context.Context, blockstorageSlug string, req Creat
 	}
 	return &resp.Data, nil
 }
+
+// Delete permanently deletes a block storage backup schedule.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/blockstorages/backups/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting block storage backup %s: %w", slug, err)
+	}
+	return nil
+}

@@ -158,3 +158,12 @@ func (s *Service) DisableRemoteAccessVPN(ctx context.Context, ipSlug, vpnID stri
 	}
 	return nil
 }
+
+// Release releases (deletes) a public IP address. SOURCE-NAT IPs tied to a
+// network must have their network deleted first.
+func (s *Service) Release(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/ipaddresses/"+slug, nil); err != nil {
+		return fmt.Errorf("releasing IP address %s: %w", slug, err)
+	}
+	return nil
+}

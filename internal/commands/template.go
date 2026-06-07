@@ -146,7 +146,7 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "account-create",
 		Short: "Create an account template",
-		Example: `  zcp template account-create --name my-template --cloud-provider zcp \
+		Example: `  zcp template account-create --name my-template --cloud-provider nimbo \
     --region yow-1 --project my-project --os-type-id <uuid> \
     --image-type "Operating System" --os ubuntu --os-version "22.04 LTS" \
     --billing-cycle hourly --url https://example.com/image.qcow2 --format QCOW2`,

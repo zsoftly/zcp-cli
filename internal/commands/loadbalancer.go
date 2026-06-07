@@ -26,8 +26,11 @@ func NewLoadBalancerCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newLBListCmd())
 	cmd.AddCommand(newLBCreateCmd())
+	cmd.AddCommand(newLBDeleteCmd())
 	cmd.AddCommand(newLBCreateRuleCmd())
+	cmd.AddCommand(newLBDeleteRuleCmd())
 	cmd.AddCommand(newLBAttachVMCmd())
+	cmd.AddCommand(newLBDetachVMCmd())
 	return cmd
 }
 
@@ -103,8 +106,8 @@ func newLBCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --cloud-provider zcp --project my-project --region mtl-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
-  zcp loadbalancer create --name my-lb --cloud-provider zcp --project my-project --region mtl-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
+		Example: `  zcp loadbalancer create --name my-lb --cloud-provider nimbo --project my-project --region yul-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
+  zcp loadbalancer create --name my-lb --cloud-provider nimbo --project my-project --region yul-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -190,6 +193,45 @@ func runLBCreate(cmd *cobra.Command, req loadbalancer.CreateRequest) error {
 		{"Created", lb.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)
+}
+
+func newLBDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <lb-slug>",
+		Short: "Permanently delete a load balancer",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp loadbalancer delete my-lb
+  zcp loadbalancer delete my-lb --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete load balancer %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := loadbalancer.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("loadbalancer delete: %w", err)
+			}
+			printer.Fprintf("Load balancer %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
 }
 
 func newLBCreateRuleCmd() *cobra.Command {
@@ -281,6 +323,89 @@ func runLBCreateRule(cmd *cobra.Command, lbSlug string, req loadbalancer.CreateR
 	return nil
 }
 
+func newLBDeleteRuleCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete-rule <lb-slug> <rule-id>",
+		Short: "Delete a rule from a load balancer",
+		Args:  cobra.ExactArgs(2),
+		Example: `  zcp loadbalancer delete-rule my-lb rule-123
+  zcp loadbalancer delete-rule my-lb rule-123 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lbSlug, ruleID := args[0], args[1]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete rule %q from load balancer %q? [y/N]: ", ruleID, lbSlug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := loadbalancer.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.DeleteRule(ctx, lbSlug, ruleID); err != nil {
+				return fmt.Errorf("loadbalancer delete-rule: %w", err)
+			}
+			printer.Fprintf("Rule %q deleted from load balancer %q.\n", ruleID, lbSlug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func newLBDetachVMCmd() *cobra.Command {
+	var vmSlug string
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "detach-vm <lb-slug> <rule-id>",
+		Short: "Detach a VM from a load balancer rule",
+		Args:  cobra.ExactArgs(2),
+		Example: `  zcp loadbalancer detach-vm my-lb rule-123 --vm vm-slug-1
+  zcp loadbalancer detach-vm my-lb rule-123 --vm vm-slug-1 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lbSlug, ruleID := args[0], args[1]
+			if vmSlug == "" {
+				return fmt.Errorf("--vm is required")
+			}
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Detach VM %q from rule %q on load balancer %q? [y/N]: ", vmSlug, ruleID, lbSlug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := loadbalancer.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.DetachVM(ctx, lbSlug, ruleID, vmSlug); err != nil {
+				return fmt.Errorf("loadbalancer detach-vm: %w", err)
+			}
+			printer.Fprintf("VM %q detached from rule %q on load balancer %q.\n", vmSlug, ruleID, lbSlug)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&vmSlug, "vm", "", "VM slug to detach (required)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
+}
+
 func newLBAttachVMCmd() *cobra.Command {
 	var (
 		cloudProvider string
@@ -293,8 +418,8 @@ func newLBAttachVMCmd() *cobra.Command {
 		Use:   "attach-vm <lb-slug> <rule-id>",
 		Short: "Attach VMs to a load balancer rule",
 		Args:  cobra.ExactArgs(2),
-		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --cloud-provider zcp --region mtl-1 --project my-project
-  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --cloud-provider zcp --region mtl-1 --project my-project --yes`,
+		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --cloud-provider nimbo --region yul-1 --project my-project
+  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --cloud-provider nimbo --region yul-1 --project my-project --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(vmSlugs) == 0 {
 				return fmt.Errorf("at least one --vm is required")

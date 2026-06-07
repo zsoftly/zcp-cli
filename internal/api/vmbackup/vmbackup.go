@@ -63,7 +63,7 @@ type CreateRequest struct {
 	Region        string  `json:"region"`
 	BillingCycle  string  `json:"billing_cycle"`
 	Plan          string  `json:"plan"`
-	PsudoService  string  `json:"psudo_service"`
+	PseudoService string  `json:"psudo_service"`
 	Project       string  `json:"project"`
 	IsVMSnapshot  bool    `json:"is_vm_snapshot"`
 	Coupon        *string `json:"coupon"`
@@ -101,4 +101,12 @@ func (s *Service) Create(ctx context.Context, vmSlug string, req CreateRequest) 
 		return nil, fmt.Errorf("creating VM backup on %s: %w", vmSlug, err)
 	}
 	return &resp, nil
+}
+
+// Delete permanently deletes a VM backup.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/virtual-machines/backups/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting VM backup %s: %w", slug, err)
+	}
+	return nil
 }

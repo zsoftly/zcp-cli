@@ -3,7 +3,9 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +22,7 @@ func NewNetworkCmd() *cobra.Command {
 	cmd.AddCommand(newNetworkCreateCmd())
 	cmd.AddCommand(newNetworkUpdateCmd())
 	cmd.AddCommand(newNetworkCategoriesCmd())
+	cmd.AddCommand(newNetworkDeleteCmd())
 	return cmd
 }
 
@@ -74,8 +77,8 @@ func newNetworkCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new isolated network",
-		Example: `  zcp network create --name my-net --category <slug> --cloud-provider <slug> --region <slug> --project <slug>
-  zcp network create --name my-net --category <slug> --gateway 10.1.1.1 --netmask 255.255.255.0 --cloud-provider <slug> --region <slug> --project <slug>`,
+		Example: `  zcp network create --name my-net --category isolated-network --cloud-provider nimbo --region yow-1 --project default
+  zcp network create --name my-net --category isolated-network --gateway 10.1.1.1 --netmask 255.255.255.0 --cloud-provider nimbo --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -155,8 +158,8 @@ func newNetworkUpdateCmd() *cobra.Command {
 		Use:   "update <slug>",
 		Short: "Update a network",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp network update <slug> --name new-name
-  zcp network update <slug> --description "Updated description"`,
+		Example: `  zcp network update en-001001-0018 --name new-name
+  zcp network update en-001001-0018 --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" && description == "" {
 				return fmt.Errorf("at least one of --name or --description is required")
@@ -237,4 +240,42 @@ func runNetworkCategories(cmd *cobra.Command) error {
 		})
 	}
 	return printer.PrintTable(headers, rows)
+}
+
+func newNetworkDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <slug>",
+		Short: "Delete an isolated network",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp network delete en-001001-0018
+  zcp network delete en-001001-0018 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "Delete network %q? Its SOURCE-NAT IP will also be released. [y/N]: ", slug)
+				var answer string
+				fmt.Scanln(&answer)
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stdout, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := network.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("network delete: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Network %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
 }

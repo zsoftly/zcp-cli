@@ -3,6 +3,7 @@ package ipaddress_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -253,6 +254,45 @@ func TestIPEnableRemoteAccessVPN(t *testing.T) {
 	}
 	if result.ID != "vpn-new" {
 		t.Errorf("result.ID = %q, want %q", result.ID, "vpn-new")
+	}
+}
+
+// TestIPRelease verifies DELETE /ipaddresses/<slug> is called.
+func TestIPRelease(t *testing.T) {
+	var gotPath, gotMethod string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := ipaddress.NewService(newClient(srv.URL))
+	err := svc.Release(context.Background(), "1036521143")
+	if err != nil {
+		t.Fatalf("Release() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/ipaddresses/1036521143" {
+		t.Errorf("path = %q, want %q", gotPath, "/ipaddresses/1036521143")
+	}
+}
+
+// TestIPRelease_NotFound verifies a 404 returns an error.
+func TestIPRelease_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"status":"Error","message":"IP address not found."}`)
+	}))
+	defer srv.Close()
+
+	svc := ipaddress.NewService(newClient(srv.URL))
+	err := svc.Release(context.Background(), "nonexistent")
+	if err == nil {
+		t.Fatal("Release() expected error, got nil")
 	}
 }
 

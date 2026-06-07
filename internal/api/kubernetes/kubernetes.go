@@ -9,6 +9,25 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
+// KubeconfigData is the nested object inside ClusterMeta.Config.
+type KubeconfigData struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ConfigData string `json:"configdata"`
+}
+
+// ClusterMeta holds the CloudStack-side details embedded in the API response.
+type ClusterMeta struct {
+	ControlNodes          string          `json:"control_nodes"`
+	Size                  string          `json:"size"`
+	KubernetesVersionName string          `json:"kubernetes_version_name"`
+	IPAddress             string          `json:"ipaddress"`
+	Endpoint              string          `json:"end_point"`
+	State                 string          `json:"state"`
+	Zone                  string          `json:"zone_name"`
+	Config                *KubeconfigData `json:"config,omitempty"`
+}
+
 // Cluster represents a ZCP managed Kubernetes cluster from the STKCNSL API.
 type Cluster struct {
 	ID                   string          `json:"id"`
@@ -43,6 +62,7 @@ type Cluster struct {
 	ServiceName          string          `json:"service_name"`
 	ServiceDisplayName   string          `json:"service_display_name"`
 	AllTimeConsumption   float64         `json:"all_time_consumption"`
+	Meta                 *ClusterMeta    `json:"meta,omitempty"`
 }
 
 // BillingCycle represents the billing cycle attached to a cluster.
@@ -180,6 +200,49 @@ func (s *Service) Upgrade(ctx context.Context, slug string, req UpgradeRequest) 
 	var resp messageResponse
 	if err := s.client.Put(ctx, fmt.Sprintf("/kubernetes-clusters/%s/change-plan", slug), nil, req, &resp); err != nil {
 		return fmt.Errorf("upgrading kubernetes cluster %s: %w", slug, err)
+	}
+	return nil
+}
+
+// Get returns a single Kubernetes cluster by slug.
+func (s *Service) Get(ctx context.Context, slug string) (*Cluster, error) {
+	var resp singleResponse
+	if err := s.client.Get(ctx, "/kubernetes-clusters/"+slug, nil, &resp); err != nil {
+		return nil, fmt.Errorf("getting kubernetes cluster %s: %w", slug, err)
+	}
+	return &resp.Data, nil
+}
+
+// ScaleRequest holds the worker node count for a scale operation.
+type ScaleRequest struct {
+	NodeSize int `json:"node_size"`
+}
+
+// Scale changes the number of worker nodes on a running cluster.
+func (s *Service) Scale(ctx context.Context, slug string, nodeSize int) error {
+	var resp messageResponse
+	if err := s.client.Put(ctx, fmt.Sprintf("/kubernetes-clusters/%s/scale", slug), nil, ScaleRequest{NodeSize: nodeSize}, &resp); err != nil {
+		return fmt.Errorf("scaling kubernetes cluster %s: %w", slug, err)
+	}
+	return nil
+}
+
+// GetKubeconfig returns the raw kubeconfig YAML for a cluster, or "" if not yet available.
+func (s *Service) GetKubeconfig(ctx context.Context, slug string) (string, error) {
+	var resp singleResponse
+	if err := s.client.Get(ctx, "/kubernetes-clusters/"+slug, nil, &resp); err != nil {
+		return "", fmt.Errorf("getting kubernetes cluster %s: %w", slug, err)
+	}
+	if resp.Data.Meta == nil || resp.Data.Meta.Config == nil {
+		return "", fmt.Errorf("kubeconfig not available yet for cluster %s (state: %s)", slug, resp.Data.State)
+	}
+	return resp.Data.Meta.Config.ConfigData, nil
+}
+
+// Delete permanently deletes a Kubernetes cluster.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/kubernetes-clusters/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting kubernetes cluster %s: %w", slug, err)
 	}
 	return nil
 }

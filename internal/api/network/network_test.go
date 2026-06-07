@@ -356,6 +356,46 @@ func TestNetworkListNetworkTypeKey(t *testing.T) {
 	}
 }
 
+// TestDeleteNetwork verifies DELETE /networks/<slug> is called correctly.
+func TestDeleteNetwork(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "en-001001-0018")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/networks/en-001001-0018" {
+		t.Errorf("path = %q, want %q", gotPath, "/networks/en-001001-0018")
+	}
+}
+
+// TestDeleteNetwork_HasVMs verifies that an error response surfaces correctly.
+func TestDeleteNetwork_HasVMs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, `{"status":"Error","message":"You cannot delete the network while virtual machines are created using it."}`)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "en-001001-0018")
+	if err == nil {
+		t.Fatal("Delete() expected error, got nil")
+	}
+}
+
 // TestDeleteEgressRule verifies DELETE path includes slug and rule ID.
 func TestDeleteEgressRule(t *testing.T) {
 	var gotPath, gotMethod string

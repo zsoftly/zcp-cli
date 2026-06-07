@@ -25,6 +25,7 @@ func NewAutoscaleCmd() *cobra.Command {
 	cmd.AddCommand(newAutoscaleDisableCmd())
 	cmd.AddCommand(newAutoscaleChangePlanCmd())
 	cmd.AddCommand(newAutoscaleChangeTemplateCmd())
+	cmd.AddCommand(newAutoscaleDeleteCmd())
 	cmd.AddCommand(newAutoscalePolicyCmd())
 	cmd.AddCommand(newAutoscaleConditionCmd())
 	return cmd
@@ -102,8 +103,8 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new autoscale group",
-		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1 --cloud-provider <slug> --region <slug> --project <slug>
-  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --cloud-provider <slug> --region <slug> --project <slug>`,
+		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1 --cloud-provider nimbo --region yow-1 --project default
+  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --cloud-provider nimbo --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -350,6 +351,49 @@ func runAutoscaleChangeTemplate(cmd *cobra.Command, slug, template string) error
 	headers := []string{"SLUG", "NAME", "TEMPLATE", "STATE"}
 	rows := [][]string{{group.Slug, group.Name, group.Template, group.State}}
 	return printer.PrintTable(headers, rows)
+}
+
+// ---------------------------------------------------------------------------
+// autoscale delete
+// ---------------------------------------------------------------------------
+
+func newAutoscaleDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <slug>",
+		Short: "Permanently delete an autoscale group",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp autoscale delete web-group
+  zcp autoscale delete web-group --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete autoscale group %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := autoscale.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("autoscale delete: %w", err)
+			}
+			printer.Fprintf("Autoscale group %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
 }
 
 // ---------------------------------------------------------------------------

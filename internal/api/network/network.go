@@ -240,3 +240,12 @@ func (s *Service) DeleteEgressRule(ctx context.Context, networkSlug string, rule
 	}
 	return nil
 }
+
+// Delete removes an isolated network. The network must have no VMs attached.
+// Its SOURCE-NAT IP is released automatically by CloudStack on deletion.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/networks/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting network %s: %w", slug, err)
+	}
+	return nil
+}

@@ -306,6 +306,7 @@ zcp network list
 zcp network categories
 zcp network create --name my-net --category <slug> --cloud-provider zcp --region yow-1 --project my-project
 zcp network update <slug> --name "New Name"
+zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
 
 # VPC tier networks
 zcp network create --name public-tier --cloud-provider zcp --region yow-1 --project my-project \

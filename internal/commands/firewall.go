@@ -39,7 +39,7 @@ func newFirewallListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List firewall rules",
-		Example: `  zcp firewall list --ip <ip-slug>`,
+		Example: `  zcp firewall list --ip 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")
@@ -88,9 +88,9 @@ func newFirewallCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a firewall rule",
-		Example: `  zcp firewall create --ip <ip-slug> --protocol tcp --start-port 80 --end-port 80
-  zcp firewall create --ip <ip-slug> --protocol tcp --start-port 80 --end-port 80 --cidr 0.0.0.0/0
-  zcp firewall create --ip <ip-slug> --protocol icmp`,
+		Example: `  zcp firewall create --ip 1036521143 --protocol tcp --start-port 80 --end-port 80
+  zcp firewall create --ip 1036521143 --protocol tcp --start-port 80 --end-port 80 --cidr 0.0.0.0/0
+  zcp firewall create --ip 1036521143 --protocol icmp`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")
@@ -157,8 +157,8 @@ func newFirewallDeleteCmd() *cobra.Command {
 		Use:   "delete <rule-id>",
 		Short: "Delete a firewall rule",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp firewall delete <rule-id> --ip <ip-slug>
-  zcp firewall delete <rule-id> --ip <ip-slug> --yes`,
+		Example: `  zcp firewall delete 42 --ip 1036521143
+  zcp firewall delete 42 --ip 1036521143 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")

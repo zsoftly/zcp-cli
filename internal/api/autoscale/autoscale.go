@@ -294,3 +294,11 @@ func (s *Service) DeleteCondition(ctx context.Context, slug string, conditionID 
 	}
 	return nil
 }
+
+// Delete permanently deletes an autoscale group.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, basePath+"/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting autoscale group %s: %w", slug, err)
+	}
+	return nil
+}

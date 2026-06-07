@@ -141,8 +141,8 @@ func newDNSCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a DNS domain",
-		Example: `  zcp dns create --name example.com --project my-project --dns-provider dns-provider --cloud-provider <slug> --region <slug>
-  zcp dns create --name example.com --project my-project --cloud-provider <slug> --region <slug>`,
+		Example: `  zcp dns create --name example.com --project my-project --dns-provider powerdns --cloud-provider nimbo --region yow-1
+  zcp dns create --name example.com --project my-project --cloud-provider nimbo --region yow-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

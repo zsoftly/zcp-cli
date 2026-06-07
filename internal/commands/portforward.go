@@ -39,7 +39,7 @@ func newPortForwardListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List port forwarding rules",
-		Example: `  zcp portforward list --ip <ip-slug>`,
+		Example: `  zcp portforward list --ip 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")
@@ -90,7 +90,7 @@ func newPortForwardCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a port forwarding rule",
-		Example: `  zcp portforward create --ip <ip-slug> --protocol tcp --public-port 8080 --private-port 80 --instance <vm-slug>`,
+		Example: `  zcp portforward create --ip 1036521143 --protocol tcp --public-port 8080 --private-port 80 --instance my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")
@@ -176,8 +176,8 @@ func newPortForwardDeleteCmd() *cobra.Command {
 		Use:   "delete <rule-id>",
 		Short: "Delete a port forwarding rule",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp portforward delete <rule-id> --ip <ip-slug>
-  zcp portforward delete <rule-id> --ip <ip-slug> --yes`,
+		Example: `  zcp portforward delete 42 --ip 1036521143
+  zcp portforward delete 42 --ip 1036521143 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ipSlug == "" {
 				return fmt.Errorf("--ip is required")

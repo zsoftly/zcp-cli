@@ -202,8 +202,8 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --cloud-provider zcp --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
-  zcp instance create --name my-vm --cloud-provider zcp --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
+		Example: `  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
+  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -1003,7 +1003,7 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "purchase-addon",
 		Short:   "Purchase an addon for a virtual machine",
-		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --cloud-provider zcp --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id <id> --billing-cycle hourly`,
+		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --cloud-provider nimbo --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")

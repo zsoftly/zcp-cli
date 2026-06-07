@@ -87,12 +87,14 @@ zcp
 │   ├── list                           List volumes
 │   ├── create                         Create a new volume
 │   ├── attach                         Attach a volume to an instance
-│   └── detach                         Detach a volume from an instance
+│   ├── detach                         Detach a volume from its instance
+│   └── delete                         Permanently delete a volume (detach first; --yes to skip prompt)
 │
 ├── snapshot                           Block storage snapshot operations
 │   ├── list                           List snapshots
 │   ├── create                         Create a snapshot of a volume
-│   └── revert                         Revert a volume to a snapshot (destructive)
+│   ├── revert                         Revert a volume to a snapshot (destructive)
+│   └── delete                         Permanently delete a snapshot (--yes to skip prompt)
 │
 ├── vm-snapshot                        VM (instance-level) snapshot operations
 │   ├── list                           List VM snapshots
@@ -104,7 +106,8 @@ zcp
 │   ├── list                           List networks
 │   ├── create                         Create a network
 │   ├── update                         Update a network
-│   └── categories                     List network categories
+│   ├── categories                     List network categories
+│   └── delete                         Delete a network (releases its SOURCE-NAT IP; --yes to skip prompt)
 │
 ├── vpc                                VPC operations
 │   ├── list                           List VPCs (--zone filter)
@@ -129,6 +132,7 @@ zcp
 ├── ip                                 Public IP address operations
 │   ├── list                           List IP addresses (--vpc filter)
 │   ├── allocate                       Allocate a new public IP address
+│   ├── release                        Release a public IP address (--yes to skip prompt)
 │   ├── static-nat                     Static NAT operations
 │   │   └── enable                     Enable static NAT for an IP
 │   └── vpn                            Remote access VPN on an IP
@@ -154,8 +158,11 @@ zcp
 ├── loadbalancer                       Load balancer operations
 │   ├── list                           List load balancers
 │   ├── create                         Create a load balancer
+│   ├── delete                         Permanently delete a load balancer (--yes to skip prompt)
 │   ├── create-rule                    Create a load balancer rule
-│   └── attach-vm                      Attach a VM to a load balancer rule
+│   ├── delete-rule                    Delete a rule from a load balancer (--yes to skip prompt)
+│   ├── attach-vm                      Attach a VM to a load balancer rule
+│   └── detach-vm                      Detach a VM from a load balancer rule (--vm required; --yes to skip prompt)
 │
 ├── ssh-key                            SSH key operations
 │   ├── list                           List SSH keys
@@ -175,10 +182,12 @@ zcp
 │
 ├── kubernetes (alias: k8s)            Kubernetes cluster operations
 │   ├── list                           List Kubernetes clusters
+│   ├── get                            Show details for a single cluster
 │   ├── create                         Create a Kubernetes cluster
 │   ├── start                          Start a stopped cluster
 │   ├── stop                           Stop a running cluster
-│   └── upgrade                        Upgrade a Kubernetes cluster version
+│   ├── upgrade                        Upgrade a Kubernetes cluster version
+│   └── delete                         Permanently delete a cluster (--yes to skip prompt)
 │
 ├── object-storage (alias: os)         Object storage operations
 │   ├── list                           List object storage instances
@@ -271,6 +280,7 @@ zcp
 │   ├── disable                        Disable an autoscale group
 │   ├── change-plan                    Change the compute plan of a group
 │   ├── change-template                Change the template of a group
+│   ├── delete                         Permanently delete an autoscale group (--yes to skip prompt)
 │   ├── policy                         Scale-up policy management
 │   │   ├── create                     Create a scale-up policy
 │   │   ├── update                     Update a scale-up policy
@@ -320,7 +330,8 @@ zcp
 │
 ├── backup                             Block storage backup operations
 │   ├── list                           List block storage backups
-│   └── create                         Create a block storage backup
+│   ├── create                         Create a block storage backup
+│   └── delete                         Permanently delete a block storage backup (--yes to skip prompt)
 │
 ├── profile-info                       User profile management (2FA status shown via get, not managed)
 │   ├── get                            Show user profile (includes 2FA status)
@@ -334,7 +345,8 @@ zcp
 │
 ├── vm-backup                          VM backup operations
 │   ├── list                           List VM backups
-│   └── create                         Create a VM backup
+│   ├── create                         Create a VM backup
+│   └── delete                         Permanently delete a VM backup (--yes to skip prompt)
 │
 ├── cloud-provider                     Cloud provider operations
 │   └── list                           List available cloud providers

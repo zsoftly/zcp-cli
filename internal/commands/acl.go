@@ -26,7 +26,7 @@ func newACLListCmd() *cobra.Command {
 		Use:     "list <vpc-slug>",
 		Short:   "List network ACLs for a VPC",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp acl list <vpc-slug>`,
+		Example: `  zcp acl list my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runACLList(cmd, args[0])
 		},
@@ -111,7 +111,7 @@ func newACLReplaceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "replace",
 		Short:   "Replace the ACL on a network",
-		Example: `  zcp acl replace --network <network-slug> --acl <acl-slug>`,
+		Example: `  zcp acl replace --network en-001001-0018 --acl my-vpc-acl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")

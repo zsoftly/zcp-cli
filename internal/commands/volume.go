@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ func NewVolumeCmd() *cobra.Command {
 	cmd.AddCommand(newVolumeCreateCmd())
 	cmd.AddCommand(newVolumeAttachCmd())
 	cmd.AddCommand(newVolumeDetachCmd())
+	cmd.AddCommand(newVolumeDeleteCmd())
 	return cmd
 }
 
@@ -90,8 +92,8 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
-		Example: `  zcp volume create --name my-disk --project my-project --cloud-provider zcp --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
-  zcp volume create --name my-disk --project my-project --cloud-provider zcp --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
+		Example: `  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
+  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -175,7 +177,7 @@ func newVolumeAttachCmd() *cobra.Command {
 		Use:     "attach <volume-slug>",
 		Short:   "Attach a volume to a virtual machine",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp volume attach <volume-slug> --vm <vm-slug>`,
+		Example: `  zcp volume attach bs-001001-0042 --vm my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			volumeSlug := args[0]
 			if vmSlug == "" {
@@ -213,7 +215,7 @@ func newVolumeDetachCmd() *cobra.Command {
 		Use:     "detach <volume-slug>",
 		Short:   "Detach a volume from its virtual machine",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp volume detach <volume-slug>`,
+		Example: `  zcp volume detach bs-001001-0042`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			volumeSlug := args[0]
 			_, client, printer, err := buildClientAndPrinter(cmd)
@@ -238,5 +240,43 @@ func newVolumeDetachCmd() *cobra.Command {
 			return printer.PrintTable(headers, rows)
 		},
 	}
+	return cmd
+}
+
+func newVolumeDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <volume-slug>",
+		Short: "Permanently delete a block storage volume",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp volume delete bs-001001-0042
+  zcp volume delete bs-001001-0042 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "Delete volume %q? This cannot be undone. Detach the volume first if it is attached. [y/N]: ", slug)
+				var answer string
+				fmt.Scanln(&answer)
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stdout, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := volume.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("volume delete: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Volume %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
