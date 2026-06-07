@@ -66,7 +66,7 @@ Auth (read by the binary itself):
 Resource selection — all optional; auto-detected from the API otherwise. Set
 these to pin the suite to a known-good region/plan and skip discovery:
 
-```
+```text
 ZCP_SMOKE_REGION            compute region slug          (default: first active non-Ceph/Dns region)
 ZCP_SMOKE_CLOUD_PROVIDER    cloud provider slug          (default: from region)
 ZCP_SMOKE_PROJECT           project slug                 (default: first project)
@@ -110,7 +110,7 @@ Add to the repo (Settings → Secrets and variables → Actions):
 
 ## Files
 
-```
+```text
 tests/smoke/
   smoke.sh       entrypoint — arg parsing, orchestration, summary, exit code
   lib.sh         framework — run_case/asserts, resource detection, cleanup stack

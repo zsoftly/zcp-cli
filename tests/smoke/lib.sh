@@ -80,8 +80,11 @@ run_case() {
 capture() {
   local __var="$1"; shift
   [[ "${1:-}" == "--" ]] && shift
-  local __out __rc
-  __out="$("$@" 2>&1)"; __rc=$?
+  local __out __rc __tmp
+  __tmp="$(mktemp)"
+  __out="$("$@" 2>"$__tmp")"; __rc=$?
+  [[ -s "$__tmp" ]] && cat "$__tmp" >&2
+  rm -f "$__tmp"
   printf -v "$__var" '%s' "$__out"
   return $__rc
 }

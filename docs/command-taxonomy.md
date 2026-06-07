@@ -80,7 +80,8 @@ zcp
 │   ├── add-network                    Attach an additional network to an instance
 │   ├── addons                         List available addons for an instance
 │   ├── purchase-addon                 Purchase an addon for an instance
-│   └── ssh                            Open an SSH session to an instance
+│   ├── ssh                            Open an SSH session to an instance
+│   └── delete                         Permanently delete an instance (--force to expunge immediately)
 │
 ├── volume                             Block storage volume operations
 │   ├── list                           List volumes

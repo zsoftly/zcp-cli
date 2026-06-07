@@ -490,6 +490,20 @@ func (s *Service) PurchaseAddon(ctx context.Context, req PurchaseAddonRequest) (
 	return &resp, nil
 }
 
+// Delete permanently destroys a virtual machine.
+// If expunge is true, ?expunge=true is sent to force immediate purge from the hypervisor
+// rather than leaving the VM in a soft-deleted/Destroyed state pending CloudStack expunge.
+func (s *Service) Delete(ctx context.Context, slug string, expunge bool) error {
+	var q url.Values
+	if expunge {
+		q = url.Values{"expunge": {"true"}}
+	}
+	if err := s.client.Delete(ctx, "/virtual-machines/"+slug, q); err != nil {
+		return fmt.Errorf("deleting virtual machine %s: %w", slug, err)
+	}
+	return nil
+}
+
 // WaitForState polls the VM until it reaches one of the target states or the context is cancelled.
 func (s *Service) WaitForState(ctx context.Context, slug string, targetStates []string, pollInterval time.Duration) (*VirtualMachine, error) {
 	if pollInterval == 0 {

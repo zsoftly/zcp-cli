@@ -160,8 +160,13 @@ fx_ip() {
   local net out; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && return 1
   capture out -- zcp ip allocate --network "$net" --plan "$(det_ip_plan)" --billing-cycle "$(det_billing_cycle)" -o json || return 1
   FX_IP="$(_jq_slug <<<"$out")"
-  [[ -z "$FX_IP" ]] && FX_IP="$(zcp ip list -o json 2>/dev/null | jq -r --arg n "$net" '(.[]//.data[])|select(.network_slug==$n or .["NETWORK ID"]!=null)|.slug' | head -1)"
-  [[ -n "$FX_IP" ]] && defer cancel "$FX_IP" "IP Address"
+  if [[ -n "$FX_IP" ]]; then
+    defer cancel "$FX_IP" "IP Address"
+  else
+    # fallback: locate the IP we just allocated but do NOT schedule teardown;
+    # we can't be certain the fallback result is ours vs a pre-existing IP
+    FX_IP="$(zcp ip list -o json 2>/dev/null | jq -r --arg n "$net" '(.[]//.data[])|select(.network_slug==$n)|.slug' | head -1)"
+  fi
 }
 
 # fx_vm — the shared VM, created via --network-plan (auto isolated net + SourceNAT
@@ -440,11 +445,13 @@ lc_kubernetes() {
   [[ -z "$ver" || -z "$plan" ]] && { _mark_skip "kubernetes (no version/plan for region)"; return; }
   out="$(zcp kubernetes create --name "$(rname k8s)" --version "$ver" --plan "$plan" \
     --region "$(det_region)" --project "$(det_project)" --cloud-provider "$(det_cp)" \
-    --billing-cycle "$(det_billing_cycle)" --workers 1 --cloud-provider-setup "${setup:-zcp-apc}" -y 2>&1)"
-  if grep -qiE 'quota not found' <<<"$out"; then
-    _mark_skip "kubernetes (account has no k8s quota — env limitation)"
-  elif grep -qiE 'error' <<<"$out"; then
-    _mark_fail "kubernetes create"; sed -n '1,2p' <<<"$out" | sed 's/^/        /'
+    --billing-cycle "$(det_billing_cycle)" --workers 1 --cloud-provider-setup "${setup:-zcp-apc}" -y 2>&1)"; local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    if grep -qiE 'quota not found' <<<"$out"; then
+      _mark_skip "kubernetes (account has no k8s quota — env limitation)"
+    else
+      _mark_fail "kubernetes create"; sed -n '1,2p' <<<"$out" | sed 's/^/        /'
+    fi
   else
     local s; s="$(zcp kubernetes list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
     _mark_pass "kubernetes create"; [[ -n "$s" ]] && defer cancel "$s" "Kubernetes"

@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
@@ -177,6 +180,13 @@ func (o Object) IsPublic() bool {
 	return strings.EqualFold(o.Permission, "public")
 }
 
+// Directory represents a virtual directory (common prefix) within a bucket.
+// The live API returns objects here, not plain strings.
+type Directory struct {
+	Prefix string `json:"prefix"`
+	Name   string `json:"name"`
+}
+
 // ObjectListPagination holds the cursor token for the next page.
 type ObjectListPagination struct {
 	NextToken *string `json:"next_token"`
@@ -185,7 +195,7 @@ type ObjectListPagination struct {
 // ObjectListData is the inner data envelope for the object list API response.
 type ObjectListData struct {
 	CurrentPrefix string               `json:"current_prefix"`
-	Directories   []string             `json:"directories"`
+	Directories   []Directory          `json:"directories"`
 	Files         []Object             `json:"files"`
 	Pagination    ObjectListPagination `json:"pagination"`
 }
@@ -351,27 +361,39 @@ func (s *Service) SetBucketACL(ctx context.Context, slug, bucketSlug, acl string
 	return &resp.Data, nil
 }
 
-// ListObjects returns all objects in a bucket, fetching all pages automatically.
-// A seen-token guard prevents infinite loops from buggy next_token responses.
+// ListObjects returns all objects in a bucket, including those inside subdirectory
+// prefixes (e.g. "tests/"). It uses the S3 protocol (minio-go Recursive=true)
+// rather than the REST API, because the REST listing endpoint cannot navigate into
+// subdirectory prefixes on the server side. S3 pagination is handled by minio-go.
+// Keys are deduplicated — the live API is known to echo objects across pages.
+// Virtual directory markers (zero-byte keys ending in "/") are skipped.
 func (s *Service) ListObjects(ctx context.Context, slug, bucketSlug string) ([]Object, error) {
-	path := fmt.Sprintf("/object-storages/%s/buckets/%s/objects", slug, bucketSlug)
-	var all []Object
+	store, err := s.Get(ctx, slug)
+	if err != nil {
+		return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
+	}
+	mc, err := NewS3Client(store)
+	if err != nil {
+		return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
+	}
+
 	seen := map[string]bool{}
-
-	q := url.Values{}
-	for {
-		var resp objectListResponse
-		if err := s.client.Get(ctx, path, q, &resp); err != nil {
-			return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
+	var all []Object
+	for obj := range mc.ListObjects(ctx, bucketSlug, minio.ListObjectsOptions{Recursive: true}) {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, obj.Err)
 		}
-		all = append(all, resp.Data.Files...)
-
-		token := resp.Data.Pagination.NextToken
-		if token == nil || *token == "" || seen[*token] {
-			break
+		if strings.HasSuffix(obj.Key, "/") || seen[obj.Key] {
+			continue
 		}
-		seen[*token] = true
-		q = url.Values{"next_token": {*token}}
+		seen[obj.Key] = true
+		all = append(all, Object{
+			Key:          obj.Key,
+			Name:         filepath.Base(obj.Key),
+			Size:         strconv.FormatInt(obj.Size, 10),
+			LastModified: obj.LastModified.UTC().Format(time.RFC3339),
+			Permission:   "Private",
+		})
 	}
 	return all, nil
 }
@@ -403,6 +425,9 @@ func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, ob
 	mc, err := NewS3Client(store)
 	if err != nil {
 		return 0, err
+	}
+	if _, err := os.Stat(localPath); err != nil {
+		return 0, fmt.Errorf("local file not found or not readable: %s: %w", localPath, err)
 	}
 	if objectKey == "" {
 		objectKey = filepath.Base(localPath)

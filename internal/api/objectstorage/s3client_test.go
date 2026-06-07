@@ -106,3 +106,20 @@ func TestNewS3Client_InvalidEndpoint(t *testing.T) {
 		t.Fatal("expected error for invalid endpoint URL, got nil")
 	}
 }
+
+func TestNewS3Client_NoScheme(t *testing.T) {
+	store := &objectstorage.ObjectStorage{
+		Slug:      "my-store",
+		APIKey:    "key",
+		APISecret: "secret",
+		Region: &objectstorage.Region{
+			CloudProviderSetup: &objectstorage.RegionCloudProviderSetup{
+				Config: objectstorage.RegionSetupConfig{S3Endpoint: "s3.example.com"},
+			},
+		},
+	}
+	_, err := objectstorage.NewS3Client(store)
+	if err == nil {
+		t.Fatal("expected error for endpoint without scheme, got nil")
+	}
+}

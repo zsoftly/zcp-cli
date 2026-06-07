@@ -27,14 +27,17 @@ func NewS3Client(store *ObjectStorage) (*minio.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid S3 endpoint %q: %w", endpoint, err)
 	}
-
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("invalid S3 endpoint %q: scheme must be http or https", endpoint)
+	}
 	host := u.Host
 	if host == "" {
-		host = u.Path
+		return nil, fmt.Errorf("invalid S3 endpoint %q: missing host", endpoint)
 	}
 
 	return minio.New(host, &minio.Options{
-		Creds:  credentials.NewStaticV4(store.APIKey, store.APISecret, ""),
-		Secure: u.Scheme == "https",
+		Creds:        credentials.NewStaticV4(store.APIKey, store.APISecret, ""),
+		Secure:       u.Scheme == "https",
+		BucketLookup: minio.BucketLookupPath,
 	})
 }

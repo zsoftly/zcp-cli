@@ -38,6 +38,7 @@ func NewInstanceCmd() *cobra.Command {
 	cmd.AddCommand(newInstanceAddonsCmd())
 	cmd.AddCommand(newInstancePurchaseAddonCmd())
 	cmd.AddCommand(newInstanceSSHCmd())
+	cmd.AddCommand(newInstanceDeleteCmd())
 	return cmd
 }
 
@@ -240,6 +241,16 @@ func newInstanceCreateCmd() *cobra.Command {
 			var sshKeyPtr *string
 			if sshKey != "" {
 				sshKeyPtr = &sshKey
+			}
+
+			if cmd.Flags().Changed("cpu") && cpu <= 0 {
+				return fmt.Errorf("invalid value for --cpu: must be > 0")
+			}
+			if cmd.Flags().Changed("memory") && memory <= 0 {
+				return fmt.Errorf("invalid value for --memory: must be > 0")
+			}
+			if cmd.Flags().Changed("disk") && disk <= 0 {
+				return fmt.Errorf("invalid value for --disk: must be > 0")
 			}
 
 			var customPlan *instance.CustomPlan
@@ -1068,6 +1079,55 @@ func runInstancePurchaseAddon(cmd *cobra.Command, vmSlug, project, region, cloud
 	headers := []string{"STATUS", "MESSAGE"}
 	rows := [][]string{{resp.Status, resp.Message}}
 	return printer.PrintTable(headers, rows)
+}
+
+// ---------- delete ----------
+
+func newInstanceDeleteCmd() *cobra.Command {
+	var yes, force bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <slug>",
+		Short: "Permanently delete a virtual machine",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp instance delete my-vm
+  zcp instance delete my-vm --yes
+  zcp instance delete my-vm --force --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stdout, "WARNING: Delete %q is permanent and cannot be undone. [y/N]: ", slug)
+				var answer string
+				fmt.Scanln(&answer)
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stdout, "Aborted.")
+					return nil
+				}
+			}
+			return runInstanceDelete(cmd, slug, force)
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&force, "force", false, "Force immediate expunge from hypervisor (passes expunge=true)")
+	return cmd
+}
+
+func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := instance.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	if err := svc.Delete(ctx, slug, force); err != nil {
+		return fmt.Errorf("instance delete: %w", err)
+	}
+
+	fmt.Fprintf(os.Stdout, "Instance %q deleted.\n", slug)
+	return nil
 }
 
 // ---------- ssh ----------

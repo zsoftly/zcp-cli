@@ -37,6 +37,7 @@ source "${HERE}/cases.sh"
 
 # ─── args ────────────────────────────────────────────────────────────────────
 MODE_LIFECYCLE=0
+LIFECYCLE_SET=0
 ONLY=""
 print_usage() { sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
@@ -45,8 +46,8 @@ while [[ $# -gt 0 ]]; do
     --only)       ONLY="$2"; shift 2 ;;
     --only=*)     ONLY="${1#*=}"; shift ;;
     --all)        ONLY=""; shift ;;
-    --lifecycle)  MODE_LIFECYCLE=1; shift ;;
-    --read-only)  MODE_LIFECYCLE=0; shift ;;
+    --lifecycle)  MODE_LIFECYCLE=1; LIFECYCLE_SET=1; shift ;;
+    --read-only)  MODE_LIFECYCLE=0; LIFECYCLE_SET=1; shift ;;
     --bin)        ZCP_BIN="$2"; shift 2 ;;
     --bin=*)      ZCP_BIN="${1#*=}"; shift ;;
     --list)       printf '%s\n' "${ALL_SERVICES[@]}"; exit 0 ;;
@@ -55,8 +56,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# env can also flip lifecycle on (used by CI dispatch / nightly)
-[[ "${ZCP_SMOKE_LIFECYCLE:-}" == "1" ]] && MODE_LIFECYCLE=1
+# env can also flip lifecycle on (used by CI dispatch / nightly), but explicit flags take precedence
+[[ "${ZCP_SMOKE_LIFECYCLE:-}" == "1" && "$LIFECYCLE_SET" == "0" ]] && MODE_LIFECYCLE=1
 
 # ─── preflight ───────────────────────────────────────────────────────────────
 require_jq
@@ -66,6 +67,9 @@ if ! command -v "$ZCP_BIN" >/dev/null 2>&1 && [[ ! -x "$ZCP_BIN" ]]; then
 fi
 if [[ -z "${ZCP_BEARER_TOKEN:-}" ]]; then
   say "${C_RED}ZCP_BEARER_TOKEN is not set${C_RST}"; exit 2
+fi
+if [[ $MODE_LIFECYCLE -eq 1 ]] && ! command -v ssh-keygen >/dev/null 2>&1; then
+  say "${C_RED}ssh-keygen not found — required for lifecycle mode (ssh-key fixture)${C_RST}"; exit 2
 fi
 
 # selection

@@ -157,7 +157,7 @@ zcp region list
 
 # Plans by service type (preferred over legacy 'offering' commands)
 zcp plan vm                # Virtual Machine plans
-zcp plan storage           # Block Storage plans
+zcp plan storage           # Block Storage plans — shows storage category slug and Ceph pool per plan
 zcp plan kubernetes        # Kubernetes plans
 zcp plan lb                # Load Balancer plans
 zcp plan router            # Virtual Router plans
@@ -248,8 +248,10 @@ zcp instance ssh <slug>
 zcp instance ssh <slug> --user ubuntu
 zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
 
-# To cancel/delete an instance, use billing cancel-service:
-zcp billing cancel-service <subscription-slug> --service "Virtual Machine" --reason not_needed_anymore
+# Delete an instance permanently
+zcp instance delete <slug>
+zcp instance delete <slug> --yes                # skip confirmation
+zcp instance delete <slug> --force --yes        # force-expunge from hypervisor immediately
 ```
 
 The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance reaches the target state, printing progress to stderr.

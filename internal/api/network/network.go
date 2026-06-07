@@ -80,7 +80,9 @@ func (n *Network) UnmarshalJSON(b []byte) error {
 		typeRaw = raw.NetworkTypeAlt
 	}
 	if len(typeRaw) > 0 {
-		_ = json.Unmarshal(typeRaw, &n.NetworkType)
+		if err := json.Unmarshal(typeRaw, &n.NetworkType); err != nil {
+			return fmt.Errorf("decoding network type: %w", err)
+		}
 	}
 
 	return nil

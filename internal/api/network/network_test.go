@@ -275,6 +275,10 @@ func TestNetworkListBoolStatus(t *testing.T) {
 	payload := `{"status":"Success","data":[{"id":"abc","slug":"test-net","name":"Test Net","status":true,"type":"Isolated","gateway":"10.0.0.1","cidr":"10.0.0.0/24","zone_slug":"yow-1","is_default":false}]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, payload)
 	}))
@@ -302,6 +306,10 @@ func TestNetworkListStringStatus(t *testing.T) {
 	payload := `{"status":"Success","data":[{"id":"old","slug":"old-net","name":"Old Net","status":"Active","type":"Isolated"}]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, payload)
 	}))
@@ -326,6 +334,10 @@ func TestNetworkListNetworkTypeKey(t *testing.T) {
 	payload := `{"status":"Success","data":[{"id":"old2","slug":"old-net2","name":"Old Net 2","status":true,"network_type":"Shared"}]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, payload)
 	}))

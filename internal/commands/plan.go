@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/plan"
+	"github.com/zsoftly/zcp-cli/internal/api/storagecategory"
 )
 
 // NewPlanCmd returns the 'plan' cobra command with subcommands for each
@@ -136,25 +137,36 @@ func newPlanStorageCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			svc := plan.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceBlockStorage)
+			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage)
 			if err != nil {
 				return fmt.Errorf("plan storage: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "SIZE", "HOURLY", "MONTHLY", "CUSTOM", "ACTIVE"}
+			// Build id→slug map so the table shows the usable slug, not a UUID.
+			catSlug := map[string]string{}
+			cats, err := storagecategory.NewService(client).List(ctx)
+			if err == nil {
+				for _, c := range cats {
+					catSlug[c.ID] = c.Slug
+				}
+			}
+
+			headers := []string{"NAME", "STORAGE CATEGORY", "CEPH POOL", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
+				slug := catSlug[p.StorageCategoryID]
+				if slug == "" {
+					slug = p.StorageCategoryID
+				}
 				rows = append(rows, []string{
-					p.ID,
 					p.Name,
-					p.Attribute.FormattedSize,
+					slug,
+					p.Attribute.StorageTags,
 					formatPrice(p.HourlyPrice),
 					formatPrice(p.MonthlyPrice),
-					strconv.FormatBool(p.IsCustom),
 					strconv.FormatBool(p.Status),
 				})
 			}

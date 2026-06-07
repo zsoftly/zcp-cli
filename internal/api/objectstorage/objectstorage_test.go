@@ -51,12 +51,6 @@ type bucketSingleResponse struct {
 	Data    objectstorage.Bucket `json:"data"`
 }
 
-type objectListResponse struct {
-	Status  string                       `json:"status"`
-	Message string                       `json:"message"`
-	Data    objectstorage.ObjectListData `json:"data"`
-}
-
 func TestList(t *testing.T) {
 	expected := []objectstorage.ObjectStorage{
 		{ID: "os-1", Name: "my-storage", Slug: "my-storage-1", Status: "Active"},
@@ -376,27 +370,29 @@ func TestSetBucketACL(t *testing.T) {
 	}
 }
 
-func TestListObjects(t *testing.T) {
-	files := []objectstorage.Object{
-		{Key: "file.txt", Name: "file.txt", Size: "1024", Permission: "Private"},
-		{Key: "images/logo.png", Name: "logo.png", Size: "38644", Permission: "Public"},
+// s3ListXML returns a minimal S3 ListBucketResult XML body for the given key/size pairs.
+func s3ListXML(bucket string, entries [][2]string) string {
+	body := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>%s</Name><IsTruncated>false</IsTruncated>`, bucket)
+	for _, e := range entries {
+		body += fmt.Sprintf(`<Contents><Key>%s</Key><Size>%s</Size><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>"x"</ETag></Contents>`, e[0], e[1])
 	}
+	body += `</ListBucketResult>`
+	return body
+}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/object-storages/my-storage-1/buckets/my-bucket/objects" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(objectListResponse{
-			Status:  "Success",
-			Message: "OK",
-			Data:    objectstorage.ObjectListData{Files: files},
-		})
-	}))
-	defer srv.Close()
+func TestListObjects(t *testing.T) {
+	// Includes a subdirectory-prefixed key ("tests/logo.png") to verify recursion.
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, s3ListXML("my-bucket", [][2]string{
+			{"file.txt", "1024"},
+			{"tests/logo.png", "38644"},
+		}))
+	})
 
-	svc := objectstorage.NewService(newTestClient(t, srv))
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
 	objects, err := svc.ListObjects(context.Background(), "my-storage-1", "my-bucket")
 	if err != nil {
 		t.Fatalf("ListObjects() error = %v", err)
@@ -410,28 +406,75 @@ func TestListObjects(t *testing.T) {
 	if objects[0].Size != "1024" {
 		t.Errorf("objects[0].Size = %q, want 1024", objects[0].Size)
 	}
-	if objects[1].IsPublic() != true {
-		t.Errorf("objects[1].IsPublic() = false, want true (permission=%q)", objects[1].Permission)
+	if objects[1].Key != "tests/logo.png" {
+		t.Errorf("objects[1].Key = %q, want tests/logo.png", objects[1].Key)
+	}
+	if objects[1].Name != "logo.png" {
+		t.Errorf("objects[1].Name = %q, want logo.png (base of key)", objects[1].Name)
+	}
+}
+
+// TestListObjects_Dedup verifies that duplicate keys returned by the S3 server
+// (known live-API quirk) appear only once in the result.
+func TestListObjects_Dedup(t *testing.T) {
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, s3ListXML("my-bucket", [][2]string{
+			{"dup.txt", "10"},
+			{"dup.txt", "10"},
+		}))
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	objects, err := svc.ListObjects(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("ListObjects() error = %v", err)
+	}
+	if len(objects) != 1 {
+		t.Fatalf("ListObjects() returned %d items, want 1 after dedup", len(objects))
+	}
+}
+
+// TestListObjects_SkipsDirectoryMarkers verifies that virtual directory keys
+// (zero-byte entries ending in "/") are excluded from results.
+func TestListObjects_SkipsDirectoryMarkers(t *testing.T) {
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, s3ListXML("my-bucket", [][2]string{
+			{"tests/", "0"},
+			{"tests/real.txt", "512"},
+		}))
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	objects, err := svc.ListObjects(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("ListObjects() error = %v", err)
+	}
+	if len(objects) != 1 {
+		t.Fatalf("ListObjects() returned %d items, want 1 (directory marker skipped)", len(objects))
+	}
+	if objects[0].Key != "tests/real.txt" {
+		t.Errorf("objects[0].Key = %q, want tests/real.txt", objects[0].Key)
 	}
 }
 
 func TestGetObject(t *testing.T) {
-	files := []objectstorage.Object{
-		{Key: "other.txt", Name: "other.txt", Size: "100", Permission: "Private"},
-		{Key: "file.txt", Name: "file.txt", Size: "1024", Permission: "Private"},
-	}
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, s3ListXML("my-bucket", [][2]string{
+			{"other.txt", "100"},
+			{"file.txt", "1024"},
+		}))
+	})
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(objectListResponse{
-			Status:  "Success",
-			Message: "OK",
-			Data:    objectstorage.ObjectListData{Files: files},
-		})
-	}))
-	defer srv.Close()
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
 
-	svc := objectstorage.NewService(newTestClient(t, srv))
 	obj, err := svc.GetObject(context.Background(), "my-storage-1", "my-bucket", "file.txt")
 	if err != nil {
 		t.Fatalf("GetObject() error = %v", err)
@@ -445,16 +488,14 @@ func TestGetObject(t *testing.T) {
 }
 
 func TestGetObject_NotFound(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(objectListResponse{
-			Status: "Success",
-			Data:   objectstorage.ObjectListData{Files: []objectstorage.Object{}},
-		})
-	}))
-	defer srv.Close()
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, s3ListXML("my-bucket", nil))
+	})
 
-	svc := objectstorage.NewService(newTestClient(t, srv))
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
 	_, err := svc.GetObject(context.Background(), "my-storage-1", "my-bucket", "missing.txt")
 	if err == nil {
 		t.Fatal("expected error for missing object, got nil")

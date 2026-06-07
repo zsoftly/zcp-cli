@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
@@ -16,8 +17,29 @@ import (
 type FlexNumber string
 
 func (n *FlexNumber) UnmarshalJSON(b []byte) error {
-	*n = FlexNumber(strings.Trim(string(b), `"`))
-	return nil
+	s := strings.TrimSpace(string(b))
+	if s == "null" || s == "" {
+		*n = FlexNumber("")
+		return nil
+	}
+	if len(s) > 0 && s[0] == '"' {
+		var inner string
+		if err := json.Unmarshal(b, &inner); err != nil {
+			return fmt.Errorf("FlexNumber: invalid quoted value: %w", err)
+		}
+		if inner != "" {
+			if _, err := strconv.ParseFloat(inner, 64); err != nil {
+				return fmt.Errorf("FlexNumber: non-numeric string %q", inner)
+			}
+		}
+		*n = FlexNumber(inner)
+		return nil
+	}
+	if (s[0] >= '0' && s[0] <= '9') || s[0] == '-' {
+		*n = FlexNumber(s)
+		return nil
+	}
+	return fmt.Errorf("FlexNumber: unexpected token %q", s)
 }
 
 func (n FlexNumber) String() string {
@@ -63,6 +85,7 @@ type Attribute struct {
 	VPCOfferingID       string      `json:"vpc_offering_id"`
 	FormattedMemoryUnit string      `json:"formatted_memory_unit"`
 	FormattedSizeUnit   string      `json:"formatted_size_unit"`
+	StorageTags         string      `json:"storage_tags"`
 }
 
 // Tag holds optional marketing label data.
@@ -102,18 +125,19 @@ type Price struct {
 
 // Plan represents a STKCNSL service plan.
 type Plan struct {
-	ID           string          `json:"id"`
-	Name         string          `json:"name"`
-	Slug         string          `json:"slug"`
-	Attribute    Attribute       `json:"attribute"`
-	Tag          json.RawMessage `json:"tag"` // can be object or empty array
-	Status       bool            `json:"status"`
-	IsCustom     bool            `json:"is_custom"`
-	HourlyPrice  float64         `json:"hourly_price"`
-	MonthlyPrice float64         `json:"monthly_price"`
-	Prices       []Price         `json:"prices"`
-	CreatedAt    string          `json:"created_at"`
-	UpdatedAt    string          `json:"updated_at"`
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	Slug              string          `json:"slug"`
+	Attribute         Attribute       `json:"attribute"`
+	Tag               json.RawMessage `json:"tag"` // can be object or empty array
+	Status            bool            `json:"status"`
+	IsCustom          bool            `json:"is_custom"`
+	HourlyPrice       float64         `json:"hourly_price"`
+	MonthlyPrice      float64         `json:"monthly_price"`
+	Prices            []Price         `json:"prices"`
+	StorageCategoryID string          `json:"storage_category_id"`
+	CreatedAt         string          `json:"created_at"`
+	UpdatedAt         string          `json:"updated_at"`
 }
 
 // ParsedTag returns the tag label if present, or "-" if the tag field is an
