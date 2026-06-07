@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -138,11 +139,12 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -178,11 +180,12 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

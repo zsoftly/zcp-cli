@@ -265,3 +265,138 @@ func TestKubernetesUpgrade(t *testing.T) {
 		t.Errorf("body billing_cycle = %v, want %q", gotBody["billing_cycle"], "hourly")
 	}
 }
+
+func TestKubernetesDelete(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	err := svc.Delete(context.Background(), "my-cluster")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/kubernetes-clusters/my-cluster" {
+		t.Errorf("path = %q, want %q", gotPath, "/kubernetes-clusters/my-cluster")
+	}
+}
+
+func TestKubernetesDelete_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	err := svc.Delete(context.Background(), "missing-cluster")
+	if err == nil {
+		t.Fatal("Delete() expected error on 404, got nil")
+	}
+}
+
+func TestKubernetesScale(t *testing.T) {
+	var gotPath, gotMethod string
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Scaling initiated.",
+		})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	err := svc.Scale(context.Background(), "my-cluster", 5)
+	if err != nil {
+		t.Fatalf("Scale() error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPut)
+	}
+	if gotPath != "/kubernetes-clusters/my-cluster/scale" {
+		t.Errorf("path = %q, want %q", gotPath, "/kubernetes-clusters/my-cluster/scale")
+	}
+	if int(gotBody["node_size"].(float64)) != 5 {
+		t.Errorf("body node_size = %v, want 5", gotBody["node_size"])
+	}
+}
+
+func TestKubernetesScale_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	err := svc.Scale(context.Background(), "my-cluster", 5)
+	if err == nil {
+		t.Fatal("Scale() expected error on non-2xx, got nil")
+	}
+}
+
+func TestKubernetesGetKubeconfig(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/kubernetes-clusters/my-cluster" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "OK",
+			"data": map[string]interface{}{
+				"id":    "abc-123",
+				"slug":  "my-cluster",
+				"state": "Running",
+				"meta": map[string]interface{}{
+					"config": map[string]interface{}{
+						"id":         "cfg-1",
+						"name":       "my-cluster-config",
+						"configdata": "apiVersion: v1\nclusters: []\n",
+					},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	cfg, err := svc.GetKubeconfig(context.Background(), "my-cluster")
+	if err != nil {
+		t.Fatalf("GetKubeconfig() error = %v", err)
+	}
+	if cfg != "apiVersion: v1\nclusters: []\n" {
+		t.Errorf("kubeconfig = %q, want %q", cfg, "apiVersion: v1\nclusters: []\n")
+	}
+}
+
+func TestKubernetesGetKubeconfig_NotReady(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "OK",
+			"data": map[string]interface{}{
+				"id":    "abc-123",
+				"slug":  "my-cluster",
+				"state": "Starting",
+			},
+		})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	_, err := svc.GetKubeconfig(context.Background(), "my-cluster")
+	if err == nil {
+		t.Fatal("GetKubeconfig() expected error when meta/config absent, got nil")
+	}
+}

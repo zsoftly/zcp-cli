@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -254,11 +255,12 @@ func newNetworkDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Delete network %q? Its SOURCE-NAT IP will also be released. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Delete network %q? Its SOURCE-NAT IP will also be released. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

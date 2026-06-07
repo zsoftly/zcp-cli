@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -154,11 +155,12 @@ func newSnapshotRevertCmd() *cobra.Command {
 				return fmt.Errorf("--volume is required")
 			}
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Reverting snapshot %q on volume %q will discard all changes since the snapshot. This cannot be undone. [y/N]: ", snapshotSlug, blockstorageSlug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Reverting snapshot %q on volume %q will discard all changes since the snapshot. This cannot be undone. [y/N]: ", snapshotSlug, blockstorageSlug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -203,11 +205,12 @@ func newSnapshotDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Delete snapshot %q? This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Delete snapshot %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

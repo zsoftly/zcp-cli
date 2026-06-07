@@ -188,3 +188,39 @@ func TestVolumeDetach(t *testing.T) {
 		t.Errorf("vol.Slug = %q, want %q", vol.Slug, "root-4153")
 	}
 }
+
+func TestVolumeDelete(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := volume.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "bs-001001-0042")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/blockstorages/bs-001001-0042" {
+		t.Errorf("path = %q, want %q", gotPath, "/blockstorages/bs-001001-0042")
+	}
+}
+
+func TestVolumeDelete_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}))
+	defer srv.Close()
+
+	svc := volume.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "bs-attached")
+	if err == nil {
+		t.Fatal("Delete() expected error on non-2xx, got nil")
+	}
+}

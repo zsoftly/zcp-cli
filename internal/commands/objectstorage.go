@@ -667,11 +667,12 @@ func newOSObjectDeleteCmd() *cobra.Command {
 			storageSlug, bucketSlug, objectKey := args[0], args[1], args[2]
 
 			if !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Delete object %q from bucket %q? [y/N]: ", objectKey, bucketSlug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Delete object %q from bucket %q? [y/N]: ", objectKey, bucketSlug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

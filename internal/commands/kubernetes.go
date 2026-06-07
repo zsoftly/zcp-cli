@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -11,19 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/kubernetes"
 )
-
-// resolveKubeconfigPath returns the path to write the kubeconfig to.
-// If path is empty, defaults to ~/.kube/config.
-func resolveKubeconfigPath(path string) (string, error) {
-	if path != "" {
-		return path, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
-	}
-	return home + "/.kube/config", nil
-}
 
 // NewKubernetesCmd returns the 'kubernetes' cobra command.
 func NewKubernetesCmd() *cobra.Command {
@@ -363,11 +352,12 @@ func newK8sClusterStopCmd() *cobra.Command {
 
 func runK8sClusterStop(cmd *cobra.Command, slug string, yes bool) error {
 	if !yes && !autoApproved(cmd) {
-		fmt.Fprintf(os.Stdout, "Stop cluster %q? [y/N]: ", slug)
-		var answer string
-		fmt.Scanln(&answer)
-		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-			fmt.Fprintln(os.Stdout, "Aborted.")
+		fmt.Fprintf(os.Stderr, "Stop cluster %q? [y/N]: ", slug)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
 			return nil
 		}
 	}
@@ -418,7 +408,9 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			}
 			currentWorkers := current.NodeSize
 			if current.Meta != nil && current.Meta.Size != "" {
-				currentWorkers, _ = strconv.Atoi(current.Meta.Size)
+				if n, aerr := strconv.Atoi(current.Meta.Size); aerr == nil {
+					currentWorkers = n
+				}
 			}
 			if currentWorkers == workers {
 				fmt.Fprintf(os.Stdout, "Cluster %q already has %d worker(s) — no change made.\n", slug, workers)
@@ -431,20 +423,34 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			fmt.Fprintf(os.Stdout, "Scaling %q from %d → %d worker(s) requested.\n", slug, currentWorkers, workers)
 
 			if wait {
-				fmt.Fprintf(os.Stdout, "Waiting for cluster to return to Running...\n")
+				const maxWait = 10 * time.Minute
+				waitCtx, waitCancel := context.WithTimeout(cmd.Context(), maxWait)
+				defer waitCancel()
+				fmt.Fprintf(os.Stdout, "Waiting for scaling to complete (max %s)...\n", maxWait)
 				for {
-					time.Sleep(15 * time.Second)
-					c, err := svc.Get(context.Background(), slug)
+					select {
+					case <-waitCtx.Done():
+						return fmt.Errorf("timed out waiting for cluster %q to finish scaling", slug)
+					case <-time.After(15 * time.Second):
+					}
+					c, err := svc.Get(waitCtx, slug)
 					if err != nil {
 						return fmt.Errorf("polling cluster state: %w", err)
 					}
-					workers := c.NodeSize
+					workerCount := c.NodeSize
 					if c.Meta != nil && c.Meta.Size != "" {
-						workers, _ = strconv.Atoi(c.Meta.Size)
+						if n, aerr := strconv.Atoi(c.Meta.Size); aerr == nil {
+							workerCount = n
+						}
 					}
-					if c.State != "Scaling" {
-						fmt.Fprintf(os.Stdout, "Done — state: %s, workers: %d\n", c.State, workers)
+					switch c.State {
+					case "Scaling":
+						// still in progress
+					case "Running":
+						fmt.Fprintf(os.Stdout, "Done — state: %s, workers: %d\n", c.State, workerCount)
 						return nil
+					default:
+						return fmt.Errorf("cluster %q entered unexpected state %q during scaling", slug, c.State)
 					}
 				}
 			}
@@ -492,8 +498,10 @@ func newK8sGetConfigCmd() *cobra.Command {
 				return nil
 			}
 
-			if err := os.MkdirAll(strings.TrimRight(outputPath[:strings.LastIndex(outputPath, "/")], "/"), 0700); err != nil {
-				return fmt.Errorf("creating directory: %w", err)
+			if dir := filepath.Dir(outputPath); dir != "." {
+				if err := os.MkdirAll(dir, 0700); err != nil {
+					return fmt.Errorf("creating directory: %w", err)
+				}
 			}
 			if err := os.WriteFile(outputPath, []byte(cfg), 0600); err != nil {
 				return fmt.Errorf("writing kubeconfig to %s: %w", outputPath, err)
@@ -544,11 +552,12 @@ func newK8sClusterDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Delete Kubernetes cluster %q? This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Delete Kubernetes cluster %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

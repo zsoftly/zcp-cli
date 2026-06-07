@@ -161,3 +161,39 @@ func TestSnapshotRevert(t *testing.T) {
 		t.Errorf("snap.ID = %q, want %q", snap.ID, "snap-1")
 	}
 }
+
+func TestSnapshotDelete(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := snapshot.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "ss-001001-0001")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/blockstorages/snapshots/ss-001001-0001" {
+		t.Errorf("path = %q, want %q", gotPath, "/blockstorages/snapshots/ss-001001-0001")
+	}
+}
+
+func TestSnapshotDelete_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := snapshot.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "does-not-exist")
+	if err == nil {
+		t.Fatal("Delete() expected error on 404, got nil")
+	}
+}
