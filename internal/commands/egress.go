@@ -100,8 +100,8 @@ func newEgressCreateCmd() *cobra.Command {
 			if err := validateEgressProtocol(protocol); err != nil {
 				return err
 			}
-			proto := strings.ToUpper(protocol)
-			if (proto == "TCP" || proto == "UDP") && startPort == "" {
+			proto := strings.ToLower(protocol)
+			if (proto == "tcp" || proto == "udp") && startPort == "" {
 				fmt.Fprintln(os.Stderr, "Warning: no ports specified for TCP/UDP rule; all ports will be affected.")
 			}
 			return runEgressCreate(cmd, egress.CreateRequest{
