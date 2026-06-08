@@ -357,6 +357,10 @@ func newLBDeleteRuleCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.DeleteRule(ctx, lbSlug, ruleID); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Load balancer rule %q not found — already deleted.\n", ruleID)
+					return nil
+				}
 				return fmt.Errorf("loadbalancer delete-rule: %w", err)
 			}
 			printer.Fprintf("Rule %q deleted from load balancer %q.\n", ruleID, lbSlug)
@@ -400,6 +404,10 @@ func newLBDetachVMCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.DetachVM(ctx, lbSlug, ruleID, vmSlug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "VM %q not found on load balancer rule — already detached.\n", vmSlug)
+					return nil
+				}
 				return fmt.Errorf("loadbalancer detach-vm: %w", err)
 			}
 			printer.Fprintf("VM %q detached from rule %q on load balancer %q.\n", vmSlug, ruleID, lbSlug)

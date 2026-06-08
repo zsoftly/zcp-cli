@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/support"
 )
 
@@ -234,6 +235,10 @@ func runTicketDelete(cmd *cobra.Command, id string, yes bool) error {
 	defer cancel()
 
 	if err := svc.DeleteTicket(ctx, id); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Support ticket %q not found — already deleted.\n", id)
+			return nil
+		}
 		return fmt.Errorf("support ticket delete: %w", err)
 	}
 

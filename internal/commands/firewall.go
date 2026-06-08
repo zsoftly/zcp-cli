@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/firewall"
 )
 
@@ -193,6 +194,10 @@ func runFirewallDelete(cmd *cobra.Command, ipSlug, ruleID string, yes bool) erro
 	defer cancel()
 
 	if err := svc.Delete(ctx, ipSlug, ruleID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Firewall rule %q not found — already deleted.\n", ruleID)
+			return nil
+		}
 		return fmt.Errorf("firewall delete: %w", err)
 	}
 

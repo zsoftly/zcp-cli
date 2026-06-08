@@ -380,6 +380,10 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 	defer cancel()
 
 	if err := svc.DeleteRecord(ctx, domainSlug, recordID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "DNS record %q not found — already deleted.\n", recordID)
+			return nil
+		}
 		return fmt.Errorf("dns record-delete: %w", err)
 	}
 

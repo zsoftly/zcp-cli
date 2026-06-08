@@ -615,6 +615,10 @@ func runVPCVPNGatewayDelete(cmd *cobra.Command, vpcSlug, gatewayID string, yes b
 	defer cancel()
 
 	if err := svc.DeleteVPNGateway(ctx, vpcSlug, gatewayID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "VPN gateway %q not found — already deleted.\n", gatewayID)
+			return nil
+		}
 		return fmt.Errorf("vpc vpn-gateway delete: %w", err)
 	}
 

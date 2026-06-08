@@ -658,6 +658,10 @@ func runInstanceTagDelete(cmd *cobra.Command, slug, key string) error {
 	defer cancel()
 
 	if err := svc.DeleteTag(ctx, slug, key); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Instance tag %q not found — already deleted.\n", key)
+			return nil
+		}
 		return fmt.Errorf("instance tag-delete: %w", err)
 	}
 

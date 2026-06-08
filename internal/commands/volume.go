@@ -230,6 +230,10 @@ func newVolumeDetachCmd() *cobra.Command {
 
 			vol, err := svc.Detach(ctx, volumeSlug)
 			if err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Volume %q not found — already detached or deleted.\n", volumeSlug)
+					return nil
+				}
 				return fmt.Errorf("volume detach: %w", err)
 			}
 
