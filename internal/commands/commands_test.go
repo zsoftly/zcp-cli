@@ -227,10 +227,10 @@ func TestVMBackupAtOutOfRange(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"at negative", []string{"vm", "--at", "-1", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--psudo-service", "x", "--project", "x"}, "--at must be between 0 and 23"},
-		{"at 24", []string{"vm", "--at", "24", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--psudo-service", "x", "--project", "x"}, "--at must be between 0 and 23"},
-		{"immediate 2", []string{"vm", "--immediate", "2", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--psudo-service", "x", "--project", "x"}, "--immediate must be 0 or 1"},
-		{"immediate -1", []string{"vm", "--immediate", "-1", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--psudo-service", "x", "--project", "x"}, "--immediate must be 0 or 1"},
+		{"at negative", []string{"vm", "--at", "-1", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--pseudo-service", "x", "--project", "x"}, "--at must be between 0 and 23"},
+		{"at 24", []string{"vm", "--at", "24", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--pseudo-service", "x", "--project", "x"}, "--at must be between 0 and 23"},
+		{"immediate 2", []string{"vm", "--immediate", "2", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--pseudo-service", "x", "--project", "x"}, "--immediate must be 0 or 1"},
+		{"immediate -1", []string{"vm", "--immediate", "-1", "--cloud-provider", "x", "--region", "x", "--billing-cycle", "x", "--plan", "x", "--pseudo-service", "x", "--project", "x"}, "--immediate must be 0 or 1"},
 	}
 
 	for _, tt := range tests {
@@ -265,7 +265,7 @@ func TestVMBackupAtValidValues(t *testing.T) {
 	root.SetArgs([]string{"vm-backup", "create", "my-vm",
 		"--at", "12", "--immediate", "1",
 		"--cloud-provider", "x", "--region", "x", "--billing-cycle", "x",
-		"--plan", "x", "--psudo-service", "x", "--project", "x"})
+		"--plan", "x", "--pseudo-service", "x", "--project", "x"})
 
 	err := root.Execute()
 	if err != nil {
