@@ -67,13 +67,14 @@ func runSSHKeyList(cmd *cobra.Command) error {
 }
 
 func newSSHKeyImportCmd() *cobra.Command {
-	var name, publicKey, keyFile string
+	var name, publicKey, keyFile, project, region string
 
 	cmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import an SSH public key",
 		Example: `  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..."
-  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub`,
+  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub
+  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..." --project default --region yul-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -91,12 +92,16 @@ func newSSHKeyImportCmd() *cobra.Command {
 			return runSSHKeyImport(cmd, sshkey.CreateRequest{
 				Name:      name,
 				PublicKey: publicKey,
+				Project:   resolveProject(project),
+				Region:    region,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Name for the SSH key (required)")
 	cmd.Flags().StringVar(&publicKey, "public-key", "", "SSH public key string")
 	cmd.Flags().StringVar(&keyFile, "key-file", "", "Path to a file containing the SSH public key")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (e.g. yow-1, yul-1)")
 	return cmd
 }
 
@@ -138,7 +143,7 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 			return runSSHKeyDelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 

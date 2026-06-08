@@ -82,6 +82,35 @@ type VirtualMachine struct {
 	IsMetricsHidden      bool            `json:"is_metrics_hidden"`
 	IsRestricted         bool            `json:"is_restricted"`
 	HasAutoscale         bool            `json:"has_autoscale"`
+	Networks             []VMNetwork     `json:"networks"`
+}
+
+// VMNetwork represents a network attached to a VM.
+type VMNetwork struct {
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Slug      string       `json:"slug"`
+	Type      string       `json:"type"`
+	IsDefault bool         `json:"is_default"`
+	Pivot     *VMNetworkIP `json:"pivot"`
+}
+
+// VMNetworkIP holds the IP assignment for a VM on a network.
+type VMNetworkIP struct {
+	IsDefault  bool   `json:"is_default"`
+	MACAddress string `json:"macaddress"`
+	IPAddress  string `json:"ipaddress"`
+	Netmask    string `json:"netmask"`
+}
+
+// NetworkPrivateIP returns the private IP of the first attached network, or "" if none.
+func (vm *VirtualMachine) NetworkPrivateIP() string {
+	for _, n := range vm.Networks {
+		if n.Pivot != nil && n.Pivot.IPAddress != "" {
+			return n.Pivot.IPAddress
+		}
+	}
+	return ""
 }
 
 // VMTemplate represents the template/OS info on a VM.

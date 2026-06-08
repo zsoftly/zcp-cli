@@ -40,6 +40,21 @@ func IsForbidden(err error) bool {
 	return errors.As(err, &ae) && ae.StatusCode == 403
 }
 
+// IsTransientRoutingError returns true for the CMP's "route … could not be found" 403,
+// which occurs during the brief window after resource creation when the routing layer
+// has not yet indexed the new slug. It is safe to retry this error.
+func IsTransientRoutingError(err error) bool {
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if ae.StatusCode != 403 {
+		return false
+	}
+	msg := strings.ToLower(ae.Message)
+	return strings.Contains(msg, "route") && strings.Contains(msg, "could not be found")
+}
+
 // IsResourceNotFound returns true if the error indicates the resource does not exist.
 // It handles the CMP API's inconsistent use of 403 for not-found responses
 // (e.g. "kubernetes-cluster::k8s.not-found") in addition to the standard 404.

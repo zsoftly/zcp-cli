@@ -2,9 +2,14 @@ package commands
 
 import (
 	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -275,4 +280,175 @@ func TestVMBackupAtValidValues(t *testing.T) {
 			t.Errorf("valid values should pass validation, got: %v", err)
 		}
 	}
+}
+
+// ─── BUG 12: instance get transient-routing-error retry loop ────────────────
+
+// routingErrBody is the exact 403 payload the CMP returns when the routing layer
+// has not yet indexed a newly-created VM slug.
+const routingErrBody = `{"status":"Error","message":"The route virtual-machines/test-vm could not be found."}`
+
+// minVMBody is the minimum valid 200 envelope for a VirtualMachine GET.
+const minVMBody = `{"status":"Success","message":"OK","data":{"id":"a1b2c3","vm_id":"vm-1","name":"test-vm","slug":"test-vm","hostname":"test-vm","username":"ubuntu","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z","networks":[]}}`
+
+// withFastRetry overrides instanceGetRetryWait for the duration of a test.
+func withFastRetry(t *testing.T) {
+	t.Helper()
+	orig := instanceGetRetryWait
+	instanceGetRetryWait = func(int) time.Duration { return time.Millisecond }
+	t.Cleanup(func() { instanceGetRetryWait = orig })
+}
+
+// TestInstanceGetRetrySucceeds verifies that instance get retries on transient
+// 403 routing errors and succeeds once the server starts returning 200.
+func TestInstanceGetRetrySucceeds(t *testing.T) {
+	withFastRetry(t)
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if n < 3 {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, routingErrBody)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, minVMBody)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	stdout, stderr, err := execCmd(t, NewInstanceCmd(), "get", "test-vm", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("expected success after retries, got: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if calls.Load() != 3 {
+		t.Errorf("server called %d times, want 3 (2 routing errors + 1 success)", calls.Load())
+	}
+	if !strings.Contains(stderr, "routing not ready") {
+		t.Errorf("expected retry message in stderr, got: %q", stderr)
+	}
+}
+
+// TestInstanceGetRetryExhausted verifies that instance get surfaces the error
+// after exhausting all 5 retry attempts.
+func TestInstanceGetRetryExhausted(t *testing.T) {
+	withFastRetry(t)
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, routingErrBody)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "get", "test-vm", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries, got nil")
+	}
+	if !strings.Contains(err.Error(), "instance get") {
+		t.Errorf("error = %q, want it to contain 'instance get'", err)
+	}
+	if calls.Load() != 5 {
+		t.Errorf("server called %d times, want 5 (all attempts exhausted)", calls.Load())
+	}
+}
+
+// TestInstanceGetNonRoutingErrorNoRetry verifies that a non-routing 403 (e.g.
+// a plain "forbidden") is returned immediately without any retry.
+func TestInstanceGetNonRoutingErrorNoRetry(t *testing.T) {
+	withFastRetry(t)
+
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"status":"Error","message":"Access denied."}`)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "get", "test-vm", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected error for 403 forbidden, got nil")
+	}
+	if calls.Load() != 1 {
+		t.Errorf("server called %d times, want 1 (no retry on non-routing error)", calls.Load())
+	}
+}
+
+// TestNoShorthandCollisions walks the full command tree and triggers persistent-flag
+// merging on every subcommand. A duplicate shorthand (e.g. -y registered locally
+// when the root already owns -y for --auto-approve) causes cobra to panic here
+// rather than at runtime.
+func TestNoShorthandCollisions(t *testing.T) {
+	root := newTestRoot()
+	root.AddCommand(
+		NewACLCmd(),
+		NewAffinityGroupCmd(),
+		NewAuthCmd(),
+		NewAutoscaleCmd(),
+		NewBackupCmd(),
+		NewBillingCmd(),
+		NewBillingCycleCmd(),
+		NewCloudProviderCmd(),
+		NewCurrencyCmd(),
+		NewDashboardCmd(),
+		NewDNSCmd(),
+		NewEgressCmd(),
+		NewFirewallCmd(),
+		NewIPCmd(),
+		NewISOCmd(),
+		NewInstanceCmd(),
+		NewKubernetesCmd(),
+		NewLoadBalancerCmd(),
+		NewMarketplaceCmd(),
+		NewMonitoringCmd(),
+		NewNetworkCmd(),
+		NewObjectStorageCmd(),
+		NewPlanCmd(),
+		NewPortForwardCmd(),
+		NewProductCmd(),
+		NewProfileCmd(),
+		NewProjectCmd(),
+		NewRegionCmd(),
+		NewServerCmd(),
+		NewSnapshotCmd(),
+		NewSSHKeyCmd(),
+		NewStorageCategoryCmd(),
+		NewStoreCmd(),
+		NewSupportCmd(),
+		NewTemplateCmd(),
+		NewUserProfileCmd(),
+		NewVirtualRouterCmd(),
+		NewVMBackupCmd(),
+		NewVMSnapshotCmd(),
+		NewVolumeCmd(),
+		NewVPCCmd(),
+		NewVPNCmd(),
+	)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("flag shorthand collision in command tree: %v", r)
+		}
+	}()
+
+	var walk func(*cobra.Command)
+	walk = func(c *cobra.Command) {
+		c.InheritedFlags() // triggers mergePersistentFlags; panics on shorthand collision
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(root)
 }

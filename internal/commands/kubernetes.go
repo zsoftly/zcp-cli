@@ -347,7 +347,7 @@ func newK8sClusterStopCmd() *cobra.Command {
 			return runK8sClusterStop(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 

@@ -219,7 +219,7 @@ func newDNSDeleteCmd() *cobra.Command {
 			return runDNSDelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -354,7 +354,7 @@ func newDNSRecordDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
 	cmd.Flags().IntVar(&recordID, "record-id", 0, "Record ID to delete (required; use 'dns show' to find IDs)")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
