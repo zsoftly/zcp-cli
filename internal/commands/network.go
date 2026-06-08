@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/network"
 )
 
@@ -272,6 +273,10 @@ func newNetworkDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Network %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("network delete: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Network %q deleted.\n", slug)

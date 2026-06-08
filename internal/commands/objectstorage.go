@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/objectstorage"
 )
 
@@ -282,6 +283,10 @@ func newOSDeleteCmd() *cobra.Command {
 			defer cancel()
 
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Object storage %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("object-storage delete: %w", err)
 			}
 			printer.Fprintf("Object storage %q deleted.\n", slug)

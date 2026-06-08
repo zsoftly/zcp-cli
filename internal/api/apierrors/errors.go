@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // APIError represents a structured error returned by the ZCP API.
@@ -37,6 +38,20 @@ func IsUnauthorized(err error) bool {
 func IsForbidden(err error) bool {
 	var ae *APIError
 	return errors.As(err, &ae) && ae.StatusCode == 403
+}
+
+// IsResourceNotFound returns true if the error indicates the resource does not exist.
+// It handles the CMP API's inconsistent use of 403 for not-found responses
+// (e.g. "kubernetes-cluster::k8s.not-found") in addition to the standard 404.
+func IsResourceNotFound(err error) bool {
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if ae.StatusCode == 404 {
+		return true
+	}
+	return ae.StatusCode == 403 && strings.Contains(strings.ToLower(ae.Message), "not-found")
 }
 
 // apiErrorResponse mirrors the STKCNSL error envelope:

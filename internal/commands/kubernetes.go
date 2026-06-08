@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/kubernetes"
 )
 
@@ -569,6 +570,10 @@ func newK8sClusterDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Kubernetes cluster %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("kubernetes delete: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Kubernetes cluster %q deletion requested.\n", slug)

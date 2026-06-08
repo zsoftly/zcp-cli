@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/vpc"
 )
 
@@ -300,6 +301,10 @@ func runVPCDelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "VPC %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("vpc delete: %w", err)
 	}
 

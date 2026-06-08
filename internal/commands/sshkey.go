@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/sshkey"
 )
 
@@ -163,6 +164,10 @@ func runSSHKeyDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, uuid); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "SSH key %q not found — already deleted.\n", uuid)
+			return nil
+		}
 		return fmt.Errorf("ssh-key delete: %w", err)
 	}
 

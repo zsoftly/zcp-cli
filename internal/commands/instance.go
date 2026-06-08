@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/instance"
 )
 
@@ -1127,6 +1128,10 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug, force); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("instance delete: %w", err)
 	}
 
