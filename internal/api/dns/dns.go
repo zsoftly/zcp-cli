@@ -17,9 +17,9 @@ type Domain struct {
 	Name        string          `json:"name"`
 	Slug        string          `json:"slug"`
 	AccountID   string          `json:"account_id"`
-	ProjectID   int             `json:"project_id"`
+	ProjectID   string          `json:"project_id"`
 	DNSProvider string          `json:"dns_provider"`
-	Status      string          `json:"status"`
+	Status      bool            `json:"status"`
 	CreatedAt   string          `json:"created_at"`
 	UpdatedAt   string          `json:"updated_at"`
 	Records     []Record        `json:"records,omitempty"`

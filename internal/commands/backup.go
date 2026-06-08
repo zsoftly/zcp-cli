@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,6 +20,7 @@ func NewBackupCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newBackupListCmd())
 	cmd.AddCommand(newBackupCreateCmd())
+	cmd.AddCommand(newBackupDeleteCmd())
 	return cmd
 }
 
@@ -65,8 +69,8 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",
-		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project
-  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project`,
+		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project
+  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -142,5 +146,44 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. backup-1 (required)")
 	cmd.Flags().StringVar(&pseudoService, "pseudo-service", "Virtual Machine Backup", "Service type for the backup")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
+	return cmd
+}
+
+func newBackupDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <backup-slug>",
+		Short: "Permanently delete a block storage backup schedule",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp backup delete bk-001001-0001
+  zcp backup delete bk-001001-0001 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete backup %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := backup.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("backup delete: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Backup %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }

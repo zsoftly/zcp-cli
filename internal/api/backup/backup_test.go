@@ -124,3 +124,40 @@ func TestBackupCreate(t *testing.T) {
 		t.Errorf("body interval = %v, want %q", gotBody["interval"], "dailyAt")
 	}
 }
+
+func TestBackupDelete(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := backup.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "bk-001001-0001")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/blockstorages/backups/bk-001001-0001" {
+		t.Errorf("path = %q, want %q", gotPath, "/blockstorages/backups/bk-001001-0001")
+	}
+}
+
+func TestBackupDelete_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := backup.NewService(newTestClient(t, srv))
+	err := svc.Delete(context.Background(), "bk-does-not-exist")
+	if err == nil {
+		t.Fatal("Delete() expected error, got nil")
+	}
+}

@@ -66,7 +66,7 @@ type AddUserRequest struct {
 	Role  string `json:"role,omitempty"`
 }
 
-// DashboardService represents a service entry on the project dashboard.
+// DashboardService represents one service category on the project dashboard.
 type DashboardService struct {
 	Name   string `json:"name"`
 	Type   string `json:"type"`
@@ -137,7 +137,7 @@ func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*
 	return &p, nil
 }
 
-// Dashboard returns services for a project's dashboard.
+// Dashboard returns the service breakdown for a project's dashboard.
 func (s *Service) Dashboard(ctx context.Context, slug string) ([]DashboardService, error) {
 	var raw json.RawMessage
 	if err := s.client.Get(ctx, "/projects/dashboard/"+slug+"/services", nil, &raw); err != nil {

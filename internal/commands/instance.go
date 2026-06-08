@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -38,6 +39,7 @@ func NewInstanceCmd() *cobra.Command {
 	cmd.AddCommand(newInstanceAddonsCmd())
 	cmd.AddCommand(newInstancePurchaseAddonCmd())
 	cmd.AddCommand(newInstanceSSHCmd())
+	cmd.AddCommand(newInstanceDeleteCmd())
 	return cmd
 }
 
@@ -191,14 +193,18 @@ func newInstanceCreateCmd() *cobra.Command {
 		storageCategory  string
 		computeCategory  string
 		blockstoragePlan string
+		networkPlan      string
+		cpu              int
+		memory           int
+		disk             int
 		wait             bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --cloud-provider zcp --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
-  zcp instance create --name my-vm --cloud-provider zcp --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
+		Example: `  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
+  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -238,6 +244,30 @@ func newInstanceCreateCmd() *cobra.Command {
 				sshKeyPtr = &sshKey
 			}
 
+			if cmd.Flags().Changed("cpu") && cpu <= 0 {
+				return fmt.Errorf("invalid value for --cpu: must be > 0")
+			}
+			if cmd.Flags().Changed("memory") && memory <= 0 {
+				return fmt.Errorf("invalid value for --memory: must be > 0")
+			}
+			if cmd.Flags().Changed("disk") && disk <= 0 {
+				return fmt.Errorf("invalid value for --disk: must be > 0")
+			}
+
+			var customPlan *instance.CustomPlan
+			if cpu > 0 || memory > 0 || disk > 0 {
+				customPlan = &instance.CustomPlan{}
+				if cpu > 0 {
+					customPlan.CPU = strconv.Itoa(cpu)
+				}
+				if memory > 0 {
+					customPlan.Memory = strconv.Itoa(memory)
+				}
+				if disk > 0 {
+					customPlan.Storage = strconv.Itoa(disk)
+				}
+			}
+
 			req := instance.CreateRequest{
 				Name:             name,
 				CloudProvider:    cloudProvider,
@@ -252,6 +282,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				BillingCycle:     billingCycle,
 				SSHKey:           sshKeyPtr,
 				Plan:             plan,
+				CustomPlan:       customPlan,
 				OSFamily:         "Linux",
 				TemplateType:     "Operating System",
 				Hostname:         h,
@@ -259,6 +290,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				StorageCategory:  storageCategory,
 				ComputeCategory:  computeCategory,
 				BlockstoragePlan: blockstoragePlan,
+				NetworkPlan:      networkPlan,
 			}
 			return runInstanceCreate(cmd, req, wait)
 		},
@@ -276,6 +308,10 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (optional)")
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")
 	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug, e.g. 50-gb-2 (required)")
+	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. inet-yow, inet-yul — see: zcp plan network)")
+	cmd.Flags().IntVar(&cpu, "cpu", 0, "Number of vCPUs for a custom plan (e.g. 2)")
+	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in MB for a custom plan (e.g. 2048)")
+	cmd.Flags().IntVar(&disk, "disk", 0, "Root disk size in GB for a custom plan (e.g. 50)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	return cmd
 }
@@ -464,11 +500,12 @@ func newInstanceResetCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Reset %q will forcefully restart the VM. Unsaved data may be lost. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Reset %q will forcefully restart the VM. Unsaved data may be lost. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -533,7 +570,7 @@ func runInstanceLogs(cmd *cobra.Command, slug string) error {
 	rows := make([][]string, 0, len(logs))
 	for _, l := range logs {
 		rows = append(rows, []string{
-			l.ID,
+			l.ID.String(),
 			l.Action,
 			l.Status,
 			l.Description,
@@ -783,11 +820,12 @@ func newInstanceChangeOSCmd() *cobra.Command {
 			}
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Changing OS on %q will reinstall the VM and erase all data. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Changing OS on %q will reinstall the VM and erase all data. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -968,7 +1006,7 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "purchase-addon",
 		Short:   "Purchase an addon for a virtual machine",
-		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --cloud-provider zcp --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id <id> --billing-cycle hourly`,
+		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --cloud-provider nimbo --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")
@@ -1044,6 +1082,56 @@ func runInstancePurchaseAddon(cmd *cobra.Command, vmSlug, project, region, cloud
 	headers := []string{"STATUS", "MESSAGE"}
 	rows := [][]string{{resp.Status, resp.Message}}
 	return printer.PrintTable(headers, rows)
+}
+
+// ---------- delete ----------
+
+func newInstanceDeleteCmd() *cobra.Command {
+	var yes, force bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <slug>",
+		Short: "Permanently delete a virtual machine",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp instance delete my-vm
+  zcp instance delete my-vm --yes
+  zcp instance delete my-vm --force --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "WARNING: Delete %q is permanent and cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			return runInstanceDelete(cmd, slug, force)
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&force, "force", false, "Force immediate expunge from hypervisor (passes expunge=true)")
+	return cmd
+}
+
+func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := instance.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	if err := svc.Delete(ctx, slug, force); err != nil {
+		return fmt.Errorf("instance delete: %w", err)
+	}
+
+	fmt.Fprintf(os.Stdout, "Instance %q deleted.\n", slug)
+	return nil
 }
 
 // ---------- ssh ----------

@@ -180,3 +180,11 @@ func (s *Service) Detach(ctx context.Context, volumeSlug string) (*Volume, error
 	}
 	return &resp.Data, nil
 }
+
+// Delete permanently deletes a block storage volume. The volume must be detached first.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/blockstorages/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting block storage %s: %w", slug, err)
+	}
+	return nil
+}

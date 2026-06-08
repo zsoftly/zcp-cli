@@ -108,18 +108,20 @@ func TestListBlockStoragePlans(t *testing.T) {
 		"data": []map[string]interface{}{
 			{
 				"id":   "storage-1",
-				"name": "50 GB",
-				"slug": "50-gb",
+				"name": "b1.g1",
+				"slug": "b1g1",
 				"attribute": map[string]interface{}{
 					"size":           50,
 					"formatted_size": "50.0 (GB)",
+					"storage_tags":   "rbd-fast",
 				},
-				"status":        true,
-				"is_custom":     false,
-				"hourly_price":  1.74,
-				"monthly_price": 425,
-				"prices":        []interface{}{},
-				"tag":           []interface{}{},
+				"storage_category_id": "cat-nvme-id",
+				"status":              true,
+				"is_custom":           true,
+				"hourly_price":        0.00019,
+				"monthly_price":       0.14,
+				"prices":              []interface{}{},
+				"tag":                 []interface{}{},
 			},
 		},
 	}
@@ -151,8 +153,16 @@ func TestListBlockStoragePlans(t *testing.T) {
 	if len(plans) != 1 {
 		t.Fatalf("List() returned %d plans, want 1", len(plans))
 	}
-	if plans[0].Name != "50 GB" {
-		t.Errorf("plans[0].Name = %q, want %q", plans[0].Name, "50 GB")
+
+	p := plans[0]
+	if p.Name != "b1.g1" {
+		t.Errorf("Name = %q, want %q", p.Name, "b1.g1")
+	}
+	if p.StorageCategoryID != "cat-nvme-id" {
+		t.Errorf("StorageCategoryID = %q, want %q", p.StorageCategoryID, "cat-nvme-id")
+	}
+	if p.Attribute.StorageTags != "rbd-fast" {
+		t.Errorf("Attribute.StorageTags = %q, want %q", p.Attribute.StorageTags, "rbd-fast")
 	}
 }
 
@@ -195,5 +205,71 @@ func TestListAPIError(t *testing.T) {
 	_, err := svc.List(context.Background(), plan.ServiceVM)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
+	}
+}
+
+// TestFlexNumberUnmarshal verifies that FlexNumber accepts numbers and quoted
+// numeric strings and rejects booleans, objects, arrays, and non-numeric strings.
+func TestFlexNumberUnmarshal(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+		ok    bool
+	}{
+		{`200`, "200", true},
+		{`0`, "0", true},
+		{`-1`, "-1", true},
+		{`"200"`, "200", true},
+		{`null`, "", true},
+		{`true`, "", false},
+		{`false`, "", false},
+		{`{}`, "", false},
+		{`[]`, "", false},
+		{`"abc"`, "", false},
+	}
+	for _, tc := range cases {
+		var n plan.FlexNumber
+		err := json.Unmarshal([]byte(tc.input), &n)
+		if tc.ok {
+			if err != nil {
+				t.Errorf("input=%s: unexpected error: %v", tc.input, err)
+			} else if string(n) != tc.want {
+				t.Errorf("input=%s: got %q, want %q", tc.input, string(n), tc.want)
+			}
+		} else {
+			if err == nil {
+				t.Errorf("input=%s: expected error, got nil (FlexNumber=%q)", tc.input, string(n))
+			}
+		}
+	}
+}
+
+// TestNetworkRateAsNumber verifies that a plan with network_rate as a bare JSON
+// number (as returned by the Virtual Router plan endpoint) decodes without error.
+func TestNetworkRateAsNumber(t *testing.T) {
+	payload := `{"status":"Success","message":"OK","data":[{"id":"vr-1","name":"VR-1GB","slug":"vr-1gb","attribute":{"cpu":1,"memory":1024,"network_rate":200,"formatted_memory":"1.0 (GB)","formatted_cpu":1},"status":true,"is_custom":false,"hourly_price":1.5,"monthly_price":550,"prices":[],"tag":[]}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	client := httpclient.New(httpclient.Options{
+		BaseURL:     srv.URL,
+		BearerToken: "test-token",
+		Timeout:     5 * time.Second,
+	})
+
+	svc := plan.NewService(client)
+	plans, err := svc.List(context.Background(), plan.ServiceVirtualRouter)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("got %d plans, want 1", len(plans))
+	}
+	if plans[0].Attribute.NetworkRate.String() != "200" {
+		t.Errorf("NetworkRate = %q, want %q", plans[0].Attribute.NetworkRate.String(), "200")
 	}
 }

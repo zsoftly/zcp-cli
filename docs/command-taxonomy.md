@@ -1,7 +1,7 @@
 # ZCP CLI Command Taxonomy (v0.0.6)
 
 **CLI name**: `zcp`
-**Base URL**: `https://api.zcp.zsoftly.ca`
+**Base URL**: `https://api.zcp.zsoftly.ca/api`
 **Authentication**: Bearer token (`--bearer-token` during profile add)
 
 ---
@@ -80,18 +80,21 @@ zcp
 │   ├── add-network                    Attach an additional network to an instance
 │   ├── addons                         List available addons for an instance
 │   ├── purchase-addon                 Purchase an addon for an instance
-│   └── ssh                            Open an SSH session to an instance
+│   ├── ssh                            Open an SSH session to an instance
+│   └── delete                         Permanently delete an instance (--force to expunge immediately)
 │
 ├── volume                             Block storage volume operations
 │   ├── list                           List volumes
 │   ├── create                         Create a new volume
 │   ├── attach                         Attach a volume to an instance
-│   └── detach                         Detach a volume from an instance
+│   ├── detach                         Detach a volume from its instance
+│   └── delete                         Permanently delete a volume (detach first; --yes to skip prompt)
 │
 ├── snapshot                           Block storage snapshot operations
 │   ├── list                           List snapshots
 │   ├── create                         Create a snapshot of a volume
-│   └── revert                         Revert a volume to a snapshot (destructive)
+│   ├── revert                         Revert a volume to a snapshot (destructive)
+│   └── delete                         Permanently delete a snapshot (--yes to skip prompt)
 │
 ├── vm-snapshot                        VM (instance-level) snapshot operations
 │   ├── list                           List VM snapshots
@@ -103,7 +106,8 @@ zcp
 │   ├── list                           List networks
 │   ├── create                         Create a network
 │   ├── update                         Update a network
-│   └── categories                     List network categories
+│   ├── categories                     List network categories
+│   └── delete                         Delete a network (releases its SOURCE-NAT IP; --yes to skip prompt)
 │
 ├── vpc                                VPC operations
 │   ├── list                           List VPCs (--zone filter)
@@ -128,6 +132,7 @@ zcp
 ├── ip                                 Public IP address operations
 │   ├── list                           List IP addresses (--vpc filter)
 │   ├── allocate                       Allocate a new public IP address
+│   ├── release                        Release a public IP address (--yes to skip prompt)
 │   ├── static-nat                     Static NAT operations
 │   │   └── enable                     Enable static NAT for an IP
 │   └── vpn                            Remote access VPN on an IP
@@ -153,8 +158,11 @@ zcp
 ├── loadbalancer                       Load balancer operations
 │   ├── list                           List load balancers
 │   ├── create                         Create a load balancer
+│   ├── delete                         Permanently delete a load balancer (--yes to skip prompt)
 │   ├── create-rule                    Create a load balancer rule
-│   └── attach-vm                      Attach a VM to a load balancer rule
+│   ├── delete-rule                    Delete a rule from a load balancer (--yes to skip prompt)
+│   ├── attach-vm                      Attach a VM to a load balancer rule
+│   └── detach-vm                      Detach a VM from a load balancer rule (--vm required; --yes to skip prompt)
 │
 ├── ssh-key                            SSH key operations
 │   ├── list                           List SSH keys
@@ -174,10 +182,31 @@ zcp
 │
 ├── kubernetes (alias: k8s)            Kubernetes cluster operations
 │   ├── list                           List Kubernetes clusters
+│   ├── get                            Show details for a single cluster
 │   ├── create                         Create a Kubernetes cluster
 │   ├── start                          Start a stopped cluster
 │   ├── stop                           Stop a running cluster
-│   └── upgrade                        Upgrade a Kubernetes cluster version
+│   ├── upgrade                        Upgrade a Kubernetes cluster version
+│   └── delete                         Permanently delete a cluster (--yes to skip prompt)
+│
+├── object-storage (alias: os)         Object storage operations
+│   ├── list                           List object storage instances
+│   ├── get                            Get details for a single object storage instance
+│   ├── create                         Create a new object storage instance
+│   ├── resize                         Resize (change storage allocation) of an instance
+│   ├── delete                         Delete an object storage instance (prompts for confirmation)
+│   ├── credentials                    Show S3 access key and secret for an instance
+│   ├── bucket                         Bucket operations within an instance
+│   │   ├── list                       List buckets
+│   │   ├── get                        Get bucket details
+│   │   ├── create                     Create a bucket
+│   │   ├── set-acl                    Set bucket ACL (private/public-read/public-read-write/authenticated-read)
+│   │   └── delete                     Delete a bucket (prompts for confirmation)
+│   └── object                         Object operations within a bucket
+│       ├── list                       List objects in a bucket (all pages, auto-paginated)
+│       ├── get                        Get object metadata (key, size, permission, last modified)
+│       ├── put                        Upload a local file to a bucket via S3 protocol
+│       └── delete                     Delete an object from a bucket via S3 protocol
 │
 ├── dns                                DNS domain and record operations
 │   ├── list                           List DNS domains
@@ -251,6 +280,7 @@ zcp
 │   ├── disable                        Disable an autoscale group
 │   ├── change-plan                    Change the compute plan of a group
 │   ├── change-template                Change the template of a group
+│   ├── delete                         Permanently delete an autoscale group (--yes to skip prompt)
 │   ├── policy                         Scale-up policy management
 │   │   ├── create                     Create a scale-up policy
 │   │   ├── update                     Update a scale-up policy
@@ -300,7 +330,8 @@ zcp
 │
 ├── backup                             Block storage backup operations
 │   ├── list                           List block storage backups
-│   └── create                         Create a block storage backup
+│   ├── create                         Create a block storage backup
+│   └── delete                         Permanently delete a block storage backup (--yes to skip prompt)
 │
 ├── profile-info                       User profile management (2FA status shown via get, not managed)
 │   ├── get                            Show user profile (includes 2FA status)
@@ -314,7 +345,8 @@ zcp
 │
 ├── vm-backup                          VM backup operations
 │   ├── list                           List VM backups
-│   └── create                         Create a VM backup
+│   ├── create                         Create a VM backup
+│   └── delete                         Permanently delete a VM backup (--yes to skip prompt)
 │
 ├── cloud-provider                     Cloud provider operations
 │   └── list                           List available cloud providers
@@ -370,46 +402,47 @@ All commands use slug-based identifiers.
 
 ## CLI Group to API Path Mapping
 
-| CLI Group          | API Source        | Notes                                                    |
-| ------------------ | ----------------- | -------------------------------------------------------- |
-| `region`           | ZCP API (STKCNSL) | Region listing                                           |
-| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                     |
-| `template`         | ZCP API (STKCNSL) | Public and account templates                             |
-| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                        |
-| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                       |
-| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                  |
-| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                       |
-| `network`          | ZCP API (STKCNSL) | Isolated networks                                        |
-| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                 |
-| `acl`              | ZCP API (STKCNSL) | Network ACLs                                             |
-| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                              |
-| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                           |
-| `egress`           | ZCP API (STKCNSL) | Egress rules                                             |
-| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                    |
-| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                 |
-| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                       |
-| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                             |
-| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                      |
-| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                  |
-| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                   |
-| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                |
-| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget |
-| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                         |
-| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                   |
-| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                            |
-| `store`            | ZCP API (STKCNSL) | Store items and checkout                                 |
-| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                 |
-| `product`          | ZCP API (STKCNSL) | Product categories and catalog                           |
-| `iso`              | ZCP API (STKCNSL) | ISO image management                                     |
-| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                            |
-| `backup`           | ZCP API (STKCNSL) | Block storage backups                                    |
-| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                               |
-| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access    |
-| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                   |
-| `server`           | ZCP API (STKCNSL) | Server listing                                           |
-| `currency`         | ZCP API (STKCNSL) | Currency listing                                         |
-| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                    |
-| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                 |
+| CLI Group          | API Source        | Notes                                                              |
+| ------------------ | ----------------- | ------------------------------------------------------------------ |
+| `region`           | ZCP API (STKCNSL) | Region listing                                                     |
+| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                               |
+| `template`         | ZCP API (STKCNSL) | Public and account templates                                       |
+| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                                  |
+| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                                 |
+| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                            |
+| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                                 |
+| `network`          | ZCP API (STKCNSL) | Isolated networks                                                  |
+| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                           |
+| `acl`              | ZCP API (STKCNSL) | Network ACLs                                                       |
+| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                                        |
+| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                                     |
+| `egress`           | ZCP API (STKCNSL) | Egress rules                                                       |
+| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                              |
+| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                           |
+| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                                 |
+| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                                       |
+| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                                |
+| `object-storage`   | ZCP REST API + S3 | REST for instance/bucket CRUD; S3 (minio-go) for object put/delete |
+| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                            |
+| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                             |
+| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                          |
+| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget           |
+| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                                   |
+| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                             |
+| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                                      |
+| `store`            | ZCP API (STKCNSL) | Store items and checkout                                           |
+| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                           |
+| `product`          | ZCP API (STKCNSL) | Product categories and catalog                                     |
+| `iso`              | ZCP API (STKCNSL) | ISO image management                                               |
+| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                                      |
+| `backup`           | ZCP API (STKCNSL) | Block storage backups                                              |
+| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                                         |
+| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access              |
+| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                             |
+| `server`           | ZCP API (STKCNSL) | Server listing                                                     |
+| `currency`         | ZCP API (STKCNSL) | Currency listing                                                   |
+| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                              |
+| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                           |
 
 ---
 

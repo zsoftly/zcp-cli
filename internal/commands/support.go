@@ -155,8 +155,8 @@ func newTicketShowCmd() *cobra.Command {
 		Use:   "show <id>",
 		Short: "Show a support ticket",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp support ticket show <id>
-  zcp support ticket show <id> --output json`,
+		Example: `  zcp support ticket show 12345
+  zcp support ticket show 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTicketShow(cmd, args[0])
 		},
@@ -202,8 +202,8 @@ func newTicketDeleteCmd() *cobra.Command {
 		Use:   "delete <id>",
 		Short: "Delete a support ticket",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp support ticket delete <id>
-  zcp support ticket delete <id> --yes`,
+		Example: `  zcp support ticket delete 12345
+  zcp support ticket delete 12345 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTicketDelete(cmd, args[0], yes)
 		},
@@ -289,7 +289,7 @@ func newTicketReplyCmd() *cobra.Command {
 		Use:     "reply <ticket-id>",
 		Short:   "Reply to a support ticket",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp support ticket reply <ticket-id> --message "Here is more detail..."`,
+		Example: `  zcp support ticket reply 12345 --message "Here is more detail..."`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if message == "" {
 				return fmt.Errorf("--message is required")
@@ -334,8 +334,8 @@ func newTicketRepliesCmd() *cobra.Command {
 		Use:   "replies <ticket-id>",
 		Short: "List replies for a support ticket",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp support ticket replies <ticket-id>
-  zcp support ticket replies <ticket-id> --output json`,
+		Example: `  zcp support ticket replies 12345
+  zcp support ticket replies 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTicketReplies(cmd, args[0])
 		},
@@ -378,8 +378,8 @@ func newTicketFeedbackCmd() *cobra.Command {
 		Use:   "feedback <ticket-id>",
 		Short: "Get feedback for a support ticket",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp support ticket feedback <ticket-id>
-  zcp support ticket feedback <ticket-id> --output json`,
+		Example: `  zcp support ticket feedback 12345
+  zcp support ticket feedback 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTicketFeedback(cmd, args[0])
 		},
@@ -423,8 +423,8 @@ func newTicketFeedbackSubmitCmd() *cobra.Command {
 		Use:   "feedback-submit <ticket-id>",
 		Short: "Submit feedback for a support ticket",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp support ticket feedback-submit <ticket-id> --rating 5
-  zcp support ticket feedback-submit <ticket-id> --rating 4 --comment "Quick resolution"`,
+		Example: `  zcp support ticket feedback-submit 12345 --rating 5
+  zcp support ticket feedback-submit 12345 --rating 4 --comment "Quick resolution"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if rating < 1 || rating > 5 {
 				return fmt.Errorf("--rating must be between 1 and 5")

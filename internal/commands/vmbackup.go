@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,6 +20,7 @@ func NewVMBackupCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newVMBackupListCmd())
 	cmd.AddCommand(newVMBackupCreateCmd())
+	cmd.AddCommand(newVMBackupDeleteCmd())
 	return cmd
 }
 
@@ -76,7 +80,7 @@ func newVMBackupCreateCmd() *cobra.Command {
 		region        string
 		billingCycle  string
 		plan          string
-		psudoService  string
+		pseudoService string
 		project       string
 		isVMSnapshot  bool
 		coupon        string
@@ -86,8 +90,8 @@ func newVMBackupCreateCmd() *cobra.Command {
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project
-  zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider zcp --region yow-1 --billing-cycle hourly --plan backup-basic --psudo-service vm-backup --project my-project`,
+		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default
+  zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cloudProvider = resolveCloudProvider(cloudProvider)
 			if cloudProvider == "" {
@@ -103,8 +107,8 @@ func newVMBackupCreateCmd() *cobra.Command {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
 			}
-			if psudoService == "" {
-				return fmt.Errorf("--psudo-service is required")
+			if pseudoService == "" {
+				return fmt.Errorf("--pseudo-service is required")
 			}
 			project = resolveProject(project)
 			if project == "" {
@@ -124,7 +128,7 @@ func newVMBackupCreateCmd() *cobra.Command {
 				Region:        region,
 				BillingCycle:  billingCycle,
 				Plan:          plan,
-				PsudoService:  psudoService,
+				PseudoService: pseudoService,
 				Project:       project,
 				IsVMSnapshot:  isVMSnapshot,
 			}
@@ -141,10 +145,49 @@ func newVMBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Backup plan slug (required)")
-	cmd.Flags().StringVar(&psudoService, "psudo-service", "", "Pseudo service name (required)")
+	cmd.Flags().StringVar(&pseudoService, "pseudo-service", "", "Pseudo service name (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().BoolVar(&isVMSnapshot, "vm-snapshot", false, "Create as VM snapshot")
 	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code")
+	return cmd
+}
+
+func newVMBackupDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <backup-slug>",
+		Short: "Permanently delete a VM backup",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp vm-backup delete vmb-001001-0001
+  zcp vm-backup delete vmb-001001-0001 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete VM backup %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := vmbackup.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("vm-backup delete: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "VM backup %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 

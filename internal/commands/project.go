@@ -255,15 +255,10 @@ func runProjectDashboard(cmd *cobra.Command, slug string) error {
 		return fmt.Errorf("project dashboard: %w", err)
 	}
 
-	headers := []string{"NAME", "TYPE", "STATUS", "COUNT"}
+	headers := []string{"SERVICE", "TYPE", "STATUS", "COUNT"}
 	rows := make([][]string, 0, len(services))
-	for _, s := range services {
-		rows = append(rows, []string{
-			s.Name,
-			s.Type,
-			s.Status,
-			strconv.Itoa(s.Count),
-		})
+	for _, svc := range services {
+		rows = append(rows, []string{svc.Name, svc.Type, svc.Status, strconv.Itoa(svc.Count)})
 	}
 	return printer.PrintTable(headers, rows)
 }

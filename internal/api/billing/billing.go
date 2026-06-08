@@ -6,31 +6,55 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
+// FlexFloat decodes from a JSON number OR a quoted numeric string.
+// The live API returns monetary fields as quoted strings.
+type FlexFloat float64
+
+func (f *FlexFloat) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*f = 0
+		return nil
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return err
+	}
+	*f = FlexFloat(v)
+	return nil
+}
+
+func (f FlexFloat) String() string {
+	return strconv.FormatFloat(float64(f), 'f', -1, 64)
+}
+
 // Balance represents account balance information.
 type Balance struct {
-	AvailableBalance     float64           `json:"available_balance"`
-	AvailableNetBalance  float64           `json:"available_net_balance"`
-	Deposited            float64           `json:"deposited"`
-	Charged              float64           `json:"charged"`
-	Due                  float64           `json:"due"`
-	Usage                float64           `json:"usage"`
-	CurrentUsage         float64           `json:"current_usage"`
-	HourlyUsage          float64           `json:"hourly_usage"`
-	CurrentHourlyRate    float64           `json:"current_hourly_rate"`
-	AllTimeUsage         float64           `json:"all_time_usage"`
-	EstimatedHourlyUsage float64           `json:"estimated_hourly_usage"`
-	CurrentMonthUsage    float64           `json:"current_month_usage"`
-	AvailableFreeCredits float64           `json:"available_free_credits"`
-	FreeCreditBalance    float64           `json:"free_credit_balance"`
-	TotalPayouts         float64           `json:"total_payouts"`
-	UnpaidInvoices       float64           `json:"unpaid_invoices"`
+	AvailableBalance     FlexFloat         `json:"available_balance"`
+	AvailableNetBalance  FlexFloat         `json:"available_net_balance"`
+	Deposited            FlexFloat         `json:"deposited"`
+	Charged              FlexFloat         `json:"charged"`
+	Due                  FlexFloat         `json:"due"`
+	Usage                FlexFloat         `json:"usage"`
+	CurrentUsage         FlexFloat         `json:"current_usage"`
+	HourlyUsage          FlexFloat         `json:"hourly_usage"`
+	CurrentHourlyRate    FlexFloat         `json:"current_hourly_rate"`
+	AllTimeUsage         FlexFloat         `json:"all_time_usage"`
+	EstimatedHourlyUsage FlexFloat         `json:"estimated_hourly_usage"`
+	CurrentMonthUsage    FlexFloat         `json:"current_month_usage"`
+	AvailableFreeCredits FlexFloat         `json:"available_free_credits"`
+	FreeCreditBalance    FlexFloat         `json:"free_credit_balance"`
+	TotalPayouts         FlexFloat         `json:"total_payouts"`
+	UnpaidInvoices       FlexFloat         `json:"unpaid_invoices"`
 	BillingCycleUsage    map[string]string `json:"billing_cycle_usage"`
-	DepositedPayments    float64           `json:"deposited_payments"`
-	SubscriptionAmount   float64           `json:"subscription_amount"`
+	DepositedPayments    FlexFloat         `json:"deposited_payments"`
+	SubscriptionAmount   FlexFloat         `json:"subscription_amount"`
 }
 
 // ServiceCost represents cost for a single service category.
@@ -88,8 +112,8 @@ type Subscription struct {
 	RenewAt            string              `json:"renew_at"`
 	Quantity           string              `json:"quantity"`
 	Price              string              `json:"price"`
-	TotalUsage         string              `json:"total_usage"`
-	TotalUsageWithTax  string              `json:"total_usage_with_tax"`
+	TotalUsage         FlexFloat           `json:"total_usage"`
+	TotalUsageWithTax  FlexFloat           `json:"total_usage_with_tax"`
 	Project            SubscriptionProject `json:"project"`
 	AccountID          string              `json:"account_id"`
 	ProjectID          string              `json:"project_id"`
@@ -339,10 +363,11 @@ func (s *Service) ListCancelRequests(ctx context.Context) (json.RawMessage, erro
 
 // CancelServiceRequest holds parameters for service cancellation.
 type CancelServiceRequest struct {
-	ServiceName string `json:"service_name"`
-	Reason      string `json:"reason"`
-	Type        string `json:"type"`
-	Description string `json:"description,omitempty"`
+	ServiceName    string `json:"service_name"`
+	Reason         string `json:"reason"`
+	Type           string `json:"type"`
+	Description    string `json:"description,omitempty"`
+	DeletePublicIP *bool  `json:"delete_public_ip,omitempty"`
 }
 
 // CancelService submits a cancellation request for a service by subscription slug.

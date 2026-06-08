@@ -3,13 +3,13 @@
 The official command-line interface for the ZSoftly Cloud Platform
 
 [![CI](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml/badge.svg)](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml)
-![Go](https://img.shields.io/badge/Go-1.26.1-blue)
+![Go](https://img.shields.io/badge/Go-1.26.4-blue)
 
 ---
 
 ## Overview
 
-ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
+ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, object storage, S3-compatible buckets, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
 
 ---
 
@@ -18,7 +18,7 @@ ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on t
 ### Quick Install — Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zsoftly/zcp-cli/main/scripts/install.sh | bash
+curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.sh | bash
 ```
 
 The script installs `zcp` to `/usr/local/bin`. You may be prompted for `sudo` access.
@@ -26,7 +26,7 @@ The script installs `zcp` to `/usr/local/bin`. You may be prompted for `sudo` ac
 ### PowerShell — Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/zsoftly/zcp-cli/main/scripts/install.ps1 | iex
+irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
 ```
 
 ### Manual Download
@@ -49,7 +49,7 @@ make build
 # Binary is written to bin/zcp
 ```
 
-Requirements: Go 1.26.1+, GNU Make.
+Requirements: Go 1.26.4+, GNU Make.
 
 ---
 
@@ -157,7 +157,7 @@ zcp region list
 
 # Plans by service type (preferred over legacy 'offering' commands)
 zcp plan vm                # Virtual Machine plans
-zcp plan storage           # Block Storage plans
+zcp plan storage           # Block Storage plans — shows storage category slug and Ceph pool per plan
 zcp plan kubernetes        # Kubernetes plans
 zcp plan lb                # Load Balancer plans
 zcp plan router            # Virtual Router plans
@@ -248,8 +248,10 @@ zcp instance ssh <slug>
 zcp instance ssh <slug> --user ubuntu
 zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
 
-# To cancel/delete an instance, use billing cancel-service:
-zcp billing cancel-service <subscription-slug> --service "Virtual Machine" --reason not_needed_anymore
+# Delete an instance permanently
+zcp instance delete <slug>
+zcp instance delete <slug> --yes                # skip confirmation
+zcp instance delete <slug> --force --yes        # force-expunge from hypervisor immediately
 ```
 
 The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance reaches the target state, printing progress to stderr.
@@ -304,6 +306,7 @@ zcp network list
 zcp network categories
 zcp network create --name my-net --category <slug> --cloud-provider zcp --region yow-1 --project my-project
 zcp network update <slug> --name "New Name"
+zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
 
 # VPC tier networks
 zcp network create --name public-tier --cloud-provider zcp --region yow-1 --project my-project \
@@ -482,6 +485,53 @@ zcp kubernetes upgrade <slug> --plan k8s-plan-2
 zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
 ```
 
+### Object Storage
+
+```bash
+# List and inspect
+zcp object-storage list
+zcp object-storage get <slug>
+
+# Create an object storage instance
+zcp object-storage create \
+  --name my-store \
+  --project my-project \
+  --cloud-provider zcp \
+  --region yow-1 \
+  --billing-cycle hourly \
+  --storage-category nvme \
+  --plan os-100gb
+
+# Resize (change allocated GB)
+zcp object-storage resize <slug> --size 200
+
+# Show S3 credentials (access key + secret)
+zcp object-storage credentials <slug>
+
+# Delete an object storage instance
+zcp object-storage delete <slug>
+
+# Buckets
+zcp object-storage bucket list <slug>
+zcp object-storage bucket get <slug> <bucket-slug>
+zcp object-storage bucket create <slug> --name my-bucket
+zcp object-storage bucket set-acl <slug> <bucket-slug> --acl public-read
+zcp object-storage bucket delete <slug> <bucket-slug>
+
+# Objects — list and inspect via ZCP REST API
+zcp object-storage object list <slug> <bucket-slug>
+zcp object-storage object get <slug> <bucket-slug> <key>
+
+# Objects — upload and delete via S3 protocol
+zcp object-storage object put <slug> <bucket-name> --file ./photo.jpg
+zcp object-storage object put <slug> <bucket-name> --file ./report.pdf --key reports/2026/q2.pdf --content-type application/pdf
+zcp object-storage object delete <slug> <bucket-name> <key>
+```
+
+Object `put` and `delete` use the S3 protocol (AWS Signature V4) against the region's S3 endpoint. The CLI derives credentials from the same `object-storage get` response, so no separate S3 configuration is needed.
+
+ACL values for `bucket set-acl`: `private`, `public-read`, `public-read-write`, `authenticated-read`.
+
 ### Billing and Admin
 
 ```bash
@@ -636,7 +686,7 @@ zcp completion powershell | Out-String | Invoke-Expression
 
 ### Requirements
 
-- Go 1.26.1 (toolchain, as specified in `go.mod`)
+- Go 1.26.4 (toolchain, as specified in `go.mod`)
 - GNU Make
 - Git
 

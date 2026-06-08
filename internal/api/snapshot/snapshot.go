@@ -105,3 +105,11 @@ func (s *Service) Revert(ctx context.Context, blockstorageSlug, snapshotSlug str
 	}
 	return &resp.Data, nil
 }
+
+// Delete permanently deletes a block storage snapshot.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/blockstorages/snapshots/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting block storage snapshot %s: %w", slug, err)
+	}
+	return nil
+}

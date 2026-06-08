@@ -62,18 +62,6 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	return profile, client, printer, nil
 }
 
-// resolveZone returns flagZone if set, otherwise the profile's default zone.
-// If neither is set it returns "" and the caller is responsible for the error.
-func resolveZone(profile *config.Profile, flagZone string) string {
-	if flagZone != "" {
-		return flagZone
-	}
-	if profile != nil {
-		return profile.DefaultZone
-	}
-	return ""
-}
-
 // resolveProject returns flagProject if set, otherwise the ZCP_PROJECT env var.
 func resolveProject(flagProject string) string {
 	if flagProject != "" {
@@ -96,11 +84,6 @@ func resolveCloudProvider(flagCloudProvider string) string {
 		return flagCloudProvider
 	}
 	return os.Getenv("ZCP_CLOUD_PROVIDER")
-}
-
-// errNoZone is the standard error shown when --zone is missing and no default is set.
-func errNoZone() error {
-	return fmt.Errorf("--zone is required (or set a default: zcp zone use <uuid>)")
 }
 
 // getTimeout reads the --timeout persistent flag value from the command's root.

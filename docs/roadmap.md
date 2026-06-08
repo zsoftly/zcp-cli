@@ -4,8 +4,9 @@ Features planned, in progress, or blocked on platform support.
 
 ---
 
-## Completed (v0.0.7)
+## Completed (v0.0.7+)
 
+- Object storage — full instance + bucket + object lifecycle; S3 protocol for object put/delete (minio-go)
 - 42 commands covering VM, storage, networking, billing, monitoring, DNS, projects, support, and more
 - Full VM lifecycle: create, start, stop, reboot, reset, tags, change-plan, change-OS, cancel
 - VPC lifecycle: create, list, update, restart, ACL list create, VPN gateway create
@@ -77,5 +78,4 @@ Only 2 VPC tier networks allowed before quota exceeded.
 - [ ] JSON output improvements — consistent envelope stripping
 - [ ] Shell completion for dynamic values (region slugs, plan slugs, etc.)
 - [ ] `zcp config set` for default cloud-provider, region, project
-- [ ] Object storage management (if API endpoint becomes available)
 - [ ] Kubernetes cluster full lifecycle (create works, delete via billing cancel-service)

@@ -20,6 +20,7 @@ func NewIPCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newIPListCmd())
 	cmd.AddCommand(newIPAllocateCmd())
+	cmd.AddCommand(newIPReleaseCmd())
 
 	natCmd := &cobra.Command{Use: "static-nat", Short: "Manage static NAT on IP addresses"}
 	natCmd.AddCommand(newIPStaticNATEnableCmd())
@@ -41,7 +42,7 @@ func newIPListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List public IP addresses",
 		Example: `  zcp ip list
-  zcp ip list --vpc <slug>`,
+  zcp ip list --vpc my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPList(cmd, vpcSlug)
 		},
@@ -87,8 +88,8 @@ func newIPAllocateCmd() *cobra.Command {
 		Use:   "allocate",
 		Short: "Allocate a new public IP address",
 		Example: `  zcp ip allocate --plan ip-plan --billing-cycle hourly
-  zcp ip allocate --plan ip-plan --billing-cycle hourly --network <slug>
-  zcp ip allocate --plan ip-plan --billing-cycle hourly --vpc <slug>`,
+  zcp ip allocate --plan ip-plan --billing-cycle hourly --network en-001001-0018
+  zcp ip allocate --plan ip-plan --billing-cycle hourly --vpc my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -139,6 +140,45 @@ func runIPAllocate(cmd *cobra.Command, req ipaddress.CreateRequest) error {
 	return printer.PrintTable(headers, rows)
 }
 
+func newIPReleaseCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "release <slug>",
+		Short: "Release a public IP address",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp ip release 1234567890
+  zcp ip release 1234567890 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Release IP %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := ipaddress.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Release(ctx, slug); err != nil {
+				return fmt.Errorf("ip release: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "IP %q released.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
+}
+
 func newIPStaticNATEnableCmd() *cobra.Command {
 	var vmSlug string
 
@@ -146,7 +186,7 @@ func newIPStaticNATEnableCmd() *cobra.Command {
 		Use:     "enable <ip-slug>",
 		Short:   "Enable static NAT on an IP address",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp ip static-nat enable <ip-slug> --instance <vm-slug>`,
+		Example: `  zcp ip static-nat enable 1036521143 --instance my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--instance is required")
@@ -191,7 +231,7 @@ func newIPVPNListCmd() *cobra.Command {
 		Use:     "list <ip-slug>",
 		Short:   "List remote access VPNs on an IP address",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp ip vpn list <ip-slug>`,
+		Example: `  zcp ip vpn list 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPVPNList(cmd, args[0])
 		},
@@ -232,7 +272,7 @@ func newIPVPNEnableCmd() *cobra.Command {
 		Use:     "enable <ip-slug>",
 		Short:   "Enable remote access VPN on an IP address",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp ip vpn enable <ip-slug>`,
+		Example: `  zcp ip vpn enable 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPVPNEnable(cmd, args[0])
 		},
@@ -272,8 +312,8 @@ func newIPVPNDisableCmd() *cobra.Command {
 		Use:   "disable <ip-slug> <vpn-id>",
 		Short: "Disable remote access VPN on an IP address",
 		Args:  cobra.ExactArgs(2),
-		Example: `  zcp ip vpn disable <ip-slug> <vpn-id>
-  zcp ip vpn disable <ip-slug> <vpn-id> --yes`,
+		Example: `  zcp ip vpn disable 1036521143 vpn-user-1
+  zcp ip vpn disable 1036521143 vpn-user-1 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPVPNDisable(cmd, args[0], args[1], yes)
 		},

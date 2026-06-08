@@ -9,6 +9,25 @@ import (
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
 
+// KubeconfigData is the nested object inside ClusterMeta.Config.
+type KubeconfigData struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ConfigData string `json:"configdata"`
+}
+
+// ClusterMeta holds the CloudStack-side details embedded in the API response.
+type ClusterMeta struct {
+	ControlNodes          string          `json:"control_nodes"`
+	Size                  string          `json:"size"`
+	KubernetesVersionName string          `json:"kubernetes_version_name"`
+	IPAddress             string          `json:"ipaddress"`
+	Endpoint              string          `json:"end_point"`
+	State                 string          `json:"state"`
+	Zone                  string          `json:"zone_name"`
+	Config                *KubeconfigData `json:"config,omitempty"`
+}
+
 // Cluster represents a ZCP managed Kubernetes cluster from the STKCNSL API.
 type Cluster struct {
 	ID                   string          `json:"id"`
@@ -43,6 +62,7 @@ type Cluster struct {
 	ServiceName          string          `json:"service_name"`
 	ServiceDisplayName   string          `json:"service_display_name"`
 	AllTimeConsumption   float64         `json:"all_time_consumption"`
+	Meta                 *ClusterMeta    `json:"meta,omitempty"`
 }
 
 // BillingCycle represents the billing cycle attached to a cluster.
@@ -71,27 +91,29 @@ type Project struct {
 
 // CreateRequest holds parameters for creating a Kubernetes cluster.
 type CreateRequest struct {
-	Name            string      `json:"name"`
-	Version         string      `json:"version"`
-	NodeSize        int         `json:"node_size"`
-	ControlNodes    int         `json:"control_nodes"`
-	CloudProvider   string      `json:"cloud_provider"`
-	Region          string      `json:"region"`
-	Project         string      `json:"project"`
-	BillingCycle    string      `json:"billing_cycle"`
-	EnableHA        bool        `json:"enable_ha"`
-	Networks        []string    `json:"networks"`
-	Plan            string      `json:"plan"`
-	WithPoolCard    bool        `json:"with_pool_card"`
-	IsCustomPlan    bool        `json:"is_custom_plan"`
-	CustomPlan      interface{} `json:"custom_plan"`
-	VirtualMachine  string      `json:"virtual_machine"`
-	Coupon          *string     `json:"coupon"`
-	StorageCategory string      `json:"storage_category"`
-	SSHKey          string      `json:"ssh_key"`
-	AuthMethod      string      `json:"authMethod"`
-	Username        string      `json:"username"`
-	Password        string      `json:"password"`
+	Name               string      `json:"name"`
+	Version            string      `json:"version"`
+	NodeSize           int         `json:"node_size"`
+	WorkerNodeSize     int         `json:"worker_node_size"`
+	ControlNodes       int         `json:"control_nodes"`
+	CloudProvider      string      `json:"cloud_provider"`
+	CloudProviderSetup string      `json:"cloud_provider_setup,omitempty"`
+	Region             string      `json:"region"`
+	Project            string      `json:"project"`
+	BillingCycle       string      `json:"billing_cycle"`
+	EnableHA           bool        `json:"enable_ha"`
+	Networks           []string    `json:"networks"`
+	Plan               string      `json:"plan"`
+	WithPoolCard       bool        `json:"with_pool_card"`
+	IsCustomPlan       bool        `json:"is_custom_plan"`
+	CustomPlan         interface{} `json:"custom_plan"`
+	VirtualMachine     string      `json:"virtual_machine"`
+	Coupon             *string     `json:"coupon"`
+	StorageCategory    string      `json:"storage_category"`
+	SSHKey             string      `json:"ssh_key"`
+	AuthMethod         string      `json:"authMethod"`
+	Username           string      `json:"username"`
+	Password           string      `json:"password"`
 }
 
 // UpgradeRequest holds parameters for upgrading (changing plan of) a Kubernetes cluster.
@@ -178,6 +200,49 @@ func (s *Service) Upgrade(ctx context.Context, slug string, req UpgradeRequest) 
 	var resp messageResponse
 	if err := s.client.Put(ctx, fmt.Sprintf("/kubernetes-clusters/%s/change-plan", slug), nil, req, &resp); err != nil {
 		return fmt.Errorf("upgrading kubernetes cluster %s: %w", slug, err)
+	}
+	return nil
+}
+
+// Get returns a single Kubernetes cluster by slug.
+func (s *Service) Get(ctx context.Context, slug string) (*Cluster, error) {
+	var resp singleResponse
+	if err := s.client.Get(ctx, "/kubernetes-clusters/"+slug, nil, &resp); err != nil {
+		return nil, fmt.Errorf("getting kubernetes cluster %s: %w", slug, err)
+	}
+	return &resp.Data, nil
+}
+
+// ScaleRequest holds the worker node count for a scale operation.
+type ScaleRequest struct {
+	NodeSize int `json:"node_size"`
+}
+
+// Scale changes the number of worker nodes on a running cluster.
+func (s *Service) Scale(ctx context.Context, slug string, nodeSize int) error {
+	var resp messageResponse
+	if err := s.client.Put(ctx, fmt.Sprintf("/kubernetes-clusters/%s/scale", slug), nil, ScaleRequest{NodeSize: nodeSize}, &resp); err != nil {
+		return fmt.Errorf("scaling kubernetes cluster %s: %w", slug, err)
+	}
+	return nil
+}
+
+// GetKubeconfig returns the raw kubeconfig YAML for a cluster, or "" if not yet available.
+func (s *Service) GetKubeconfig(ctx context.Context, slug string) (string, error) {
+	var resp singleResponse
+	if err := s.client.Get(ctx, "/kubernetes-clusters/"+slug, nil, &resp); err != nil {
+		return "", fmt.Errorf("getting kubernetes cluster %s: %w", slug, err)
+	}
+	if resp.Data.Meta == nil || resp.Data.Meta.Config == nil {
+		return "", fmt.Errorf("kubeconfig not available yet for cluster %s (state: %s)", slug, resp.Data.State)
+	}
+	return resp.Data.Meta.Config.ConfigData, nil
+}
+
+// Delete permanently deletes a Kubernetes cluster.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/kubernetes-clusters/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting kubernetes cluster %s: %w", slug, err)
 	}
 	return nil
 }

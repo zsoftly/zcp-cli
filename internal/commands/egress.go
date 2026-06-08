@@ -39,8 +39,8 @@ func newEgressListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List egress rules for a network",
-		Example: `  zcp egress list --network <slug>
-  zcp egress list --network <slug> --output json`,
+		Example: `  zcp egress list --network en-001001-0018
+  zcp egress list --network en-001001-0018 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
@@ -88,8 +88,8 @@ func newEgressCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create an egress rule",
-		Example: `  zcp egress create --network <slug> --protocol tcp --start-port 443
-  zcp egress create --network <slug> --protocol all`,
+		Example: `  zcp egress create --network en-001001-0018 --protocol tcp --start-port 443
+  zcp egress create --network en-001001-0018 --protocol all`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
@@ -100,8 +100,8 @@ func newEgressCreateCmd() *cobra.Command {
 			if err := validateEgressProtocol(protocol); err != nil {
 				return err
 			}
-			proto := strings.ToUpper(protocol)
-			if (proto == "TCP" || proto == "UDP") && startPort == "" {
+			proto := strings.ToLower(protocol)
+			if (proto == "tcp" || proto == "udp") && startPort == "" {
 				fmt.Fprintln(os.Stderr, "Warning: no ports specified for TCP/UDP rule; all ports will be affected.")
 			}
 			return runEgressCreate(cmd, egress.CreateRequest{
@@ -159,8 +159,8 @@ func newEgressDeleteCmd() *cobra.Command {
 		Use:   "delete <id>",
 		Short: "Delete an egress rule",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp egress delete 42 --network <slug>
-  zcp egress delete 42 --network <slug> --yes`,
+		Example: `  zcp egress delete 42 --network en-001001-0018
+  zcp egress delete 42 --network en-001001-0018 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")

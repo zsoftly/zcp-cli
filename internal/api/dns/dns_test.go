@@ -22,8 +22,8 @@ func newClient(baseURL string) *httpclient.Client {
 
 func TestDNSDomainList(t *testing.T) {
 	expected := []dns.Domain{
-		{ID: "1", Name: "example.com", Slug: "example-com-1", Status: "active"},
-		{ID: "2", Name: "test.org", Slug: "test-org-2", Status: "active"},
+		{ID: "1", Name: "example.com", Slug: "example-com-1", Status: true},
+		{ID: "2", Name: "test.org", Slug: "test-org-2", Status: true},
 	}
 
 	var gotPath string
@@ -109,7 +109,7 @@ func TestDNSDomainCreate(t *testing.T) {
 		Name:        "new.com",
 		Slug:        "new-com-3",
 		DNSProvider: "powerdns",
-		Status:      "active",
+		Status:      true,
 	}
 
 	var gotBody map[string]interface{}
@@ -252,5 +252,32 @@ func TestDNSRecordDelete(t *testing.T) {
 	}
 	if gotPath != "/dns/domains/example-com-1/records" {
 		t.Errorf("path = %q, want %q", gotPath, "/dns/domains/example-com-1/records")
+	}
+}
+
+// TestDNSDomainListRealShape decodes the real API JSON shape:
+// project_id as a UUID string, status as a bool.
+func TestDNSDomainListRealShape(t *testing.T) {
+	payload := `{"status":"Success","message":"OK","current_page":1,"total":1,"data":[{"id":"a1dd5370","name":"examdomain.com","slug":"examdomaincom","project_id":"a1c29c89-11ea-4ab1-a3df-c4ebd895cffe","account_id":"a1c29c88","status":true,"created_at":"2026-05-25T14:33:17.000000Z","updated_at":"2026-05-25T14:33:17.000000Z"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	domains, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(domains) != 1 {
+		t.Fatalf("got %d domains, want 1", len(domains))
+	}
+	if domains[0].ProjectID != "a1c29c89-11ea-4ab1-a3df-c4ebd895cffe" {
+		t.Errorf("ProjectID = %q, want UUID string", domains[0].ProjectID)
+	}
+	if !domains[0].Status {
+		t.Errorf("Status = false, want true")
 	}
 }

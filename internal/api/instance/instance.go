@@ -160,15 +160,15 @@ type StorageCategory struct {
 
 // ActivityLog represents a VM activity log entry.
 type ActivityLog struct {
-	ID          string `json:"id"`
-	Category    string `json:"category"`
-	Action      string `json:"action"`
-	Status      string `json:"status"`
-	Error       string `json:"error"`
-	Description string `json:"description"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	Project     string `json:"project"`
+	ID          json.Number `json:"id"`
+	Category    string      `json:"category"`
+	Action      string      `json:"action"`
+	Status      string      `json:"status"`
+	Error       string      `json:"error"`
+	Description string      `json:"description"`
+	CreatedAt   string      `json:"created_at"`
+	UpdatedAt   string      `json:"updated_at"`
+	Project     string      `json:"project"`
 }
 
 // Addon represents a VM addon.
@@ -210,6 +210,7 @@ type CreateRequest struct {
 	StorageCategory      string      `json:"storage_category,omitempty"`
 	ComputeCategory      string      `json:"compute_category,omitempty"`
 	BlockstoragePlan     string      `json:"blockstorage_plan,omitempty"`
+	NetworkPlan          string      `json:"network_plan,omitempty"`
 	IsVNF                bool        `json:"is_vnf"`
 	IsVMPasswordRequired bool        `json:"is_vm_password_required"`
 	IsVMSSHRequired      bool        `json:"is_vm_ssh_required"`
@@ -487,6 +488,20 @@ func (s *Service) PurchaseAddon(ctx context.Context, req PurchaseAddonRequest) (
 		return nil, fmt.Errorf("purchasing addon: %w", err)
 	}
 	return &resp, nil
+}
+
+// Delete permanently destroys a virtual machine.
+// If expunge is true, ?expunge=true is sent to force immediate purge from the hypervisor
+// rather than leaving the VM in a soft-deleted/Destroyed state pending CloudStack expunge.
+func (s *Service) Delete(ctx context.Context, slug string, expunge bool) error {
+	var q url.Values
+	if expunge {
+		q = url.Values{"expunge": {"true"}}
+	}
+	if err := s.client.Delete(ctx, "/virtual-machines/"+slug, q); err != nil {
+		return fmt.Errorf("deleting virtual machine %s: %w", slug, err)
+	}
+	return nil
 }
 
 // WaitForState polls the VM until it reaches one of the target states or the context is cancelled.

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -70,8 +71,8 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a VM snapshot",
-		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project proj-1 --cloud-provider cp-1 --region rgn-1 --service svc-1
-  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project proj-1 --cloud-provider cp-1 --region rgn-1 --service svc-1 --memory`,
+		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project default --cloud-provider nimbo --region yow-1 --service virtual-machine
+  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project default --cloud-provider nimbo --region yow-1 --service virtual-machine --memory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -133,16 +134,17 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 		Use:   "delete <slug>",
 		Short: "Delete a VM snapshot permanently",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-snapshot delete <slug>
-  zcp vm-snapshot delete <slug> --yes`,
+		Example: `  zcp vm-snapshot delete vms-001001-0001
+  zcp vm-snapshot delete vms-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "Are you sure you want to delete %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -173,16 +175,17 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 		Use:   "revert <slug>",
 		Short: "Revert a VM to a snapshot state (DESTRUCTIVE)",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-snapshot revert <slug>
-  zcp vm-snapshot revert <slug> --yes`,
+		Example: `  zcp vm-snapshot revert vms-001001-0001
+  zcp vm-snapshot revert vms-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", slug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Reverting to snapshot %q will discard all VM state since the snapshot was taken. This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}

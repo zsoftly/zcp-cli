@@ -302,3 +302,90 @@ func TestLoadBalancerAttachVMError(t *testing.T) {
 		t.Fatal("AttachVM() expected error on 404, got nil")
 	}
 }
+
+func TestLoadBalancerDelete(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "lb-001001-0001")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/load-balancers/lb-001001-0001" {
+		t.Errorf("path = %q, want %q", gotPath, "/load-balancers/lb-001001-0001")
+	}
+}
+
+func TestLoadBalancerDeleteRule(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.DeleteRule(context.Background(), "my-lb", "rule-42")
+	if err != nil {
+		t.Fatalf("DeleteRule() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/load-balancers/my-lb/load-balancer-rules/rule-42" {
+		t.Errorf("path = %q, want %q", gotPath, "/load-balancers/my-lb/load-balancer-rules/rule-42")
+	}
+}
+
+func TestLoadBalancerDetachVM(t *testing.T) {
+	var gotPath, gotMethod string
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.DetachVM(context.Background(), "my-lb", "rule-42", "my-vm")
+	if err != nil {
+		t.Fatalf("DetachVM() error = %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodPost)
+	}
+	if gotPath != "/load-balancers/my-lb/load-balancer-rules/rule-42/detach" {
+		t.Errorf("path = %q, want %q", gotPath, "/load-balancers/my-lb/load-balancer-rules/rule-42/detach")
+	}
+	if gotBody["virtual_machine"] != "my-vm" {
+		t.Errorf("body virtual_machine = %v, want %q", gotBody["virtual_machine"], "my-vm")
+	}
+}
+
+func TestLoadBalancerDelete_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "missing-lb")
+	if err == nil {
+		t.Fatal("Delete() expected error on 404, got nil")
+	}
+}

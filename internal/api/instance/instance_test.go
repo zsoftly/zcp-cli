@@ -106,3 +106,75 @@ func TestStop(t *testing.T) {
 		t.Fatalf("Stop() error = %v", err)
 	}
 }
+
+func TestDelete(t *testing.T) {
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/virtual-machines/test-vm" {
+			t.Errorf("method=%s path=%s", r.Method, r.URL.Path)
+		}
+		if got := r.URL.Query().Get("expunge"); got != "" {
+			t.Errorf("expunge query param should be absent, got %q", got)
+		}
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Virtual machine deleted successfully.",
+			"data":    nil,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	if err := svc.Delete(context.Background(), "test-vm", false); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !called {
+		t.Error("DELETE request was never made")
+	}
+}
+
+func TestDelete_Force(t *testing.T) {
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/virtual-machines/test-vm" {
+			t.Errorf("method=%s path=%s", r.Method, r.URL.Path)
+		}
+		if got := r.URL.Query().Get("expunge"); got != "true" {
+			t.Errorf("expunge = %q, want %q", got, "true")
+		}
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Virtual machine deleted successfully.",
+			"data":    nil,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	if err := svc.Delete(context.Background(), "test-vm", true); err != nil {
+		t.Fatalf("Delete(force) error = %v", err)
+	}
+	if !called {
+		t.Error("DELETE request was never made")
+	}
+}
+
+func TestDelete_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Error",
+			"message": "Virtual machine not found.",
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	if err := svc.Delete(context.Background(), "nonexistent", false); err == nil {
+		t.Fatal("Delete() expected error for 404, got nil")
+	}
+}

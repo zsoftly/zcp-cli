@@ -28,7 +28,7 @@ func makeNetwork(slug, name string) network.Network {
 		ID:          "1",
 		Slug:        slug,
 		Name:        name,
-		Status:      "Active",
+		Status:      true,
 		NetworkType: "Isolated",
 		Gateway:     "10.0.0.1",
 		CIDR:        "10.0.0.0/24",
@@ -266,6 +266,133 @@ func TestCreateEgressRule(t *testing.T) {
 	}
 	if gotBody["protocol"] != "tcp" {
 		t.Errorf("body[protocol] = %v, want %q", gotBody["protocol"], "tcp")
+	}
+}
+
+// TestNetworkListBoolStatus verifies that a network list response with boolean
+// status (as returned by the live API) decodes without error.
+func TestNetworkListBoolStatus(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"abc","slug":"test-net","name":"Test Net","status":true,"type":"Isolated","gateway":"10.0.0.1","cidr":"10.0.0.0/24","zone_slug":"yow-1","is_default":false}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if !result[0].Status {
+		t.Errorf("result[0].Status = false, want true")
+	}
+	if result[0].NetworkType != "Isolated" {
+		t.Errorf("result[0].NetworkType = %q, want %q", result[0].NetworkType, "Isolated")
+	}
+}
+
+// TestNetworkListStringStatus verifies that "status":"Active" (older API shape)
+// decodes as Status=true.
+func TestNetworkListStringStatus(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"old","slug":"old-net","name":"Old Net","status":"Active","type":"Isolated"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if !result[0].Status {
+		t.Errorf("result[0].Status = false, want true (decoded from string %q)", "Active")
+	}
+}
+
+// TestNetworkListNetworkTypeKey verifies that "network_type":"Isolated" (older
+// API key name) populates NetworkType correctly.
+func TestNetworkListNetworkTypeKey(t *testing.T) {
+	payload := `{"status":"Success","data":[{"id":"old2","slug":"old-net2","name":"Old Net 2","status":true,"network_type":"Shared"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	result, err := svc.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("List() returned %d networks, want 1", len(result))
+	}
+	if result[0].NetworkType != "Shared" {
+		t.Errorf("NetworkType = %q, want %q", result[0].NetworkType, "Shared")
+	}
+}
+
+// TestDeleteNetwork verifies DELETE /networks/<slug> is called correctly.
+func TestDeleteNetwork(t *testing.T) {
+	var gotPath, gotMethod string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "en-001001-0018")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want %q", gotMethod, http.MethodDelete)
+	}
+	if gotPath != "/networks/en-001001-0018" {
+		t.Errorf("path = %q, want %q", gotPath, "/networks/en-001001-0018")
+	}
+}
+
+// TestDeleteNetwork_HasVMs verifies that an error response surfaces correctly.
+func TestDeleteNetwork_HasVMs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		fmt.Fprint(w, `{"status":"Error","message":"You cannot delete the network while virtual machines are created using it."}`)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	err := svc.Delete(context.Background(), "en-001001-0018")
+	if err == nil {
+		t.Fatal("Delete() expected error, got nil")
 	}
 }
 

@@ -229,110 +229,131 @@
 | 130 | `/monitoring/{SLUG}/network-traffic`    | GET    | VM network traffic metrics | `monitoring` |
 | 131 | `/monitoring/{SLUG}/disk-io-read-write` | GET    | VM disk I/O metrics        | `monitoring` |
 
+### Object Storage
+
+Object storage instances, buckets, and object metadata are managed via the ZCP REST API. Object uploads and deletes use the **S3 protocol** (AWS Signature V4) directly against the region's `s3_endpoint` — not the ZCP REST API.
+
+| #   | Path                                              | Method | Summary                               | CLI Group        |
+| --- | ------------------------------------------------- | ------ | ------------------------------------- | ---------------- |
+| 132 | `/object-storages`                                | GET    | List object storage instances         | `object-storage` |
+| 133 | `/object-storages`                                | POST   | Create object storage instance        | `object-storage` |
+| 134 | `/object-storages/{SLUG}`                         | GET    | Get object storage instance           | `object-storage` |
+| 135 | `/object-storages/{SLUG}/resize`                  | POST   | Resize object storage instance        | `object-storage` |
+| 136 | `/object-storages/{SLUG}`                         | DELETE | Delete object storage instance        | `object-storage` |
+| 137 | `/object-storages/{SLUG}/buckets`                 | GET    | List buckets                          | `object-storage` |
+| 138 | `/object-storages/{SLUG}/buckets`                 | POST   | Create bucket                         | `object-storage` |
+| 139 | `/object-storages/{SLUG}/buckets/{BSLUG}`         | GET    | Get bucket                            | `object-storage` |
+| 140 | `/object-storages/{SLUG}/buckets/{BSLUG}`         | PUT    | Update bucket settings                | `object-storage` |
+| 141 | `/object-storages/{SLUG}/buckets/{BSLUG}`         | DELETE | Delete bucket                         | `object-storage` |
+| 142 | `/object-storages/{SLUG}/buckets/{BSLUG}/acl`     | PUT    | Set bucket ACL                        | `object-storage` |
+| 143 | `/object-storages/{SLUG}/buckets/{BSLUG}/objects` | GET    | List objects in bucket (cursor-paged) | `object-storage` |
+
+> **S3 endpoints** (used by `object put` and `object delete`): the CLI reads `region.cloud_provider_setup.config.s3_endpoint` from the `GET /object-storages/{SLUG}?include=region` response and opens a direct S3 connection using the instance's `api_key` / `api_secret` as AWS access credentials.
+
 ### Billing
 
 | #   | Path                      | Method | Summary                   | CLI Group |
 | --- | ------------------------- | ------ | ------------------------- | --------- |
-| 132 | `/billing/costs`          | GET    | Get current costs         | `billing` |
-| 133 | `/billing/balance`        | GET    | Get account balance       | `billing` |
-| 134 | `/billing/monthly-usage`  | GET    | Get monthly usage summary | `billing` |
-| 135 | `/billing/credit-limit`   | GET    | Get credit limit          | `billing` |
-| 136 | `/billing/service-counts` | GET    | Get service counts        | `billing` |
-| 137 | `/billing/subscriptions`  | GET    | List subscriptions        | `billing` |
-| 138 | `/billing/invoices`       | GET    | List invoices             | `billing` |
-| 139 | `/billing/usage`          | GET    | Get detailed usage        | `billing` |
-| 140 | `/billing/free-credits`   | GET    | Get free credits          | `billing` |
-| 141 | `/billing/contracts`      | GET    | List contracts            | `billing` |
-| 142 | `/billing/trials`         | GET    | List trials               | `billing` |
-| 143 | `/billing/payments`       | GET    | List payments             | `billing` |
-| 144 | `/billing/coupons`        | GET    | List coupons              | `billing` |
-| 145 | `/billing/coupons`        | POST   | Apply coupon              | `billing` |
-| 146 | `/billing/budget-alerts`  | GET    | List budget alerts        | `billing` |
-| 147 | `/billing/budget-alerts`  | POST   | Create budget alert       | `billing` |
-| 148 | `/billing/cancel-service` | POST   | Cancel a service          | `billing` |
+| 144 | `/billing/costs`          | GET    | Get current costs         | `billing` |
+| 145 | `/billing/balance`        | GET    | Get account balance       | `billing` |
+| 146 | `/billing/monthly-usage`  | GET    | Get monthly usage summary | `billing` |
+| 147 | `/billing/credit-limit`   | GET    | Get credit limit          | `billing` |
+| 148 | `/billing/service-counts` | GET    | Get service counts        | `billing` |
+| 149 | `/billing/subscriptions`  | GET    | List subscriptions        | `billing` |
+| 150 | `/billing/invoices`       | GET    | List invoices             | `billing` |
+| 151 | `/billing/usage`          | GET    | Get detailed usage        | `billing` |
+| 152 | `/billing/free-credits`   | GET    | Get free credits          | `billing` |
+| 153 | `/billing/contracts`      | GET    | List contracts            | `billing` |
+| 154 | `/billing/trials`         | GET    | List trials               | `billing` |
+| 155 | `/billing/payments`       | GET    | List payments             | `billing` |
+| 156 | `/billing/coupons`        | GET    | List coupons              | `billing` |
+| 157 | `/billing/coupons`        | POST   | Apply coupon              | `billing` |
+| 158 | `/billing/budget-alerts`  | GET    | List budget alerts        | `billing` |
+| 159 | `/billing/budget-alerts`  | POST   | Create budget alert       | `billing` |
+| 160 | `/billing/cancel-service` | POST   | Cancel a service          | `billing` |
 
 ### Profile
 
 | #   | Path                       | Method | Summary                | CLI Group |
 | --- | -------------------------- | ------ | ---------------------- | --------- |
-| 149 | `/profile`                 | GET    | Get user profile       | `profile` |
-| 150 | `/profile`                 | PUT    | Update user profile    | `profile` |
-| 151 | `/profile/company-details` | PUT    | Update company details | `profile` |
-| 152 | `/profile/time-settings`   | POST   | Update time settings   | `profile` |
-| 153 | `/profile/api-enable`      | POST   | Enable API access      | `profile` |
-| 154 | `/profile/api-disable`     | DELETE | Disable API access     | `profile` |
-| 155 | `/profile/activity-logs`   | GET    | Get activity logs      | `profile` |
+| 161 | `/profile`                 | GET    | Get user profile       | `profile` |
+| 162 | `/profile`                 | PUT    | Update user profile    | `profile` |
+| 163 | `/profile/company-details` | PUT    | Update company details | `profile` |
+| 164 | `/profile/time-settings`   | POST   | Update time settings   | `profile` |
+| 165 | `/profile/api-enable`      | POST   | Enable API access      | `profile` |
+| 166 | `/profile/api-disable`     | DELETE | Disable API access     | `profile` |
+| 167 | `/profile/activity-logs`   | GET    | Get activity logs      | `profile` |
 
 ### SSH Keys
 
 | #   | Path                     | Method | Summary        | CLI Group |
 | --- | ------------------------ | ------ | -------------- | --------- |
-| 156 | `/users/ssh-keys`        | GET    | List SSH keys  | `ssh-key` |
-| 157 | `/users/ssh-keys`        | POST   | Create SSH key | `ssh-key` |
-| 158 | `/users/ssh-keys/{SLUG}` | DELETE | Delete SSH key | `ssh-key` |
+| 168 | `/users/ssh-keys`        | GET    | List SSH keys  | `ssh-key` |
+| 169 | `/users/ssh-keys`        | POST   | Create SSH key | `ssh-key` |
+| 170 | `/users/ssh-keys/{SLUG}` | DELETE | Delete SSH key | `ssh-key` |
 
 ### Support
 
 | #   | Path                              | Method | Summary               | CLI Group |
 | --- | --------------------------------- | ------ | --------------------- | --------- |
-| 159 | `/support/tickets`                | GET    | List support tickets  | `support` |
-| 160 | `/support/tickets`                | POST   | Create support ticket | `support` |
-| 161 | `/support/tickets/{SLUG}`         | PUT    | Update support ticket | `support` |
-| 162 | `/support/tickets/{SLUG}`         | DELETE | Delete support ticket | `support` |
-| 163 | `/support/tickets/{SLUG}/replies` | GET    | List ticket replies   | `support` |
-| 164 | `/support/tickets/{SLUG}/replies` | POST   | Reply to ticket       | `support` |
-| 165 | `/support/feedback`               | GET    | List feedback         | `support` |
-| 166 | `/support/feedback`               | POST   | Submit feedback       | `support` |
-| 167 | `/support/faqs`                   | GET    | List FAQs             | `support` |
+| 171 | `/support/tickets`                | GET    | List support tickets  | `support` |
+| 172 | `/support/tickets`                | POST   | Create support ticket | `support` |
+| 173 | `/support/tickets/{SLUG}`         | PUT    | Update support ticket | `support` |
+| 174 | `/support/tickets/{SLUG}`         | DELETE | Delete support ticket | `support` |
+| 175 | `/support/tickets/{SLUG}/replies` | GET    | List ticket replies   | `support` |
+| 176 | `/support/tickets/{SLUG}/replies` | POST   | Reply to ticket       | `support` |
+| 177 | `/support/feedback`               | GET    | List feedback         | `support` |
+| 178 | `/support/feedback`               | POST   | Submit feedback       | `support` |
+| 179 | `/support/faqs`                   | GET    | List FAQs             | `support` |
 
 ### Plans
 
 | #   | Path                      | Method | Summary                  | CLI Group |
 | --- | ------------------------- | ------ | ------------------------ | --------- |
-| 168 | `/plans/service/VM`       | GET    | List VM plans            | `plan`    |
-| 169 | `/plans/service/Router`   | GET    | List router plans        | `plan`    |
-| 170 | `/plans/service/Storage`  | GET    | List storage plans       | `plan`    |
-| 171 | `/plans/service/LB`       | GET    | List load balancer plans | `plan`    |
-| 172 | `/plans/service/K8s`      | GET    | List Kubernetes plans    | `plan`    |
-| 173 | `/plans/service/IP`       | GET    | List IP address plans    | `plan`    |
-| 174 | `/plans/service/Snapshot` | GET    | List snapshot plans      | `plan`    |
-| 175 | `/plans/service/Template` | GET    | List template plans      | `plan`    |
-| 176 | `/plans/service/ISO`      | GET    | List ISO plans           | `plan`    |
-| 177 | `/plans/service/Backups`  | GET    | List backup plans        | `plan`    |
+| 180 | `/plans/service/VM`       | GET    | List VM plans            | `plan`    |
+| 181 | `/plans/service/Router`   | GET    | List router plans        | `plan`    |
+| 182 | `/plans/service/Storage`  | GET    | List storage plans       | `plan`    |
+| 183 | `/plans/service/LB`       | GET    | List load balancer plans | `plan`    |
+| 184 | `/plans/service/K8s`      | GET    | List Kubernetes plans    | `plan`    |
+| 185 | `/plans/service/IP`       | GET    | List IP address plans    | `plan`    |
+| 186 | `/plans/service/Snapshot` | GET    | List snapshot plans      | `plan`    |
+| 187 | `/plans/service/Template` | GET    | List template plans      | `plan`    |
+| 188 | `/plans/service/ISO`      | GET    | List ISO plans           | `plan`    |
+| 189 | `/plans/service/Backups`  | GET    | List backup plans        | `plan`    |
 
 ### Discovery
 
 | #   | Path                  | Method | Summary                 | CLI Group   |
 | --- | --------------------- | ------ | ----------------------- | ----------- |
-| 178 | `/regions`            | GET    | List regions            | `discovery` |
-| 179 | `/servers`            | GET    | List servers            | `discovery` |
-| 180 | `/cloud-providers`    | GET    | List cloud providers    | `discovery` |
-| 181 | `/currencies`         | GET    | List currencies         | `discovery` |
-| 182 | `/storage-categories` | GET    | List storage categories | `discovery` |
-| 183 | `/billing-cycles`     | GET    | List billing cycles     | `discovery` |
-| 184 | `/unit-pricings`      | GET    | List unit pricings      | `discovery` |
+| 190 | `/regions`            | GET    | List regions            | `discovery` |
+| 191 | `/servers`            | GET    | List servers            | `discovery` |
+| 192 | `/cloud-providers`    | GET    | List cloud providers    | `discovery` |
+| 193 | `/currencies`         | GET    | List currencies         | `discovery` |
+| 194 | `/storage-categories` | GET    | List storage categories | `discovery` |
+| 195 | `/billing-cycles`     | GET    | List billing cycles     | `discovery` |
+| 196 | `/unit-pricings`      | GET    | List unit pricings      | `discovery` |
 
 ### Store
 
 | #   | Path                         | Method | Summary                 | CLI Group |
 | --- | ---------------------------- | ------ | ----------------------- | --------- |
-| 185 | `/store/items`               | GET    | List store items        | `store`   |
-| 186 | `/store/checkout`            | POST   | Checkout store cart     | `store`   |
-| 187 | `/store/marketplace-apps`    | GET    | List marketplace apps   | `store`   |
-| 188 | `/store/products/categories` | GET    | List product categories | `store`   |
+| 197 | `/store/items`               | GET    | List store items        | `store`   |
+| 198 | `/store/checkout`            | POST   | Checkout store cart     | `store`   |
+| 199 | `/store/marketplace-apps`    | GET    | List marketplace apps   | `store`   |
+| 200 | `/store/products/categories` | GET    | List product categories | `store`   |
 
 ### Auth
 
 | #   | Path              | Method | Summary                      | CLI Group |
 | --- | ----------------- | ------ | ---------------------------- | --------- |
-| 189 | `/login`          | POST   | Log in (obtain Bearer token) | `auth`    |
-| 190 | `/register`       | POST   | Register new account         | `auth`    |
-| 191 | `/reset-password` | POST   | Reset password               | `auth`    |
-| 192 | `/mfa/enable`     | POST   | Enable MFA                   | `auth`    |
-| 193 | `/mfa/disable`    | POST   | Disable MFA                  | `auth`    |
-| 194 | `/mfa/verify`     | POST   | Verify MFA code              | `auth`    |
+| 201 | `/login`          | POST   | Log in (obtain Bearer token) | `auth`    |
+| 202 | `/register`       | POST   | Register new account         | `auth`    |
+| 203 | `/reset-password` | POST   | Reset password               | `auth`    |
+| 204 | `/mfa/enable`     | POST   | Enable MFA                   | `auth`    |
+| 205 | `/mfa/disable`    | POST   | Disable MFA                  | `auth`    |
+| 206 | `/mfa/verify`     | POST   | Verify MFA code              | `auth`    |
 
-**Total endpoints**: 194
+**Total endpoints**: 206
 
 ---
 

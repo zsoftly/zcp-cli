@@ -206,3 +206,34 @@ func (s *Service) AttachVM(ctx context.Context, lbSlug, ruleID string, req Attac
 	}
 	return nil
 }
+
+// DetachVMRequest holds parameters for detaching a VM from a load balancer rule.
+type DetachVMRequest struct {
+	VirtualMachine string `json:"virtual_machine"`
+}
+
+// Delete permanently deletes a load balancer.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/load-balancers/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting load balancer %s: %w", slug, err)
+	}
+	return nil
+}
+
+// DeleteRule removes a rule from a load balancer.
+func (s *Service) DeleteRule(ctx context.Context, lbSlug, ruleID string) error {
+	path := fmt.Sprintf("/load-balancers/%s/load-balancer-rules/%s", lbSlug, ruleID)
+	if err := s.client.Delete(ctx, path, nil); err != nil {
+		return fmt.Errorf("deleting rule %s from load balancer %s: %w", ruleID, lbSlug, err)
+	}
+	return nil
+}
+
+// DetachVM detaches a VM from a load balancer rule.
+func (s *Service) DetachVM(ctx context.Context, lbSlug, ruleID, vmSlug string) error {
+	path := fmt.Sprintf("/load-balancers/%s/load-balancer-rules/%s/detach", lbSlug, ruleID)
+	if err := s.client.Post(ctx, path, DetachVMRequest{VirtualMachine: vmSlug}, nil); err != nil {
+		return fmt.Errorf("detaching VM %s from rule %s on load balancer %s: %w", vmSlug, ruleID, lbSlug, err)
+	}
+	return nil
+}

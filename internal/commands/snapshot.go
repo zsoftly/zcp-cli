@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -20,6 +21,7 @@ func NewSnapshotCmd() *cobra.Command {
 	cmd.AddCommand(newSnapshotListCmd())
 	cmd.AddCommand(newSnapshotCreateCmd())
 	cmd.AddCommand(newSnapshotRevertCmd())
+	cmd.AddCommand(newSnapshotDeleteCmd())
 	return cmd
 }
 
@@ -66,7 +68,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a block storage snapshot",
-		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --cloud-provider zcp --region yow-1 --billing-cycle hourly --project my-project`,
+		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --cloud-provider nimbo --region yow-1 --billing-cycle hourly --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -145,19 +147,20 @@ func newSnapshotRevertCmd() *cobra.Command {
 		Use:   "revert <snapshot-slug>",
 		Short: "Revert a block storage volume to a snapshot state (DESTRUCTIVE)",
 		Args:  cobra.ExactArgs(1),
-		Example: `  zcp snapshot revert <snapshot-slug> --volume <volume-slug>
-  zcp snapshot revert <snapshot-slug> --volume <volume-slug> --yes`,
+		Example: `  zcp snapshot revert ss-001001-0001 --volume bs-001001-0042
+  zcp snapshot revert ss-001001-0001 --volume bs-001001-0042 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			snapshotSlug := args[0]
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
 			}
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stdout, "WARNING: Reverting snapshot %q on volume %q will discard all changes since the snapshot. This cannot be undone. [y/N]: ", snapshotSlug, blockstorageSlug)
-				var answer string
-				fmt.Scanln(&answer)
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					fmt.Fprintln(os.Stdout, "Aborted.")
+				fmt.Fprintf(os.Stderr, "WARNING: Reverting snapshot %q on volume %q will discard all changes since the snapshot. This cannot be undone. [y/N]: ", snapshotSlug, blockstorageSlug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
 					return nil
 				}
 			}
@@ -187,5 +190,44 @@ func newSnapshotRevertCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	cmd.Flags().StringVar(&blockstorageSlug, "volume", "", "Block storage volume slug (required)")
+	return cmd
+}
+
+func newSnapshotDeleteCmd() *cobra.Command {
+	var yes bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <snapshot-slug>",
+		Short: "Permanently delete a block storage snapshot",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp snapshot delete ss-001001-0001
+  zcp snapshot delete ss-001001-0001 --yes`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			slug := args[0]
+			if !yes && !autoApproved(cmd) {
+				fmt.Fprintf(os.Stderr, "Delete snapshot %q? This cannot be undone. [y/N]: ", slug)
+				scanner := bufio.NewScanner(os.Stdin)
+				scanner.Scan()
+				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				if answer != "y" && answer != "yes" {
+					fmt.Fprintln(os.Stderr, "Aborted.")
+					return nil
+				}
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := snapshot.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.Delete(ctx, slug); err != nil {
+				return fmt.Errorf("snapshot delete: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Snapshot %q deleted.\n", slug)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }

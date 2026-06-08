@@ -3,7 +3,9 @@ package network
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/internal/httpclient"
 )
@@ -13,8 +15,8 @@ type Network struct {
 	ID          string `json:"id"`
 	Slug        string `json:"slug"`
 	Name        string `json:"name"`
-	Status      string `json:"status"`
-	NetworkType string `json:"network_type"`
+	Status      bool   `json:"status"`
+	NetworkType string `json:"type"`
 	Gateway     string `json:"gateway"`
 	CIDR        string `json:"cidr"`
 	Netmask     string `json:"netmask"`
@@ -25,6 +27,65 @@ type Network struct {
 	Category    string `json:"category"`
 	Description string `json:"description"`
 	IsDefault   bool   `json:"is_default"`
+}
+
+// UnmarshalJSON provides backward-compatible decoding for Network.
+// The live API returns status as bool and network type under "type"; older
+// deployments may return status as string ("Active"/"Inactive") and/or use
+// "network_type" as the key.
+func (n *Network) UnmarshalJSON(b []byte) error {
+	type networkRaw struct {
+		ID             string          `json:"id"`
+		Slug           string          `json:"slug"`
+		Name           string          `json:"name"`
+		Status         json.RawMessage `json:"status"`
+		NetworkType    json.RawMessage `json:"type"`
+		NetworkTypeAlt json.RawMessage `json:"network_type"`
+		Gateway        string          `json:"gateway"`
+		CIDR           string          `json:"cidr"`
+		Netmask        string          `json:"netmask"`
+		DNS1           string          `json:"dns1"`
+		DNS2           string          `json:"dns2"`
+		ZoneSlug       string          `json:"zone_slug"`
+		ZoneName       string          `json:"zone_name"`
+		Category       string          `json:"category"`
+		Description    string          `json:"description"`
+		IsDefault      bool            `json:"is_default"`
+	}
+	var raw networkRaw
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	n.ID = raw.ID
+	n.Slug = raw.Slug
+	n.Name = raw.Name
+	n.Gateway = raw.Gateway
+	n.CIDR = raw.CIDR
+	n.Netmask = raw.Netmask
+	n.DNS1 = raw.DNS1
+	n.DNS2 = raw.DNS2
+	n.ZoneSlug = raw.ZoneSlug
+	n.ZoneName = raw.ZoneName
+	n.Category = raw.Category
+	n.Description = raw.Description
+	n.IsDefault = raw.IsDefault
+
+	if len(raw.Status) > 0 {
+		s := strings.Trim(string(raw.Status), `"`)
+		n.Status = s == "true" || strings.EqualFold(s, "active") || s == "1"
+	}
+
+	typeRaw := raw.NetworkType
+	if len(typeRaw) == 0 {
+		typeRaw = raw.NetworkTypeAlt
+	}
+	if len(typeRaw) > 0 {
+		if err := json.Unmarshal(typeRaw, &n.NetworkType); err != nil {
+			return fmt.Errorf("decoding network type: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Category represents a network category (offering).
@@ -176,6 +237,15 @@ func (s *Service) DeleteEgressRule(ctx context.Context, networkSlug string, rule
 	path := fmt.Sprintf("/networks/%s/egress-firewall-rules/%s", networkSlug, ruleID)
 	if err := s.client.Delete(ctx, path, nil); err != nil {
 		return fmt.Errorf("deleting egress rule %s for network %s: %w", ruleID, networkSlug, err)
+	}
+	return nil
+}
+
+// Delete removes an isolated network. The network must have no VMs attached.
+// Its SOURCE-NAT IP is released automatically by CloudStack on deletion.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/networks/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting network %s: %w", slug, err)
 	}
 	return nil
 }
