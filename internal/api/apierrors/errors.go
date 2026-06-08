@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -40,7 +41,11 @@ func IsForbidden(err error) bool {
 	return errors.As(err, &ae) && ae.StatusCode == 403
 }
 
-// IsTransientRoutingError returns true for the CMP's "route … could not be found" 403,
+// transientRoutingRE matches the CMP's known routing-layer error phrase.
+// Expected format: "The route <path> could not be found."
+var transientRoutingRE = regexp.MustCompile(`(?i)\bthe route\b.*could not be found`)
+
+// IsTransientRoutingError returns true for the CMP's "The route … could not be found" 403,
 // which occurs during the brief window after resource creation when the routing layer
 // has not yet indexed the new slug. It is safe to retry this error.
 func IsTransientRoutingError(err error) bool {
@@ -51,8 +56,7 @@ func IsTransientRoutingError(err error) bool {
 	if ae.StatusCode != 403 {
 		return false
 	}
-	msg := strings.ToLower(ae.Message)
-	return strings.Contains(msg, "route") && strings.Contains(msg, "could not be found")
+	return transientRoutingRE.MatchString(ae.Message)
 }
 
 // IsResourceNotFound returns true if the error indicates the resource does not exist.

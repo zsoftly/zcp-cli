@@ -103,14 +103,22 @@ type VMNetworkIP struct {
 	Netmask    string `json:"netmask"`
 }
 
-// NetworkPrivateIP returns the private IP of the first attached network, or "" if none.
+// NetworkPrivateIP returns the private IP from the default network, falling back
+// to the first network with an IP if no default is set.
 func (vm *VirtualMachine) NetworkPrivateIP() string {
+	var fallback string
 	for _, n := range vm.Networks {
-		if n.Pivot != nil && n.Pivot.IPAddress != "" {
+		if n.Pivot == nil || n.Pivot.IPAddress == "" {
+			continue
+		}
+		if n.IsDefault || n.Pivot.IsDefault {
 			return n.Pivot.IPAddress
 		}
+		if fallback == "" {
+			fallback = n.Pivot.IPAddress
+		}
 	}
-	return ""
+	return fallback
 }
 
 // VMTemplate represents the template/OS info on a VM.

@@ -144,10 +144,12 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		if apierrors.IsTransientRoutingError(err) && attempt < 4 {
 			wait := instanceGetRetryWait(attempt)
 			fmt.Fprintf(cmd.ErrOrStderr(), "VM routing not ready yet, retrying in %v...\n", wait)
+			timer := time.NewTimer(wait)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return fmt.Errorf("instance get: %w", ctx.Err())
-			case <-time.After(wait):
+			case <-timer.C:
 			}
 			continue
 		}
@@ -264,6 +266,9 @@ func newInstanceCreateCmd() *cobra.Command {
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
+			}
+			if userData != "" && userDataFile != "" {
+				return fmt.Errorf("--user-data and --user-data-file are mutually exclusive")
 			}
 			if userDataFile != "" {
 				data, err := os.ReadFile(userDataFile)

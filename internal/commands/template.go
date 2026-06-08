@@ -243,7 +243,7 @@ func newTemplateAccountDeleteCmd() *cobra.Command {
 			return runTemplateAccountDelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "f", false, "Skip confirmation prompt")
 	return cmd
 }
 

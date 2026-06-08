@@ -186,6 +186,11 @@ func TestIsTransientRoutingError(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "403 broad 'route…could not be found' without 'the' prefix",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "route /v1/foo could not be found"},
+			want: false,
+		},
+		{
 			name: "non-APIError",
 			err:  errors.New("plain error"),
 			want: false,

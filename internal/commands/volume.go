@@ -120,14 +120,15 @@ func newVolumeCreateCmd() *cobra.Command {
 			if storageCategory == "" {
 				return fmt.Errorf("--storage-category is required")
 			}
-			if plan != "" && size > 0 {
+			sizeChanged := cmd.Flags().Changed("size")
+			if plan != "" && sizeChanged {
 				return fmt.Errorf("--plan and --size are mutually exclusive")
 			}
-			if plan == "" && size == 0 {
+			if plan == "" && !sizeChanged {
 				return fmt.Errorf("--plan or --size is required")
 			}
-			if size < 0 {
-				return fmt.Errorf("--size cannot be negative")
+			if sizeChanged && size <= 0 {
+				return fmt.Errorf("--size must be > 0")
 			}
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
