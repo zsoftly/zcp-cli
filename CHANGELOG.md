@@ -5,6 +5,54 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2026-06-07
+
+### Added
+
+- **`object-storage`** — full Ceph/S3 object storage management: list, get, create, delete, resize storage instances; bucket management (list, get, create, delete); object management (list, get, upload, delete); `zcp object-storage credentials` for S3 access key display. Cloud provider defaults to `ceph` — do not pass `--cloud-provider nimbo` (that is the CloudStack compute provider, not Ceph)
+- **`zcp instance delete`** — permanently delete virtual machines; `--force` flag for immediate expunge (skips the deferred expunge window)
+- **`zcp network delete`** — delete isolated networks with confirmation; also releases the associated SOURCE-NAT IP
+- **`zcp snapshot delete`** — permanently delete block storage snapshots
+- **`zcp vm-backup delete`** — permanently delete VM backup schedules
+- **`zcp volume delete`** — permanently delete block storage volumes (detach first)
+- **`zcp vpc delete`** — permanently delete VPCs
+- **`zcp backup delete`** — permanently delete block storage backup schedules
+- **`zcp kubernetes scale`** — scale worker node count up or down; idempotent (no-ops if already at target); `--wait` flag to block until the cluster returns to Running (10-min timeout, context-aware)
+- **`zcp kubernetes get-config`** — download kubeconfig to stdout (default) or a file with `--output <path>`; prints the export command when writing to a file
+- **`zcp lb delete-rule`** — delete a rule from a load balancer
+- **`zcp lb detach-vm`** — detach a VM from a load balancer rule
+- **Smoke testing framework** — `tests/smoke/` directory with live end-to-end test scripts (`smoke.sh`, `cases.sh`, `affected.sh`, `lib.sh`) for running full lifecycle tests against the ZCP API
+
+### Fixed
+
+- **`zcp vm-backup create --pseudo-service`** — flag was misspelled `--psudo-service`; corrected to `--pseudo-service` (API JSON tag `psudo_service` preserved for wire compatibility)
+- **`zcp egress create`** — protocol values were sent as-typed; API requires uppercase; `tcp`/`udp` are now normalised to `TCP`/`UDP` before the request
+- **`zcp kubernetes get`** — was showing `Workers=0`, `Version=""` for Running clusters; now reads real values from CloudStack meta fields (`meta.size`, `meta.kubernetes_version_name`, `meta.ipaddress`, `meta.end_point`)
+- **`zcp kubernetes scale --wait`** — polling loop used `context.Background()` with no upper bound; now inherits `cmd.Context()` with a 10-minute deadline; non-`Scaling` terminal states (e.g. `Error`) return an error instead of looping forever
+- **`zcp kubernetes get-config --output`** — directory creation used `strings.LastIndex` which panicked when the path had no `/`; replaced with `filepath.Dir`
+- **`zcp kubernetes scale` idempotency** — `strconv.Atoi` parse error on `meta.size` silently zeroed `currentWorkers`, causing false "already at N" matches; now falls back to the top-level `node_size` field on parse failure
+- **Confirmation prompts** — all 15 destructive-action prompts across 9 command files (`instance`, `network`, `ip`, `backup`, `snapshot`, `vmsnapshot`, `volume`, `vmbackup`, `objectstorage`) now use `bufio.Scanner`; prompts go to `stderr`; both `y` and `yes` are accepted; previously `fmt.Scanln` / stdout-only / `y`-only
+
+### Changed
+
+- **`zcp kubernetes get`** — prefers CloudStack meta fields over top-level API fields for all display values (version, workers, control nodes, IP, endpoint)
+- **`zcp kubernetes create`** — `--storage-category` is now validated as required (API returns "quota not found" without it); enhanced with `--ssh-key`, `--auth-method`, `--username`, `--password` flags
+- **`zcp plan list`** — now shows storage category in the output table
+- **Project dashboard** — updated to consume structured service data returned by the API
+- **Go toolchain** — upgraded to `go1.26.4`
+- **Help text** — all `--cloud-provider` examples corrected from `zcp` to `nimbo` (12+ files); all angle-bracket placeholders replaced with realistic values (`bs-001001-0042`, `ss-001001-0001`, `en-001001-0018`, etc.); `mtl-1` corrected to `yul-1` in load balancer examples
+
+### Tests
+
+- **25 new API-layer unit tests** — Delete path/method/error coverage added to `backup`, `snapshot`, `volume`, `loadbalancer` (Delete, DeleteRule, DetachVM), `kubernetes` (Delete, Scale, GetKubeconfig — including the not-ready case)
+- **New `vmbackup` test file** — List, Create, Delete (the package had no tests before)
+- **Instance delete tests** — success, `--force`, and 404 not-found scenarios
+- **IP address release tests** added to `ipaddress` package
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.9...0.0.10
+
+---
+
 ## [0.0.9] - 2026-04-14
 
 ### Added
