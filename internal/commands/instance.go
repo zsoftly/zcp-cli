@@ -11,8 +11,15 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/instance"
 )
+
+// instanceGetRetryWait controls the backoff between transient-routing-error retries.
+// Overridden in tests to avoid real sleeps.
+var instanceGetRetryWait = func(attempt int) time.Duration {
+	return time.Duration(2<<uint(attempt)) * time.Second
+}
 
 // NewInstanceCmd returns the 'instance' cobra command.
 func NewInstanceCmd() *cobra.Command {
@@ -84,11 +91,15 @@ func runInstanceList(cmd *cobra.Command) error {
 		if vm.Region != nil {
 			regionName = vm.Region.Name
 		}
+		privateIP := instance.StringVal(vm.PrivateIP)
+		if privateIP == "" {
+			privateIP = vm.NetworkPrivateIP()
+		}
 		rows = append(rows, []string{
 			vm.Slug,
 			vm.Name,
 			vm.State,
-			instance.StringVal(vm.PrivateIP),
+			privateIP,
 			instance.StringVal(vm.PublicIP),
 			regionName,
 			templateName,
@@ -124,7 +135,26 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	vm, err := svc.Get(ctx, slug)
+	var vm *instance.VirtualMachine
+	for attempt := 0; attempt < 5; attempt++ {
+		vm, err = svc.Get(ctx, slug)
+		if err == nil {
+			break
+		}
+		if apierrors.IsTransientRoutingError(err) && attempt < 4 {
+			wait := instanceGetRetryWait(attempt)
+			fmt.Fprintf(cmd.ErrOrStderr(), "VM routing not ready yet, retrying in %v...\n", wait)
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("instance get: %w", ctx.Err())
+			case <-timer.C:
+			}
+			continue
+		}
+		return fmt.Errorf("instance get: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("instance get: %w", err)
 	}
@@ -150,6 +180,11 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		storageName = vm.StorageSetting.Name
 	}
 
+	privateIP := instance.StringVal(vm.PrivateIP)
+	if privateIP == "" {
+		privateIP = vm.NetworkPrivateIP()
+	}
+
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
 		{"Slug", vm.Slug},
@@ -157,7 +192,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		{"Hostname", vm.Hostname},
 		{"State", vm.State},
 		{"Username", vm.Username},
-		{"Private IP", instance.StringVal(vm.PrivateIP)},
+		{"Private IP", privateIP},
 		{"Public IP", instance.StringVal(vm.PublicIP)},
 		{"Region", regionName},
 		{"Template", templateName},
@@ -194,6 +229,8 @@ func newInstanceCreateCmd() *cobra.Command {
 		computeCategory  string
 		blockstoragePlan string
 		networkPlan      string
+		userData         string
+		userDataFile     string
 		cpu              int
 		memory           int
 		disk             int
@@ -230,8 +267,15 @@ func newInstanceCreateCmd() *cobra.Command {
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
 			}
-			if blockstoragePlan == "" {
-				return fmt.Errorf("--blockstorage-plan is required (e.g. 50-gb-2, 100gb — see: zcp plan storage)")
+			if userData != "" && userDataFile != "" {
+				return fmt.Errorf("--user-data and --user-data-file are mutually exclusive")
+			}
+			if userDataFile != "" {
+				data, err := os.ReadFile(userDataFile)
+				if err != nil {
+					return fmt.Errorf("reading user-data file %q: %w", userDataFile, err)
+				}
+				userData = string(data)
 			}
 
 			h := hostname
@@ -242,6 +286,11 @@ func newInstanceCreateCmd() *cobra.Command {
 			var sshKeyPtr *string
 			if sshKey != "" {
 				sshKeyPtr = &sshKey
+			}
+
+			var userDataPtr *string
+			if userData != "" {
+				userDataPtr = &userData
 			}
 
 			if cmd.Flags().Changed("cpu") && cpu <= 0 {
@@ -291,6 +340,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				ComputeCategory:  computeCategory,
 				BlockstoragePlan: blockstoragePlan,
 				NetworkPlan:      networkPlan,
+				UserData:         userDataPtr,
 			}
 			return runInstanceCreate(cmd, req, wait)
 		},
@@ -307,8 +357,10 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&hostname, "hostname", "", "Hostname (defaults to --name)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (optional)")
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")
-	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug, e.g. 50-gb-2 (required)")
-	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. inet-yow, inet-yul — see: zcp plan network)")
+	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug (optional, e.g. b2g1 — see: zcp plan storage)")
+	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. pnet-yow, pnet-yul — see: zcp plan network)")
+	cmd.Flags().StringVar(&userData, "user-data", "", "Startup script content (cloud-init / bash)")
+	cmd.Flags().StringVar(&userDataFile, "user-data-file", "", "Path to a file containing the startup script")
 	cmd.Flags().IntVar(&cpu, "cpu", 0, "Number of vCPUs for a custom plan (e.g. 2)")
 	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in MB for a custom plan (e.g. 2048)")
 	cmd.Flags().IntVar(&disk, "disk", 0, "Root disk size in GB for a custom plan (e.g. 50)")
@@ -512,7 +564,7 @@ func newInstanceResetCmd() *cobra.Command {
 			return runInstanceReset(cmd, slug)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -657,6 +709,10 @@ func runInstanceTagDelete(cmd *cobra.Command, slug, key string) error {
 	defer cancel()
 
 	if err := svc.DeleteTag(ctx, slug, key); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Instance tag %q not found — already deleted.\n", key)
+			return nil
+		}
 		return fmt.Errorf("instance tag-delete: %w", err)
 	}
 
@@ -833,7 +889,7 @@ func newInstanceChangeOSCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&template, "template", "", "New template slug (required)")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -1127,6 +1183,10 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug, force); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("instance delete: %w", err)
 	}
 
@@ -1180,8 +1240,11 @@ func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port in
 		return fmt.Errorf("resolving instance IP: %w", err)
 	}
 
-	// Prefer private IP; fall back to public IP
+	// Prefer private IP; fall back to network pivot IP, then public IP
 	ip := instance.StringVal(vm.PrivateIP)
+	if ip == "" {
+		ip = vm.NetworkPrivateIP()
+	}
 	if ip == "" {
 		ip = instance.StringVal(vm.PublicIP)
 	}

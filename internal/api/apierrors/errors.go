@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 // APIError represents a structured error returned by the ZCP API.
@@ -37,6 +39,38 @@ func IsUnauthorized(err error) bool {
 func IsForbidden(err error) bool {
 	var ae *APIError
 	return errors.As(err, &ae) && ae.StatusCode == 403
+}
+
+// transientRoutingRE matches the CMP's known routing-layer error phrase.
+// Expected format: "The route <path> could not be found."
+var transientRoutingRE = regexp.MustCompile(`(?i)\bthe route\b.*could not be found`)
+
+// IsTransientRoutingError returns true for the CMP's "The route … could not be found" 403,
+// which occurs during the brief window after resource creation when the routing layer
+// has not yet indexed the new slug. It is safe to retry this error.
+func IsTransientRoutingError(err error) bool {
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if ae.StatusCode != 403 {
+		return false
+	}
+	return transientRoutingRE.MatchString(ae.Message)
+}
+
+// IsResourceNotFound returns true if the error indicates the resource does not exist.
+// It handles the CMP API's inconsistent use of 403 for not-found responses
+// (e.g. "kubernetes-cluster::k8s.not-found") in addition to the standard 404.
+func IsResourceNotFound(err error) bool {
+	var ae *APIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if ae.StatusCode == 404 {
+		return true
+	}
+	return ae.StatusCode == 403 && strings.Contains(strings.ToLower(ae.Message), "not-found")
 }
 
 // apiErrorResponse mirrors the STKCNSL error envelope:

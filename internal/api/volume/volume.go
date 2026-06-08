@@ -108,20 +108,25 @@ type singleResponse struct {
 	Data    Volume `json:"data"`
 }
 
+// CustomPlanStorage holds the storage size (in GB) for a custom-tier volume plan.
+type CustomPlanStorage struct {
+	Storage int `json:"storage"`
+}
+
 // CreateRequest holds parameters for creating a block storage volume.
 type CreateRequest struct {
-	Name            string `json:"name"`
-	Project         string `json:"project"`
-	CloudProvider   string `json:"cloud_provider"`
-	Region          string `json:"region"`
-	BillingCycle    string `json:"billing_cycle"`
-	StorageCategory string `json:"storage_category"`
-	Plan            string `json:"plan"`
-	IsCustomPlan    bool   `json:"is_custom_plan"`
-	CustomPlan      string `json:"custom_plan,omitempty"`
-	VirtualMachine  string `json:"virtual_machine,omitempty"`
-	Coupon          string `json:"coupon,omitempty"`
-	IsFreeTrial     bool   `json:"is_free_trial_plan"`
+	Name            string             `json:"name"`
+	Project         string             `json:"project"`
+	CloudProvider   string             `json:"cloud_provider"`
+	Region          string             `json:"region"`
+	BillingCycle    string             `json:"billing_cycle"`
+	StorageCategory string             `json:"storage_category"`
+	Plan            string             `json:"plan,omitempty"`
+	IsCustomPlan    bool               `json:"is_custom_plan"`
+	CustomPlan      *CustomPlanStorage `json:"custom_plan,omitempty"`
+	VirtualMachine  string             `json:"virtual_machine,omitempty"`
+	Coupon          string             `json:"coupon,omitempty"`
+	IsFreeTrial     bool               `json:"is_free_trial_plan"`
 }
 
 // AttachRequest holds parameters for attaching a volume to a VM.

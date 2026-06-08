@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/dns"
 )
 
@@ -218,7 +219,7 @@ func newDNSDeleteCmd() *cobra.Command {
 			return runDNSDelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -244,6 +245,10 @@ func runDNSDelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "DNS domain %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("dns delete: %w", err)
 	}
 
@@ -349,7 +354,7 @@ func newDNSRecordDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
 	cmd.Flags().IntVar(&recordID, "record-id", 0, "Record ID to delete (required; use 'dns show' to find IDs)")
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -375,6 +380,10 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 	defer cancel()
 
 	if err := svc.DeleteRecord(ctx, domainSlug, recordID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "DNS record %d not found — already deleted.\n", recordID)
+			return nil
+		}
 		return fmt.Errorf("dns record-delete: %w", err)
 	}
 

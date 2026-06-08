@@ -5,6 +5,44 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.11] - 2026-06-08
+
+### Added
+
+- **`zcp instance create --user-data`** — pass a cloud-init / user-data script inline at VM creation time, matching portal capability
+- **`zcp instance create --user-data-file`** — read user-data from a local file; mutually exclusive with `--user-data` (returns a clear error if both are set)
+
+### Fixed
+
+- **`zcp ssh-key import`** — CLI was sending `cloud_provider` to the API; the portal (and API) expect `region`. The `--cloud-provider` flag has been replaced with `--region` on this command
+- **`zcp instance get` / `zcp instance list` — Private IP always blank** — the top-level `private_ip` API field is `null`; the real value is in `networks[].pivot.ipaddress`. Both commands now read from the network pivot, preferring the default network (`is_default` / `pivot.is_default`) before falling back to the first attached network
+- **`zcp instance get` — transient 403 after VM creation** — CMP returns a 403 "The route virtual-machines/\<slug\> could not be found" briefly after creation while its routing layer indexes the new slug. `instance get` now retries up to 5 times with 2 / 4 / 8 / 16-second exponential backoff before surfacing the error
+- **`zcp dns record-delete`** — "not found" log message used `%q` (string-quote verb) for the integer record ID; corrected to `%d`
+
+### Changed
+
+- **`zcp instance create --blockstorage-plan`** — no longer required; backend auto-assigns when omitted (consistent with portal behaviour)
+- **`zcp instance create --network-plan`** — help text example values corrected from `inet-yow` / `inet-yul` to `pnet-yow` / `pnet-yul`
+- **`zcp template account-delete --yes`** — added `-f` shorthand; `-y` is reserved globally by `--auto-approve`
+- **`zcp volume create --size`** — validation now uses `cmd.Flags().Changed("size")`; explicitly passing `--size 0` returns `--size must be > 0` instead of the misleading `--plan or --size is required`; `--plan` and `--size` are now mutually exclusive even when `--size 0` is passed
+
+### Internal
+
+- **`IsTransientRoutingError`** — detection tightened from broad substring match to anchored regexp `(?i)\bthe route\b.*could not be found`, reducing false-positive risk as CMP error messages evolve
+- **`NetworkPrivateIP()`** — respects `is_default` / `pivot.is_default` network ordering instead of returning the first slice element; stable when multiple networks are attached
+- **Retry backoff timer** — `instance get` retry loop replaced `time.After` with `time.NewTimer` + `Stop()` to release the timer immediately on context cancellation rather than leaving it to fire unobserved
+
+### Tests
+
+- **`TestIsTransientRoutingError`** (10 subtests) — covers exact live CMP message, case-insensitivity, wrong status codes, partial-phrase matches, no-prefix match, nil, and non-API errors
+- **`TestInstanceGetRetrySucceeds`** — httptest server that returns two 403 routing errors then a 200; verifies call count and retry message in stderr
+- **`TestInstanceGetRetryExhausted`** — always-403 server; verifies all 5 attempts are exhausted and the error is surfaced
+- **`TestInstanceGetNonRoutingErrorNoRetry`** — non-routing 403; verifies a single attempt with no retry
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.10...0.0.11
+
+---
+
 ## [0.0.10] - 2026-06-07
 
 ### Added

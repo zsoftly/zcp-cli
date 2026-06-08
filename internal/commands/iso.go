@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/iso"
 )
 
@@ -238,7 +239,7 @@ func newISODeleteCmd() *cobra.Command {
 			return runISODelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -264,6 +265,10 @@ func runISODelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "ISO %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("iso delete: %w", err)
 	}
 

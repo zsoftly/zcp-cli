@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/egress"
 )
 
@@ -196,6 +197,10 @@ func runEgressDelete(cmd *cobra.Command, networkSlug string, ruleID string, yes 
 	defer cancel()
 
 	if err := svc.Delete(ctx, networkSlug, ruleID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Egress rule %q not found — already deleted.\n", ruleID)
+			return nil
+		}
 		return fmt.Errorf("egress delete: %w", err)
 	}
 

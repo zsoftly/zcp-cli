@@ -91,11 +91,11 @@ _read_with_ip() {
   if [[ -z "$ip" || "$ip" == "null" ]]; then _mark_skip "$svc list (no IP available)"; return; fi
   run_case "$svc list --ip $ip" -- zcp "$svc" list --ip "$ip"
 }
-# egress list needs a network arg.
+# egress list needs an ISOLATED network arg (egress rules are invalid on VPC/L2 nets).
 _read_with_network() {
   local svc="$1" net
-  net="$(api_get "/networks?region=$(det_region)" | jq -r '.data[0].slug' 2>/dev/null)"
-  if [[ -z "$net" || "$net" == "null" ]]; then _mark_skip "$svc list (no network available)"; return; fi
+  net="$(api_get "/networks?region=$(det_region)" | jq -r '.data[] | select((.type//.network_type)=="Isolated") | .slug' 2>/dev/null | head -1)"
+  if [[ -z "$net" || "$net" == "null" ]]; then _mark_skip "$svc list (no Isolated network available)"; return; fi
   run_case "egress list --network $net" -- zcp egress list --network "$net"
 }
 # acl list is VPC-scoped — needs a VPC slug, not a network.
@@ -115,7 +115,7 @@ _read_objectstorage() {
     _mark_skip "object-storage object list (no store available)"
     return
   fi
-  run_case "object-storage bucket list $store" -- zcp object-storage bucket list "$store"
+  run_case "object-storage bucket list $store" -- zcp object-storage bucket list "$store" --timeout 60
   run_case "object-storage credentials $store"  -- zcp object-storage credentials "$store"
   bucket="$(zcp object-storage bucket list "$store" -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' 2>/dev/null | head -1)"
   if [[ -z "$bucket" || "$bucket" == "null" ]]; then

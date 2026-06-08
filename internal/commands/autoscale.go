@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/autoscale"
 )
 
@@ -386,6 +387,10 @@ func newAutoscaleDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Autoscale group %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("autoscale delete: %w", err)
 			}
 			printer.Fprintf("Autoscale group %q deleted.\n", slug)
@@ -645,6 +650,10 @@ func runPolicyDelete(cmd *cobra.Command, slug string, policyID int, yes bool) er
 	defer cancel()
 
 	if err := svc.DeletePolicy(ctx, slug, policyID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Autoscale policy %q not found — already deleted.\n", policyID)
+			return nil
+		}
 		return fmt.Errorf("autoscale policy delete: %w", err)
 	}
 
@@ -901,6 +910,10 @@ func runConditionDelete(cmd *cobra.Command, slug string, conditionID int, yes bo
 	defer cancel()
 
 	if err := svc.DeleteCondition(ctx, slug, conditionID); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Autoscale condition %q not found — already deleted.\n", conditionID)
+			return nil
+		}
 		return fmt.Errorf("autoscale condition delete: %w", err)
 	}
 

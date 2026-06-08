@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/vpn"
 	"golang.org/x/term"
 )
@@ -315,6 +316,10 @@ func runVPNCGDelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "VPN customer gateway %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("vpn customer-gateway delete: %w", err)
 	}
 
@@ -497,6 +502,10 @@ func runVPNUserDelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "VPN user %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("vpn user delete: %w", err)
 	}
 

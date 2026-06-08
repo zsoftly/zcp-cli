@@ -143,3 +143,71 @@ func TestAPIErrorString(t *testing.T) {
 		t.Error("Error() returned empty string")
 	}
 }
+
+func TestIsTransientRoutingError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "exact CMP routing message",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "The route virtual-machines/my-vm could not be found."},
+			want: true,
+		},
+		{
+			name: "case-insensitive match",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "THE ROUTE api/v1 COULD NOT BE FOUND."},
+			want: true,
+		},
+		{
+			name: "404 with routing-style message",
+			err:  &apierrors.APIError{StatusCode: 404, Message: "The route virtual-machines/x could not be found."},
+			want: false,
+		},
+		{
+			name: "403 not-found (IsResourceNotFound territory)",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "kubernetes-cluster::k8s.not-found"},
+			want: false,
+		},
+		{
+			name: "403 generic forbidden",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "Access denied."},
+			want: false,
+		},
+		{
+			name: "403 contains only 'route'",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "route misconfigured"},
+			want: false,
+		},
+		{
+			name: "403 contains only 'could not be found'",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "resource could not be found"},
+			want: false,
+		},
+		{
+			name: "403 broad 'route…could not be found' without 'the' prefix",
+			err:  &apierrors.APIError{StatusCode: 403, Message: "route /v1/foo could not be found"},
+			want: false,
+		},
+		{
+			name: "non-APIError",
+			err:  errors.New("plain error"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := apierrors.IsTransientRoutingError(tt.err)
+			if got != tt.want {
+				t.Errorf("IsTransientRoutingError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}

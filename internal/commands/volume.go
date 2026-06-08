@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/volume"
 )
 
@@ -88,12 +89,14 @@ func newVolumeListCmd() *cobra.Command {
 func newVolumeCreateCmd() *cobra.Command {
 	var name, project, cloudProvider, region, billingCycle, storageCategory, plan string
 	var vmSlug, coupon string
-	var isCustomPlan, isFreeTrial bool
+	var size int
+	var isFreeTrial bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
 		Example: `  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
+  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
   zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -117,8 +120,15 @@ func newVolumeCreateCmd() *cobra.Command {
 			if storageCategory == "" {
 				return fmt.Errorf("--storage-category is required")
 			}
-			if plan == "" {
-				return fmt.Errorf("--plan is required")
+			sizeChanged := cmd.Flags().Changed("size")
+			if plan != "" && sizeChanged {
+				return fmt.Errorf("--plan and --size are mutually exclusive")
+			}
+			if plan == "" && !sizeChanged {
+				return fmt.Errorf("--plan or --size is required")
+			}
+			if sizeChanged && size <= 0 {
+				return fmt.Errorf("--size must be > 0")
 			}
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -136,10 +146,13 @@ func newVolumeCreateCmd() *cobra.Command {
 				BillingCycle:    billingCycle,
 				StorageCategory: storageCategory,
 				Plan:            plan,
-				IsCustomPlan:    isCustomPlan,
+				IsCustomPlan:    size > 0,
 				VirtualMachine:  vmSlug,
 				Coupon:          coupon,
 				IsFreeTrial:     isFreeTrial,
+			}
+			if size > 0 {
+				req.CustomPlan = &volume.CustomPlanStorage{Storage: size}
 			}
 			vol, err := svc.Create(ctx, req)
 			if err != nil {
@@ -163,8 +176,8 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. nvme (required)")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. 50-gb-2 (required)")
-	cmd.Flags().BoolVar(&isCustomPlan, "custom-plan", false, "Use a custom plan")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. 50-gb-2 (mutually exclusive with --size)")
+	cmd.Flags().IntVar(&size, "size", 0, "Storage size in GB for custom-tier plans (mutually exclusive with --plan)")
 	cmd.Flags().StringVar(&vmSlug, "vm", "", "Virtual machine slug to attach on creation")
 	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code")
 	cmd.Flags().BoolVar(&isFreeTrial, "free-trial", false, "Use a free trial plan")
@@ -229,6 +242,10 @@ func newVolumeDetachCmd() *cobra.Command {
 
 			vol, err := svc.Detach(ctx, volumeSlug)
 			if err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Volume %q not found — already detached or deleted.\n", volumeSlug)
+					return nil
+				}
 				return fmt.Errorf("volume detach: %w", err)
 			}
 
@@ -273,6 +290,10 @@ func newVolumeDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Volume %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("volume delete: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Volume %q deleted.\n", slug)

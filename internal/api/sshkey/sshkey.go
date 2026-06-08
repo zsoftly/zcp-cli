@@ -30,6 +30,8 @@ type Owner struct {
 type CreateRequest struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
+	Project   string `json:"project,omitempty"`
+	Region    string `json:"region,omitempty"`
 }
 
 // Service provides SSH key API operations.

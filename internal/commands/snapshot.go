@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/snapshot"
 )
 
@@ -222,6 +223,10 @@ func newSnapshotDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "Snapshot %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("snapshot delete: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Snapshot %q deleted.\n", slug)

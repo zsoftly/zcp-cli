@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/ipaddress"
 )
 
@@ -169,6 +170,10 @@ func newIPReleaseCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Release(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "IP address %q not found — already released.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("ip release: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "IP %q released.\n", slug)

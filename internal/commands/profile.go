@@ -186,7 +186,7 @@ func newProfileDeleteCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVarP(&force, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&force, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 

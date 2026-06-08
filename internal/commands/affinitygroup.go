@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/api/affinitygroup"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 )
 
 // NewAffinityGroupCmd returns the 'affinity-group' cobra command.
@@ -159,7 +160,7 @@ func newAffinityGroupDeleteCmd() *cobra.Command {
 			return runAffinityGroupDelete(cmd, args[0], yes)
 		},
 	}
-	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
 }
 
@@ -185,6 +186,10 @@ func runAffinityGroupDelete(cmd *cobra.Command, slug string, yes bool) error {
 	defer cancel()
 
 	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Affinity group %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return fmt.Errorf("affinity-group delete: %w", err)
 	}
 

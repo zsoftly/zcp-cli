@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
 	"github.com/zsoftly/zcp-cli/internal/api/vmbackup"
 )
 
@@ -181,6 +182,10 @@ func newVMBackupDeleteCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 			if err := svc.Delete(ctx, slug); err != nil {
+				if apierrors.IsResourceNotFound(err) {
+					fmt.Fprintf(os.Stderr, "VM backup %q not found — already deleted.\n", slug)
+					return nil
+				}
 				return fmt.Errorf("vm-backup delete: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "VM backup %q deleted.\n", slug)
