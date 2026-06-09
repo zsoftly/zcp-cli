@@ -411,7 +411,7 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			switch current.State {
 			case "Running", "Scaling":
 			default:
-				return fmt.Errorf("cluster %q is in state %q — scale requires Running state", slug, current.State)
+				return fmt.Errorf("cluster %q is in state %q — scale requires Running or Scaling state", slug, current.State)
 			}
 
 			currentWorkers := current.NodeSize
