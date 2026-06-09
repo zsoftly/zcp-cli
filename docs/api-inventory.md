@@ -60,13 +60,18 @@
 
 ### Kubernetes
 
-| #   | Path                                      | Method | Summary                   | CLI Group    |
-| --- | ----------------------------------------- | ------ | ------------------------- | ------------ |
-| 31  | `/kubernetes-clusters`                    | GET    | List Kubernetes clusters  | `kubernetes` |
-| 32  | `/kubernetes-clusters`                    | POST   | Create Kubernetes cluster | `kubernetes` |
-| 33  | `/kubernetes-clusters/{SLUG}/start`       | PUT    | Start Kubernetes cluster  | `kubernetes` |
-| 34  | `/kubernetes-clusters/{SLUG}/stop`        | PUT    | Stop Kubernetes cluster   | `kubernetes` |
-| 35  | `/kubernetes-clusters/{SLUG}/change-plan` | PUT    | Change cluster plan       | `kubernetes` |
+| #   | Path                                      | Method | Summary                            | CLI Group    |
+| --- | ----------------------------------------- | ------ | ---------------------------------- | ------------ |
+| 31  | `/kubernetes-clusters`                    | GET    | List Kubernetes clusters           | `kubernetes` |
+| 32  | `/kubernetes-clusters`                    | POST   | Create Kubernetes cluster          | `kubernetes` |
+| 33  | `/kubernetes-clusters/versions`           | GET    | List available Kubernetes versions | `kubernetes` |
+| 34  | `/kubernetes-clusters/{SLUG}`             | GET    | Get cluster details                | `kubernetes` |
+| 35  | `/kubernetes-clusters/{SLUG}/start`       | PUT    | Start Kubernetes cluster           | `kubernetes` |
+| 36  | `/kubernetes-clusters/{SLUG}/stop`        | PUT    | Stop Kubernetes cluster            | `kubernetes` |
+| 37  | `/kubernetes-clusters/{SLUG}/scale`       | PUT    | Scale worker node count            | `kubernetes` |
+| 38  | `/kubernetes-clusters/{SLUG}/change-plan` | PUT    | Change cluster compute plan        | `kubernetes` |
+| 39  | `/kubernetes-clusters/{SLUG}/version`     | POST   | Upgrade Kubernetes version         | `kubernetes` |
+| 40  | `/kubernetes-clusters/{SLUG}`             | DELETE | Delete Kubernetes cluster          | `kubernetes` |
 
 ### Load Balancers
 

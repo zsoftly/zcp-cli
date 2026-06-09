@@ -21,6 +21,7 @@ type ClusterMeta struct {
 	ControlNodes          string          `json:"control_nodes"`
 	Size                  string          `json:"size"`
 	KubernetesVersionName string          `json:"kubernetes_version_name"`
+	KubernetesVersionID   string          `json:"kubernetes_version_id"`
 	IPAddress             string          `json:"ipaddress"`
 	Endpoint              string          `json:"end_point"`
 	State                 string          `json:"state"`
@@ -125,6 +126,32 @@ type UpgradeRequest struct {
 	CustomPlan   interface{} `json:"custom_plan"`
 }
 
+// UpgradeVersionRequest holds the version slug for a Kubernetes version upgrade.
+type UpgradeVersionRequest struct {
+	Slug string `json:"slug"`
+}
+
+// KubernetesVersion represents an available Kubernetes version from the CMP catalog.
+type KubernetesVersion struct {
+	ID                         string `json:"id"`
+	KubernetesClusterVersionID string `json:"kubernetes_cluster_version_id"`
+	Name                       string `json:"name"`
+	Slug                       string `json:"slug"`
+	Version                    string `json:"version"`
+	RegionID                   string `json:"region_id"`
+}
+
+// versionsListResponse is the STKCNSL response envelope for the versions list.
+type versionsListResponse struct {
+	Status      string              `json:"status"`
+	Message     string              `json:"message"`
+	CurrentPage int                 `json:"current_page"`
+	Data        []KubernetesVersion `json:"data"`
+	LastPage    int                 `json:"last_page"`
+	PerPage     int                 `json:"per_page"`
+	Total       int                 `json:"total"`
+}
+
 // listResponse is the STKCNSL response envelope for paginated lists.
 type listResponse struct {
 	Status      string    `json:"status"`
@@ -202,6 +229,24 @@ func (s *Service) Upgrade(ctx context.Context, slug string, req UpgradeRequest) 
 		return fmt.Errorf("upgrading kubernetes cluster %s: %w", slug, err)
 	}
 	return nil
+}
+
+// UpgradeVersion upgrades the Kubernetes version of a cluster.
+func (s *Service) UpgradeVersion(ctx context.Context, clusterSlug string, req UpgradeVersionRequest) error {
+	var resp messageResponse
+	if err := s.client.Post(ctx, fmt.Sprintf("/kubernetes-clusters/%s/version", clusterSlug), req, &resp); err != nil {
+		return fmt.Errorf("upgrading kubernetes version for cluster %s: %w", clusterSlug, err)
+	}
+	return nil
+}
+
+// ListVersions returns all available Kubernetes versions from the CMP catalog.
+func (s *Service) ListVersions(ctx context.Context) ([]KubernetesVersion, error) {
+	var resp versionsListResponse
+	if err := s.client.Get(ctx, "/kubernetes-clusters/versions", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing kubernetes versions: %w", err)
+	}
+	return resp.Data, nil
 }
 
 // Get returns a single Kubernetes cluster by slug.

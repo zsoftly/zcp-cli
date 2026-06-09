@@ -186,7 +186,10 @@ zcp
 │   ├── create                         Create a Kubernetes cluster
 │   ├── start                          Start a stopped cluster
 │   ├── stop                           Stop a running cluster
-│   ├── upgrade                        Upgrade a Kubernetes cluster version
+│   ├── scale                          Scale worker node count (--workers N, --wait)
+│   ├── upgrade                        Change the compute plan of a cluster (--plan)
+│   ├── upgrade-version                Upgrade the Kubernetes version (--version v1.x.y)
+│   ├── get-config                     Download kubeconfig (--output path, --print)
 │   └── delete                         Permanently delete a cluster (--yes to skip prompt)
 │
 ├── object-storage (alias: os)         Object storage operations
