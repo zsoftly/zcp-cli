@@ -190,8 +190,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.35.0 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
-  zcp kubernetes create --name ha-cluster --version v1.35.0 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
+  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -258,7 +258,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Cluster name (required)")
-	cmd.Flags().StringVar(&version, "version", "", "Kubernetes version, e.g. v1.28.4 (required)")
+	cmd.Flags().StringVar(&version, "version", "", "Kubernetes version, e.g. v1.36.1 (required)")
 	cmd.Flags().IntVar(&nodeSize, "workers", 0, "Number of worker nodes (required, >= 1)")
 	cmd.Flags().IntVar(&controlNodes, "control-nodes", 1, "Number of control plane nodes (default 1)")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
