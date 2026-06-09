@@ -31,6 +31,7 @@ func NewKubernetesCmd() *cobra.Command {
 	cmd.AddCommand(newK8sClusterDeleteCmd())
 	cmd.AddCommand(newK8sGetConfigCmd())
 	cmd.AddCommand(newK8sClusterScaleCmd())
+	cmd.AddCommand(newK8sClusterUpgradeVersionCmd())
 	return cmd
 }
 
@@ -407,6 +408,12 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("kubernetes scale: %w", err)
 			}
+			switch current.State {
+			case "Running", "Scaling":
+			default:
+				return fmt.Errorf("cluster %q is in state %q — scale requires Running or Scaling state", slug, current.State)
+			}
+
 			currentWorkers := current.NodeSize
 			if current.Meta != nil && current.Meta.Size != "" {
 				if n, aerr := strconv.Atoi(current.Meta.Size); aerr == nil {
@@ -582,6 +589,80 @@ func newK8sClusterDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
+}
+
+func newK8sClusterUpgradeVersionCmd() *cobra.Command {
+	var version string
+
+	cmd := &cobra.Command{
+		Use:   "upgrade-version <cluster-slug>",
+		Short: "Upgrade the Kubernetes version of a cluster",
+		Args:  cobra.ExactArgs(1),
+		Example: `  zcp kubernetes upgrade-version my-cluster --version v1.35.1
+  zcp kubernetes upgrade-version my-cluster --version v1.36.1`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if version == "" {
+				return fmt.Errorf("--version is required")
+			}
+			return runK8sClusterUpgradeVersion(cmd, args[0], version)
+		},
+	}
+	cmd.Flags().StringVar(&version, "version", "", "Target Kubernetes version, e.g. v1.35.1 (required)")
+	return cmd
+}
+
+func runK8sClusterUpgradeVersion(cmd *cobra.Command, clusterSlug, targetVersion string) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := kubernetes.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	cluster, err := svc.Get(ctx, clusterSlug)
+	if err != nil {
+		return fmt.Errorf("kubernetes upgrade-version: %w", err)
+	}
+	if cluster.Meta == nil {
+		return fmt.Errorf("kubernetes upgrade-version: cluster metadata unavailable")
+	}
+
+	versions, err := svc.ListVersions(ctx)
+	if err != nil {
+		return fmt.Errorf("kubernetes upgrade-version: %w", err)
+	}
+
+	var regionID string
+	for _, v := range versions {
+		if v.KubernetesClusterVersionID == cluster.Meta.KubernetesVersionID {
+			regionID = v.RegionID
+			break
+		}
+	}
+	if regionID == "" {
+		return fmt.Errorf("kubernetes upgrade-version: could not determine region for cluster %q", clusterSlug)
+	}
+
+	var versionSlug string
+	for _, v := range versions {
+		if v.Version == targetVersion && v.RegionID == regionID {
+			versionSlug = v.Slug
+			break
+		}
+	}
+	if versionSlug == "" {
+		return fmt.Errorf("kubernetes version %q not available in this cluster's region", targetVersion)
+	}
+
+	req := kubernetes.UpgradeVersionRequest{Slug: versionSlug}
+	if err := svc.UpgradeVersion(ctx, clusterSlug, req); err != nil {
+		return fmt.Errorf("kubernetes upgrade-version: %w", err)
+	}
+
+	fmt.Fprintf(os.Stdout, "Kubernetes cluster %q version upgrade to %q requested.\n", clusterSlug, targetVersion)
+	return nil
 }
 
 func runK8sClusterUpgrade(cmd *cobra.Command, slug, plan, billingCycle string) error {

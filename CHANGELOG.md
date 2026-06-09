@@ -5,6 +5,27 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.12] - 2026-06-09
+
+### Added
+
+- **`zcp kubernetes upgrade-version`** — upgrade the Kubernetes version of a running cluster; accepts `--version v1.x.y` (e.g. `v1.35.1`, `v1.36.1`); resolves the correct version slug for the cluster's region automatically from the CMP catalog; returns a clear error if the requested version is unavailable in that region
+
+### Fixed
+
+- **`zcp kubernetes scale` — misleading state-guard error** — error message said "scale requires Running state" even though the guard accepts both Running and Scaling; corrected to "requires Running or Scaling state"
+
+### Internal
+
+- `ClusterMeta` gains `KubernetesVersionID` field; used by `upgrade-version` to match the cluster's current version against the catalog and derive its region
+- `kubernetes.Service` gains `ListVersions` and `UpgradeVersion` methods
+- `docs/api-inventory.md` — duplicate endpoint number 112 in the Projects table corrected to 117; cascading +5 renumber across ISOs (118–121), Affinity Groups (122–124), Templates (125–129), Monitoring (130–136), Object Storage (137–148), Billing (149–165), Profile (166–172), SSH Keys (173–175), Support (176–184), Plans (185–194), Discovery (195–201), Store (202–205), Auth (206–211); total updated 206 → 211
+- `docs/command-taxonomy.md` — kubernetes section corrected: `scale`, `upgrade-version`, `get-config` added; `upgrade` relabelled as compute-plan change (not version upgrade)
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.11...0.0.12
+
+---
+
 ## [0.0.11] - 2026-06-08
 
 ### Added
