@@ -453,27 +453,29 @@ zcp project icon list
 zcp kubernetes list
 zcp kubernetes create \
   --name my-cluster \
-  --version v1.28.4 \
-  --plan k8s-plan-1 \
+  --version v1.36.1 \
+  --plan k8s-li-yow-1 \
   --region yow-1 \
-  --project my-project \
-  --cloud-provider zcp \
-  --billing-cycle monthly \
+  --project default \
+  --cloud-provider nimbo \
+  --billing-cycle hourly \
   --workers 3 \
+  --storage-category pro-nvme \
   --ssh-key mykey
 
 # HA cluster with multiple control nodes
 zcp kubernetes create \
   --name ha-cluster \
-  --version v1.28.4 \
-  --plan k8s-plan-1 \
+  --version v1.36.1 \
+  --plan k8s-li-yow-1 \
   --region yow-1 \
-  --project my-project \
-  --cloud-provider zcp \
-  --billing-cycle monthly \
+  --project default \
+  --cloud-provider nimbo \
+  --billing-cycle hourly \
   --workers 3 \
   --control-nodes 3 \
   --ha \
+  --storage-category pro-nvme \
   --ssh-key mykey
 
 # Start / stop / upgrade
