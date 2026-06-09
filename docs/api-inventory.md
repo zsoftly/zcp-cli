@@ -77,122 +77,122 @@
 
 | #   | Path                            | Method | Summary                    | CLI Group |
 | --- | ------------------------------- | ------ | -------------------------- | --------- |
-| 36  | `/load-balancers`               | GET    | List load balancers        | `lb`      |
-| 37  | `/load-balancers`               | POST   | Create load balancer       | `lb`      |
-| 38  | `/load-balancers/{SLUG}/rules`  | POST   | Add load balancer rule     | `lb`      |
-| 39  | `/load-balancers/{SLUG}/attach` | POST   | Attach VM to load balancer | `lb`      |
+| 41  | `/load-balancers`               | GET    | List load balancers        | `lb`      |
+| 42  | `/load-balancers`               | POST   | Create load balancer       | `lb`      |
+| 43  | `/load-balancers/{SLUG}/rules`  | POST   | Add load balancer rule     | `lb`      |
+| 44  | `/load-balancers/{SLUG}/attach` | POST   | Attach VM to load balancer | `lb`      |
 
 ### Autoscale
 
 | #   | Path                                | Method | Summary                    | CLI Group   |
 | --- | ----------------------------------- | ------ | -------------------------- | ----------- |
-| 40  | `/autoscale`                        | GET    | List autoscale groups      | `autoscale` |
-| 41  | `/autoscale`                        | POST   | Create autoscale group     | `autoscale` |
-| 42  | `/autoscale/{SLUG}/change-plan`     | POST   | Change autoscale plan      | `autoscale` |
-| 43  | `/autoscale/{SLUG}/change-template` | POST   | Change autoscale template  | `autoscale` |
-| 44  | `/autoscale/{SLUG}/enable`          | PUT    | Enable autoscale group     | `autoscale` |
-| 45  | `/autoscale/{SLUG}/disable`         | PUT    | Disable autoscale group    | `autoscale` |
-| 46  | `/autoscale/{SLUG}/policies`        | GET    | List autoscale policies    | `autoscale` |
-| 47  | `/autoscale/{SLUG}/policies`        | POST   | Create autoscale policy    | `autoscale` |
-| 48  | `/autoscale/{SLUG}/policies/{ID}`   | PUT    | Update autoscale policy    | `autoscale` |
-| 49  | `/autoscale/{SLUG}/policies/{ID}`   | DELETE | Delete autoscale policy    | `autoscale` |
-| 50  | `/autoscale/{SLUG}/conditions`      | GET    | List autoscale conditions  | `autoscale` |
-| 51  | `/autoscale/{SLUG}/conditions`      | POST   | Create autoscale condition | `autoscale` |
-| 52  | `/autoscale/{SLUG}/conditions/{ID}` | PUT    | Update autoscale condition | `autoscale` |
-| 53  | `/autoscale/{SLUG}/conditions/{ID}` | DELETE | Delete autoscale condition | `autoscale` |
+| 45  | `/autoscale`                        | GET    | List autoscale groups      | `autoscale` |
+| 46  | `/autoscale`                        | POST   | Create autoscale group     | `autoscale` |
+| 47  | `/autoscale/{SLUG}/change-plan`     | POST   | Change autoscale plan      | `autoscale` |
+| 48  | `/autoscale/{SLUG}/change-template` | POST   | Change autoscale template  | `autoscale` |
+| 49  | `/autoscale/{SLUG}/enable`          | PUT    | Enable autoscale group     | `autoscale` |
+| 50  | `/autoscale/{SLUG}/disable`         | PUT    | Disable autoscale group    | `autoscale` |
+| 51  | `/autoscale/{SLUG}/policies`        | GET    | List autoscale policies    | `autoscale` |
+| 52  | `/autoscale/{SLUG}/policies`        | POST   | Create autoscale policy    | `autoscale` |
+| 53  | `/autoscale/{SLUG}/policies/{ID}`   | PUT    | Update autoscale policy    | `autoscale` |
+| 54  | `/autoscale/{SLUG}/policies/{ID}`   | DELETE | Delete autoscale policy    | `autoscale` |
+| 55  | `/autoscale/{SLUG}/conditions`      | GET    | List autoscale conditions  | `autoscale` |
+| 56  | `/autoscale/{SLUG}/conditions`      | POST   | Create autoscale condition | `autoscale` |
+| 57  | `/autoscale/{SLUG}/conditions/{ID}` | PUT    | Update autoscale condition | `autoscale` |
+| 58  | `/autoscale/{SLUG}/conditions/{ID}` | DELETE | Delete autoscale condition | `autoscale` |
 
 ### Networks
 
 | #   | Path                                          | Method | Summary                     | CLI Group |
 | --- | --------------------------------------------- | ------ | --------------------------- | --------- |
-| 54  | `/networks`                                   | GET    | List networks               | `network` |
-| 55  | `/networks`                                   | POST   | Create network              | `network` |
-| 56  | `/networks/{SLUG}`                            | PUT    | Update network              | `network` |
-| 57  | `/networks/categories`                        | GET    | List network categories     | `network` |
-| 58  | `/networks/{SLUG}/egress-firewall-rules`      | GET    | List egress firewall rules  | `network` |
-| 59  | `/networks/{SLUG}/egress-firewall-rules`      | POST   | Create egress firewall rule | `network` |
-| 60  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | PUT    | Update egress firewall rule | `network` |
-| 61  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | DELETE | Delete egress firewall rule | `network` |
+| 59  | `/networks`                                   | GET    | List networks               | `network` |
+| 60  | `/networks`                                   | POST   | Create network              | `network` |
+| 61  | `/networks/{SLUG}`                            | PUT    | Update network              | `network` |
+| 62  | `/networks/categories`                        | GET    | List network categories     | `network` |
+| 63  | `/networks/{SLUG}/egress-firewall-rules`      | GET    | List egress firewall rules  | `network` |
+| 64  | `/networks/{SLUG}/egress-firewall-rules`      | POST   | Create egress firewall rule | `network` |
+| 65  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | PUT    | Update egress firewall rule | `network` |
+| 66  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | DELETE | Delete egress firewall rule | `network` |
 
 ### Virtual Routers
 
 | #   | Path                             | Method | Summary               | CLI Group |
 | --- | -------------------------------- | ------ | --------------------- | --------- |
-| 62  | `/virtual-routers`               | GET    | List virtual routers  | `router`  |
-| 63  | `/virtual-routers`               | POST   | Create virtual router | `router`  |
-| 64  | `/virtual-routers/{SLUG}/reboot` | GET    | Reboot virtual router | `router`  |
+| 67  | `/virtual-routers`               | GET    | List virtual routers  | `router`  |
+| 68  | `/virtual-routers`               | POST   | Create virtual router | `router`  |
+| 69  | `/virtual-routers/{SLUG}/reboot` | GET    | Reboot virtual router | `router`  |
 
 ### VPC
 
 | #   | Path                                 | Method | Summary            | CLI Group |
 | --- | ------------------------------------ | ------ | ------------------ | --------- |
-| 65  | `/vpcs`                              | GET    | List VPCs          | `vpc`     |
-| 66  | `/vpcs`                              | POST   | Create VPC         | `vpc`     |
-| 67  | `/vpcs/{SLUG}`                       | PUT    | Update VPC         | `vpc`     |
-| 68  | `/vpcs/{SLUG}/restart`               | GET    | Restart VPC        | `vpc`     |
-| 69  | `/vpcs/{SLUG}/network-acl-list`      | GET    | List network ACLs  | `vpc`     |
-| 70  | `/vpcs/{SLUG}/network-acl-list`      | POST   | Create network ACL | `vpc`     |
-| 71  | `/vpcs/{SLUG}/network-acl-list/{ID}` | PUT    | Update network ACL | `vpc`     |
-| 72  | `/vpcs/{SLUG}/network-acl-list/{ID}` | DELETE | Delete network ACL | `vpc`     |
-| 73  | `/vpcs/{SLUG}/vpn-gateways`          | GET    | List VPN gateways  | `vpc`     |
-| 74  | `/vpcs/{SLUG}/vpn-gateways`          | POST   | Create VPN gateway | `vpc`     |
-| 75  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | PUT    | Update VPN gateway | `vpc`     |
-| 76  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | DELETE | Delete VPN gateway | `vpc`     |
+| 70  | `/vpcs`                              | GET    | List VPCs          | `vpc`     |
+| 71  | `/vpcs`                              | POST   | Create VPC         | `vpc`     |
+| 72  | `/vpcs/{SLUG}`                       | PUT    | Update VPC         | `vpc`     |
+| 73  | `/vpcs/{SLUG}/restart`               | GET    | Restart VPC        | `vpc`     |
+| 74  | `/vpcs/{SLUG}/network-acl-list`      | GET    | List network ACLs  | `vpc`     |
+| 75  | `/vpcs/{SLUG}/network-acl-list`      | POST   | Create network ACL | `vpc`     |
+| 76  | `/vpcs/{SLUG}/network-acl-list/{ID}` | PUT    | Update network ACL | `vpc`     |
+| 77  | `/vpcs/{SLUG}/network-acl-list/{ID}` | DELETE | Delete network ACL | `vpc`     |
+| 78  | `/vpcs/{SLUG}/vpn-gateways`          | GET    | List VPN gateways  | `vpc`     |
+| 79  | `/vpcs/{SLUG}/vpn-gateways`          | POST   | Create VPN gateway | `vpc`     |
+| 80  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | PUT    | Update VPN gateway | `vpc`     |
+| 81  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | DELETE | Delete VPN gateway | `vpc`     |
 
 ### IP Addresses
 
 | #   | Path                                             | Method | Summary                     | CLI Group |
 | --- | ------------------------------------------------ | ------ | --------------------------- | --------- |
-| 77  | `/ipaddresses`                                   | GET    | List IP addresses           | `ip`      |
-| 78  | `/ipaddresses`                                   | POST   | Acquire IP address          | `ip`      |
-| 79  | `/ipaddresses/{SLUG}/static-nat`                 | POST   | Enable/disable static NAT   | `ip`      |
-| 80  | `/ipaddresses/{SLUG}/firewall-rules`             | GET    | List firewall rules         | `ip`      |
-| 81  | `/ipaddresses/{SLUG}/firewall-rules`             | POST   | Create firewall rule        | `ip`      |
-| 82  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | PUT    | Update firewall rule        | `ip`      |
-| 83  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | DELETE | Delete firewall rule        | `ip`      |
-| 84  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | GET    | List port forwarding rules  | `ip`      |
-| 85  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | POST   | Create port forwarding rule | `ip`      |
-| 86  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | PUT    | Update port forwarding rule | `ip`      |
-| 87  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | DELETE | Delete port forwarding rule | `ip`      |
-| 88  | `/ipaddresses/{SLUG}/remote-access-vpns`         | GET    | List remote access VPNs     | `ip`      |
-| 89  | `/ipaddresses/{SLUG}/remote-access-vpns`         | POST   | Create remote access VPN    | `ip`      |
-| 90  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | PUT    | Update remote access VPN    | `ip`      |
-| 91  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | DELETE | Delete remote access VPN    | `ip`      |
+| 82  | `/ipaddresses`                                   | GET    | List IP addresses           | `ip`      |
+| 83  | `/ipaddresses`                                   | POST   | Acquire IP address          | `ip`      |
+| 84  | `/ipaddresses/{SLUG}/static-nat`                 | POST   | Enable/disable static NAT   | `ip`      |
+| 85  | `/ipaddresses/{SLUG}/firewall-rules`             | GET    | List firewall rules         | `ip`      |
+| 86  | `/ipaddresses/{SLUG}/firewall-rules`             | POST   | Create firewall rule        | `ip`      |
+| 87  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | PUT    | Update firewall rule        | `ip`      |
+| 88  | `/ipaddresses/{SLUG}/firewall-rules/{ID}`        | DELETE | Delete firewall rule        | `ip`      |
+| 89  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | GET    | List port forwarding rules  | `ip`      |
+| 90  | `/ipaddresses/{SLUG}/port-forwarding-rules`      | POST   | Create port forwarding rule | `ip`      |
+| 91  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | PUT    | Update port forwarding rule | `ip`      |
+| 92  | `/ipaddresses/{SLUG}/port-forwarding-rules/{ID}` | DELETE | Delete port forwarding rule | `ip`      |
+| 93  | `/ipaddresses/{SLUG}/remote-access-vpns`         | GET    | List remote access VPNs     | `ip`      |
+| 94  | `/ipaddresses/{SLUG}/remote-access-vpns`         | POST   | Create remote access VPN    | `ip`      |
+| 95  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | PUT    | Update remote access VPN    | `ip`      |
+| 96  | `/ipaddresses/{SLUG}/remote-access-vpns/{ID}`    | DELETE | Delete remote access VPN    | `ip`      |
 
 ### VPN
 
 | #   | Path                            | Method | Summary                     | CLI Group |
 | --- | ------------------------------- | ------ | --------------------------- | --------- |
-| 92  | `/vpn-users`                    | GET    | List VPN users              | `vpn`     |
-| 93  | `/vpn-users`                    | POST   | Create VPN user             | `vpn`     |
-| 94  | `/vpn-users/{SLUG}`             | PUT    | Update VPN user             | `vpn`     |
-| 95  | `/vpn-users/{SLUG}`             | DELETE | Delete VPN user             | `vpn`     |
-| 96  | `/vpn-customer-gateways`        | GET    | List VPN customer gateways  | `vpn`     |
-| 97  | `/vpn-customer-gateways`        | POST   | Create VPN customer gateway | `vpn`     |
-| 98  | `/vpn-customer-gateways/{SLUG}` | PUT    | Update VPN customer gateway | `vpn`     |
-| 99  | `/vpn-customer-gateways/{SLUG}` | DELETE | Delete VPN customer gateway | `vpn`     |
+| 97  | `/vpn-users`                    | GET    | List VPN users              | `vpn`     |
+| 98  | `/vpn-users`                    | POST   | Create VPN user             | `vpn`     |
+| 99  | `/vpn-users/{SLUG}`             | PUT    | Update VPN user             | `vpn`     |
+| 100 | `/vpn-users/{SLUG}`             | DELETE | Delete VPN user             | `vpn`     |
+| 101 | `/vpn-customer-gateways`        | GET    | List VPN customer gateways  | `vpn`     |
+| 102 | `/vpn-customer-gateways`        | POST   | Create VPN customer gateway | `vpn`     |
+| 103 | `/vpn-customer-gateways/{SLUG}` | PUT    | Update VPN customer gateway | `vpn`     |
+| 104 | `/vpn-customer-gateways/{SLUG}` | DELETE | Delete VPN customer gateway | `vpn`     |
 
 ### DNS
 
 | #   | Path                               | Method | Summary           | CLI Group |
 | --- | ---------------------------------- | ------ | ----------------- | --------- |
-| 100 | `/dns/domains`                     | GET    | List DNS domains  | `dns`     |
-| 101 | `/dns/domains`                     | POST   | Create DNS domain | `dns`     |
-| 102 | `/dns/domains/{SLUG}`              | PUT    | Update DNS domain | `dns`     |
-| 103 | `/dns/domains/{SLUG}`              | DELETE | Delete DNS domain | `dns`     |
-| 104 | `/dns/domains/{SLUG}/records`      | POST   | Create DNS record | `dns`     |
-| 105 | `/dns/domains/{SLUG}/records/{ID}` | DELETE | Delete DNS record | `dns`     |
+| 105 | `/dns/domains`                     | GET    | List DNS domains  | `dns`     |
+| 106 | `/dns/domains`                     | POST   | Create DNS domain | `dns`     |
+| 107 | `/dns/domains/{SLUG}`              | PUT    | Update DNS domain | `dns`     |
+| 108 | `/dns/domains/{SLUG}`              | DELETE | Delete DNS domain | `dns`     |
+| 109 | `/dns/domains/{SLUG}/records`      | POST   | Create DNS record | `dns`     |
+| 110 | `/dns/domains/{SLUG}/records/{ID}` | DELETE | Delete DNS record | `dns`     |
 
 ### Projects
 
 | #   | Path                         | Method | Summary               | CLI Group |
 | --- | ---------------------------- | ------ | --------------------- | --------- |
-| 106 | `/projects`                  | GET    | List projects         | `project` |
-| 107 | `/projects`                  | POST   | Create project        | `project` |
-| 108 | `/projects/{SLUG}`           | PUT    | Update project        | `project` |
-| 109 | `/projects/{SLUG}/dashboard` | GET    | Get project dashboard | `project` |
-| 110 | `/projects/{SLUG}/icons`     | GET    | Get project icons     | `project` |
-| 111 | `/projects/{SLUG}/users`     | GET    | List project users    | `project` |
+| 111 | `/projects`                  | GET    | List projects         | `project` |
+| 112 | `/projects`                  | POST   | Create project        | `project` |
+| 113 | `/projects/{SLUG}`           | PUT    | Update project        | `project` |
+| 114 | `/projects/{SLUG}/dashboard` | GET    | Get project dashboard | `project` |
+| 115 | `/projects/{SLUG}/icons`     | GET    | Get project icons     | `project` |
+| 116 | `/projects/{SLUG}/users`     | GET    | List project users    | `project` |
 | 112 | `/projects/{SLUG}/users`     | POST   | Add user to project   | `project` |
 
 ### ISOs
