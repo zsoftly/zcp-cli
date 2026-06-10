@@ -15,9 +15,9 @@ All service packages and the HTTP client are now importable by external Go modul
 (e.g. the ZCP Terraform provider). If you import any of these paths in your own code,
 update them as follows:
 
-| Old path | New path |
-|---|---|
-| `github.com/zsoftly/zcp-cli/internal/httpclient` | `github.com/zsoftly/zcp-cli/pkg/httpclient` |
+| Old path                                            | New path                                       |
+| --------------------------------------------------- | ---------------------------------------------- |
+| `github.com/zsoftly/zcp-cli/internal/httpclient`    | `github.com/zsoftly/zcp-cli/pkg/httpclient`    |
 | `github.com/zsoftly/zcp-cli/internal/api/<service>` | `github.com/zsoftly/zcp-cli/pkg/api/<service>` |
 
 CLI end users are **not affected** — the binary behaviour is unchanged.
