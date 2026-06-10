@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/region"
+	"github.com/zsoftly/zcp-cli/pkg/api/region"
 )
 
 // NewRegionCmd returns the 'region' cobra command.

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/dashboard"
+	"github.com/zsoftly/zcp-cli/pkg/api/dashboard"
 )
 
 // NewDashboardCmd returns the 'dashboard' cobra command.

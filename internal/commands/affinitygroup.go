@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/affinitygroup"
-	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/affinitygroup"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 )
 
 // NewAffinityGroupCmd returns the 'affinity-group' cobra command.

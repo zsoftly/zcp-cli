@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/product"
+	"github.com/zsoftly/zcp-cli/pkg/api/product"
 )
 
 // NewProductCmd returns the 'product' cobra command.

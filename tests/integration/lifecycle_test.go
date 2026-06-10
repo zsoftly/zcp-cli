@@ -35,17 +35,17 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/zsoftly/zcp-cli/internal/api/instance"
-	"github.com/zsoftly/zcp-cli/internal/api/network"
-	"github.com/zsoftly/zcp-cli/internal/api/plan"
-	"github.com/zsoftly/zcp-cli/internal/api/project"
-	"github.com/zsoftly/zcp-cli/internal/api/region"
-	"github.com/zsoftly/zcp-cli/internal/api/snapshot"
-	"github.com/zsoftly/zcp-cli/internal/api/sshkey"
-	"github.com/zsoftly/zcp-cli/internal/api/template"
-	"github.com/zsoftly/zcp-cli/internal/api/volume"
 	"github.com/zsoftly/zcp-cli/internal/config"
-	"github.com/zsoftly/zcp-cli/internal/httpclient"
+	"github.com/zsoftly/zcp-cli/pkg/api/instance"
+	"github.com/zsoftly/zcp-cli/pkg/api/network"
+	"github.com/zsoftly/zcp-cli/pkg/api/plan"
+	"github.com/zsoftly/zcp-cli/pkg/api/project"
+	"github.com/zsoftly/zcp-cli/pkg/api/region"
+	"github.com/zsoftly/zcp-cli/pkg/api/snapshot"
+	"github.com/zsoftly/zcp-cli/pkg/api/sshkey"
+	"github.com/zsoftly/zcp-cli/pkg/api/template"
+	"github.com/zsoftly/zcp-cli/pkg/api/volume"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
 // ─── helpers ────────────────────────────────────────────────────────────────

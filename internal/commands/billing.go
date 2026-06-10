@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/billing"
+	"github.com/zsoftly/zcp-cli/pkg/api/billing"
 )
 
 // NewBillingCmd returns the 'billing' cobra command group.

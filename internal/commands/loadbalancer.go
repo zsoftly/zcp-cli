@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
-	"github.com/zsoftly/zcp-cli/internal/api/loadbalancer"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/loadbalancer"
 )
 
 var validLBAlgorithms = map[string]bool{

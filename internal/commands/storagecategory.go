@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/storagecategory"
+	"github.com/zsoftly/zcp-cli/pkg/api/storagecategory"
 )
 
 // NewStorageCategoryCmd returns the 'storage-category' cobra command.

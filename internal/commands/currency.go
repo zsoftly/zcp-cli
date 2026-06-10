@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/currency"
+	"github.com/zsoftly/zcp-cli/pkg/api/currency"
 )
 
 // NewCurrencyCmd returns the 'currency' cobra command.

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
-	"github.com/zsoftly/zcp-cli/internal/api/vpn"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/vpn"
 	"golang.org/x/term"
 )
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/config"
-	"github.com/zsoftly/zcp-cli/internal/httpclient"
 	"github.com/zsoftly/zcp-cli/internal/output"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
 // buildClientAndPrinter is a helper used by all read commands to:

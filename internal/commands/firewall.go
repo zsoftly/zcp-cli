@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
-	"github.com/zsoftly/zcp-cli/internal/api/firewall"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/firewall"
 )
 
 var validFirewallProtocols = map[string]bool{"tcp": true, "udp": true, "icmp": true, "all": true}

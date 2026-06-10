@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/plan"
-	"github.com/zsoftly/zcp-cli/internal/api/storagecategory"
+	"github.com/zsoftly/zcp-cli/pkg/api/plan"
+	"github.com/zsoftly/zcp-cli/pkg/api/storagecategory"
 )
 
 // NewPlanCmd returns the 'plan' cobra command with subcommands for each

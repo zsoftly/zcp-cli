@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/apierrors"
-	"github.com/zsoftly/zcp-cli/internal/api/vmbackup"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/vmbackup"
 )
 
 // NewVMBackupCmd returns the 'vm-backup' cobra command.

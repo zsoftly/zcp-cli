@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/server"
+	"github.com/zsoftly/zcp-cli/pkg/api/server"
 )
 
 // NewServerCmd returns the 'server' cobra command.

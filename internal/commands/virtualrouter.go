@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/virtualrouter"
+	"github.com/zsoftly/zcp-cli/pkg/api/virtualrouter"
 )
 
 // NewVirtualRouterCmd returns the 'virtual-router' cobra command.
