@@ -82,7 +82,8 @@ func runVPNCGList(cmd *cobra.Command) error {
 }
 
 func addCustomerGatewayFlags(cmd *cobra.Command, name, gateway, cidr, psk, ikePolicy, espPolicy *string,
-	ikeLifetime, espLifetime, ikeEncryption, ikeHash, ikeVersion, espEncryption, espHash *string,
+	ikeLifetime, espLifetime, ikeEncryption, ikeHash, ikeVersion, ikeDH *string,
+	espEncryption, espHash, espDH, espPFS *string,
 	forceEncap, splitConnection, dpd *bool) {
 	cmd.Flags().StringVar(name, "name", "", "Customer gateway name")
 	cmd.Flags().StringVar(gateway, "gateway", "", "Remote gateway IP address")
@@ -95,8 +96,11 @@ func addCustomerGatewayFlags(cmd *cobra.Command, name, gateway, cidr, psk, ikePo
 	cmd.Flags().StringVar(ikeEncryption, "ike-encryption", "", "IKE encryption algorithm")
 	cmd.Flags().StringVar(ikeHash, "ike-hash", "", "IKE hash algorithm")
 	cmd.Flags().StringVar(ikeVersion, "ike-version", "", "IKE version (optional)")
+	cmd.Flags().StringVar(ikeDH, "ike-dh", "", "IKE Diffie-Hellman group")
 	cmd.Flags().StringVar(espEncryption, "esp-encryption", "", "ESP encryption algorithm")
 	cmd.Flags().StringVar(espHash, "esp-hash", "", "ESP hash algorithm")
+	cmd.Flags().StringVar(espDH, "esp-dh", "", "ESP Diffie-Hellman group")
+	cmd.Flags().StringVar(espPFS, "esp-pfs", "", "ESP Perfect Forward Secrecy group")
 	cmd.Flags().BoolVar(forceEncap, "force-encap", false, "Force UDP encapsulation")
 	cmd.Flags().BoolVar(splitConnection, "split-connection", false, "Enable split connection")
 	cmd.Flags().BoolVar(dpd, "dpd", false, "Enable dead peer detection")
@@ -106,8 +110,8 @@ func newVPNCGCreateCmd() *cobra.Command {
 	var (
 		name, gateway, cidr, psk, ikePolicy, espPolicy string
 		ikeLifetime, espLifetime                       string
-		ikeEncryption, ikeHash, ikeVersion             string
-		espEncryption, espHash                         string
+		ikeEncryption, ikeHash, ikeVersion, ikeDH      string
+		espEncryption, espHash, espDH, espPFS          string
 		forceEncap, splitConnection, dpd               bool
 		cloudProvider, region, project                 string
 	)
@@ -159,8 +163,11 @@ func newVPNCGCreateCmd() *cobra.Command {
 				IKEEncryption:      ikeEncryption,
 				IKEHash:            ikeHash,
 				IKEVersion:         ikeVersion,
+				IKEDH:              ikeDH,
 				ESPEncryption:      espEncryption,
 				ESPHash:            espHash,
+				ESPDH:              espDH,
+				ESPPFS:             espPFS,
 				ForceEncapsulation: forceEncap,
 				SplitConnections:   splitConnection,
 				DeadPeerDetection:  dpd,
@@ -171,7 +178,8 @@ func newVPNCGCreateCmd() *cobra.Command {
 		},
 	}
 	addCustomerGatewayFlags(cmd, &name, &gateway, &cidr, &psk, &ikePolicy, &espPolicy,
-		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &espEncryption, &espHash,
+		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
+		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
@@ -212,8 +220,8 @@ func newVPNCGUpdateCmd() *cobra.Command {
 	var (
 		name, gateway, cidr, psk, ikePolicy, espPolicy string
 		ikeLifetime, espLifetime                       string
-		ikeEncryption, ikeHash, ikeVersion             string
-		espEncryption, espHash                         string
+		ikeEncryption, ikeHash, ikeVersion, ikeDH      string
+		espEncryption, espHash, espDH, espPFS          string
 		forceEncap, splitConnection, dpd               bool
 	)
 
@@ -235,8 +243,11 @@ func newVPNCGUpdateCmd() *cobra.Command {
 				IKEEncryption:      ikeEncryption,
 				IKEHash:            ikeHash,
 				IKEVersion:         ikeVersion,
+				IKEDH:              ikeDH,
 				ESPEncryption:      espEncryption,
 				ESPHash:            espHash,
+				ESPDH:              espDH,
+				ESPPFS:             espPFS,
 				ForceEncapsulation: forceEncap,
 				SplitConnections:   splitConnection,
 				DeadPeerDetection:  dpd,
@@ -244,7 +255,8 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		},
 	}
 	addCustomerGatewayFlags(cmd, &name, &gateway, &cidr, &psk, &ikePolicy, &espPolicy,
-		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &espEncryption, &espHash,
+		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
+		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
 	return cmd
 }

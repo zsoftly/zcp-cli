@@ -196,13 +196,39 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Network, erro
 	return &resp.Data, nil
 }
 
+// Get returns a single network by slug.
+func (s *Service) Get(ctx context.Context, slug string) (*Network, error) {
+	networks, err := s.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range networks {
+		if networks[i].Slug == slug {
+			return &networks[i], nil
+		}
+	}
+	return nil, fmt.Errorf("network %q not found", slug)
+}
+
 // Update modifies a network's mutable attributes.
 func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*Network, error) {
-	var resp singleNetworkResponse
-	if err := s.client.Put(ctx, "/networks/"+slug, nil, req, &resp); err != nil {
+	type rawEnv struct {
+		Status string          `json:"status"`
+		Data   json.RawMessage `json:"data"`
+	}
+	var env rawEnv
+	if err := s.client.Put(ctx, "/networks/"+slug, nil, req, &env); err != nil {
 		return nil, fmt.Errorf("updating network %s: %w", slug, err)
 	}
-	return &resp.Data, nil
+	// The Update API may return data:null or data:[null] — fall back to GET.
+	raw := string(env.Data)
+	if len(env.Data) > 0 && raw != "null" && raw != "[null]" {
+		var n Network
+		if err := json.Unmarshal(env.Data, &n); err == nil && n.Slug != "" {
+			return &n, nil
+		}
+	}
+	return s.Get(ctx, slug)
 }
 
 // ListCategories returns available network categories (offerings).

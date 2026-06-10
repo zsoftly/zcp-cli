@@ -149,11 +149,14 @@ func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*
 	if err := s.client.Put(ctx, "/vpcs/"+slug, nil, req, &env); err != nil {
 		return nil, fmt.Errorf("updating VPC %s: %w", slug, err)
 	}
-	var v VPC
-	if err := json.Unmarshal(env.Data, &v); err != nil {
-		return nil, fmt.Errorf("decoding updated VPC: %w", err)
+	// The Update API may return data:null — fall back to GET.
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		var v VPC
+		if err := json.Unmarshal(env.Data, &v); err == nil && v.Slug != "" {
+			return &v, nil
+		}
 	}
-	return &v, nil
+	return s.Get(ctx, slug)
 }
 
 // Delete removes a VPC by slug.
