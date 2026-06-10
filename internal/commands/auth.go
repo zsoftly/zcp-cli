@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/region"
 	"github.com/zsoftly/zcp-cli/internal/config"
-	"github.com/zsoftly/zcp-cli/internal/httpclient"
 	"github.com/zsoftly/zcp-cli/internal/output"
+	"github.com/zsoftly/zcp-cli/pkg/api/region"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
 // NewAuthCmd returns the 'auth' cobra command.

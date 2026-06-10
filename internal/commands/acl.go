@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/acl"
+	"github.com/zsoftly/zcp-cli/pkg/api/acl"
 )
 
 // NewACLCmd returns the 'acl' cobra command.

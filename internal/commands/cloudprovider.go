@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/cloudprovider"
+	"github.com/zsoftly/zcp-cli/pkg/api/cloudprovider"
 )
 
 // NewCloudProviderCmd returns the 'cloud-provider' cobra command.

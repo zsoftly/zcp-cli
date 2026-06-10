@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/marketplace"
+	"github.com/zsoftly/zcp-cli/pkg/api/marketplace"
 )
 
 // NewMarketplaceCmd returns the 'marketplace' cobra command.

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/zsoftly/zcp-cli/internal/api/monitoring"
+	"github.com/zsoftly/zcp-cli/pkg/api/monitoring"
 )
 
 // NewMonitoringCmd returns the 'monitoring' cobra command.
