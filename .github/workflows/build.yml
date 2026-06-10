@@ -10,7 +10,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, 'issue/*', 'issues/*', 'feature/*', 'feat/*', 'fix/*', 'release/*']
-    tags: ['[0-9]*']
+    tags: ['v[0-9]*']
   pull_request:
     branches: [main, 'release/*']
   workflow_dispatch:

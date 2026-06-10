@@ -5,6 +5,40 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.13] - 2026-06-10
+
+### ⚠ Breaking Changes
+
+**API packages moved from `internal/` to `pkg/`.**
+
+All service packages and the HTTP client are now importable by external Go modules
+(e.g. the ZCP Terraform provider). If you import any of these paths in your own code,
+update them as follows:
+
+| Old path | New path |
+|---|---|
+| `github.com/zsoftly/zcp-cli/internal/httpclient` | `github.com/zsoftly/zcp-cli/pkg/httpclient` |
+| `github.com/zsoftly/zcp-cli/internal/api/<service>` | `github.com/zsoftly/zcp-cli/pkg/api/<service>` |
+
+CLI end users are **not affected** — the binary behaviour is unchanged.
+
+### Changed
+
+- All 28 API service packages moved: `internal/api/*` → `pkg/api/*`
+- HTTP client moved: `internal/httpclient` → `pkg/httpclient`
+- CLI-internal packages (`internal/commands`, `internal/config`, `internal/output`, `internal/version`) remain under `internal/` and are not part of the public API
+
+### Meta
+
+- Release tags now use the `v` prefix (`v0.0.13`, `v0.1.0`, …) to align with Go module
+  and Terraform Registry conventions. The previous tag format (`0.0.12` etc.) is preserved
+  for backwards compatibility but will not be used for future releases.
+- CI pipeline updated to trigger on `v[0-9]*` tags
+
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.13
+
+---
+
 ## [0.0.12] - 2026-06-09
 
 ### Added

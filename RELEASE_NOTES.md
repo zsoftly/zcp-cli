@@ -1,41 +1,102 @@
-# zcp 0.0.12 Release Notes
+# zcp v0.0.13 Release Notes
 
-## New
+## ⚠ Breaking Changes — API package paths changed
 
-### `zcp kubernetes upgrade-version` — upgrade Kubernetes cluster version
+This release moves all API service packages and the HTTP client out of `internal/`
+into `pkg/` so that external Go modules (such as the ZCP Terraform provider) can
+import them directly.
 
-Upgrade a running cluster from one Kubernetes version to the next:
+**CLI end users are not affected.** The binary is identical to v0.0.12.
+
+### Migration guide for Go library consumers
+
+Run a global find-and-replace in your project:
 
 ```bash
-zcp kubernetes upgrade-version my-cluster --version v1.35.1
-zcp kubernetes upgrade-version my-cluster --version v1.36.1
+# macOS / BSD sed
+find . -name '*.go' | xargs sed -i '' \
+  's|github.com/zsoftly/zcp-cli/internal/httpclient|github.com/zsoftly/zcp-cli/pkg/httpclient|g'
+find . -name '*.go' | xargs sed -i '' \
+  's|github.com/zsoftly/zcp-cli/internal/api/|github.com/zsoftly/zcp-cli/pkg/api/|g'
+
+# Linux sed
+find . -name '*.go' | xargs sed -i \
+  's|github.com/zsoftly/zcp-cli/internal/httpclient|github.com/zsoftly/zcp-cli/pkg/httpclient|g'
+find . -name '*.go' | xargs sed -i \
+  's|github.com/zsoftly/zcp-cli/internal/api/|github.com/zsoftly/zcp-cli/pkg/api/|g'
 ```
 
-The CLI resolves the correct version slug for the cluster's region automatically — no need to look up region-specific slugs manually. An error is returned if the requested version is not available in the cluster's region.
+Then update your `go.mod` to reference `v0.0.13`:
 
-Supported upgrade path (must be sequential — no skipping):
+```bash
+go get github.com/zsoftly/zcp-cli@v0.0.13
+go mod tidy
+```
 
-```
-v1.34.3 → v1.35.1 → v1.36.1
-```
+### What moved
+
+| Old | New |
+|---|---|
+| `internal/httpclient` | `pkg/httpclient` |
+| `internal/api/acl` | `pkg/api/acl` |
+| `internal/api/affinitygroup` | `pkg/api/affinitygroup` |
+| `internal/api/apierrors` | `pkg/api/apierrors` |
+| `internal/api/autoscale` | `pkg/api/autoscale` |
+| `internal/api/backup` | `pkg/api/backup` |
+| `internal/api/billing` | `pkg/api/billing` |
+| `internal/api/billingcycle` | `pkg/api/billingcycle` |
+| `internal/api/cloudprovider` | `pkg/api/cloudprovider` |
+| `internal/api/currency` | `pkg/api/currency` |
+| `internal/api/dashboard` | `pkg/api/dashboard` |
+| `internal/api/dns` | `pkg/api/dns` |
+| `internal/api/egress` | `pkg/api/egress` |
+| `internal/api/firewall` | `pkg/api/firewall` |
+| `internal/api/instance` | `pkg/api/instance` |
+| `internal/api/ipaddress` | `pkg/api/ipaddress` |
+| `internal/api/iso` | `pkg/api/iso` |
+| `internal/api/kubernetes` | `pkg/api/kubernetes` |
+| `internal/api/loadbalancer` | `pkg/api/loadbalancer` |
+| `internal/api/marketplace` | `pkg/api/marketplace` |
+| `internal/api/monitoring` | `pkg/api/monitoring` |
+| `internal/api/network` | `pkg/api/network` |
+| `internal/api/objectstorage` | `pkg/api/objectstorage` |
+| `internal/api/plan` | `pkg/api/plan` |
+| `internal/api/portforward` | `pkg/api/portforward` |
+| `internal/api/product` | `pkg/api/product` |
+| `internal/api/project` | `pkg/api/project` |
+| `internal/api/region` | `pkg/api/region` |
+| `internal/api/response` | `pkg/api/response` |
+| `internal/api/server` | `pkg/api/server` |
+| `internal/api/snapshot` | `pkg/api/snapshot` |
+| `internal/api/sshkey` | `pkg/api/sshkey` |
+| `internal/api/storagecategory` | `pkg/api/storagecategory` |
+| `internal/api/store` | `pkg/api/store` |
+| `internal/api/support` | `pkg/api/support` |
+| `internal/api/template` | `pkg/api/template` |
+| `internal/api/userprofile` | `pkg/api/userprofile` |
+| `internal/api/virtualrouter` | `pkg/api/virtualrouter` |
+| `internal/api/vmbackup` | `pkg/api/vmbackup` |
+| `internal/api/vmsnapshot` | `pkg/api/vmsnapshot` |
+| `internal/api/volume` | `pkg/api/volume` |
+| `internal/api/vpc` | `pkg/api/vpc` |
+| `internal/api/vpn` | `pkg/api/vpn` |
+
+### Packages that remain internal
+
+These are CLI-only and are **not** part of the public API:
+
+- `internal/commands`
+- `internal/config`
+- `internal/output`
+- `internal/version`
 
 ---
 
-## Bug Fixes
+## Note on release tag format
 
-### `zcp kubernetes scale` — misleading state-guard error
-
-The pre-flight check that blocks scale operations on non-running clusters was emitting:
-
-```
-cluster "my-cluster" is in state "Stopped" — scale requires Running state
-```
-
-The guard actually accepts both `Running` and `Scaling`. The error message now reads:
-
-```
-cluster "my-cluster" is in state "Stopped" — scale requires Running or Scaling state
-```
+Starting with this release, tags use the `v` prefix (`v0.0.13`) to align with
+Go module conventions and the Terraform Registry. Previous tags (`0.0.1`–`0.0.12`)
+are preserved but the old format will not be used going forward.
 
 ---
 
@@ -57,11 +118,11 @@ irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | ie
 
 ```bash
 zcp version
-# zcp version 0.0.12
+# zcp version v0.0.13
 ```
 
 ---
 
 ## Full Changelog
 
-https://github.com/zsoftly/zcp-cli/compare/0.0.11...0.0.12
+https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.13

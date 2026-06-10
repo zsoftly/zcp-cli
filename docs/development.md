@@ -54,10 +54,10 @@ zcp-cli/
 ### Key Packages
 
 - `internal/config` — manages `~/.config/zcp/config.yaml`, profile resolution, and URL precedence logic.
-- `internal/httpclient` — a single `Client` struct used by all API service packages. It injects the `Authorization: Bearer` header, sets `User-Agent`, and delegates error parsing to `apierrors`. Also provides `GetEnvelope`/`PostEnvelope`/`PutEnvelope` helpers for unwrapping the `{status, data}` response envelope.
+- `pkg/httpclient` — a single `Client` struct used by all API service packages and by external consumers (e.g. the Terraform provider). It injects the `Authorization: Bearer` header, sets `User-Agent`, and delegates error parsing to `apierrors`. Also provides `GetEnvelope`/`PostEnvelope`/`PutEnvelope` helpers for unwrapping the `{status, data}` response envelope.
+- `pkg/api/apierrors` — parses ZCP API error envelopes into typed `APIError` values.
+- `pkg/api/response` — generic response envelope types (`Envelope[T]`, `Single[T]`) for the paginated API format.
 - `internal/output` — the `Printer` type renders tabular data in table, JSON, or YAML format. All commands use this for consistent output.
-- `internal/api/apierrors` — parses ZCP API error envelopes into typed `APIError` values.
-- `internal/api/response` — generic response envelope types (`Envelope[T]`, `Single[T]`) for the paginated API format.
 - `internal/commands` — one file per command group (e.g., `instance.go`, `region.go`, `dns.go`). Each file registers Cobra subcommands and implements `RunE` functions.
 
 ---
@@ -131,14 +131,14 @@ The following steps add a new top-level command group. The example adds `zcp net
 
 ### 1. Create the API service package
 
-Create `internal/api/network/network.go`:
+Create `pkg/api/network/network.go`:
 
 ```go
 package network
 
 import (
     "context"
-    "github.com/zsoftly/zcp-cli/internal/httpclient"
+    "github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
 type Network struct {
@@ -162,7 +162,7 @@ func (s *Service) List(ctx context.Context) ([]Network, error) {
 
 ### 2. Write tests for the service
 
-Create `internal/api/network/network_test.go` following the pattern used in `internal/api/region/region_test.go`:
+Create `pkg/api/network/network_test.go` following the pattern used in `pkg/api/region/region_test.go`:
 
 - Spin up an `httptest.Server` that returns fixture JSON.
 - Assert on the path, query parameters, and decoded result.
@@ -177,9 +177,9 @@ package commands
 
 import (
     "github.com/spf13/cobra"
-    "github.com/zsoftly/zcp-cli/internal/api/network"
+    "github.com/zsoftly/zcp-cli/pkg/api/network"
     "github.com/zsoftly/zcp-cli/internal/config"
-    "github.com/zsoftly/zcp-cli/internal/httpclient"
+    "github.com/zsoftly/zcp-cli/pkg/httpclient"
     "github.com/zsoftly/zcp-cli/internal/output"
 )
 
