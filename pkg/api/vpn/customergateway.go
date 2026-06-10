@@ -10,42 +10,45 @@ import (
 
 // CustomerGateway represents a ZCP VPN customer gateway.
 type CustomerGateway struct {
-	Slug            string `json:"slug"`
-	Name            string `json:"name"`
-	Gateway         string `json:"gateway"`
-	IKEPolicy       string `json:"ikepolicy"`
-	ESPPolicy       string `json:"esppolicy"`
-	ESPLifetime     string `json:"esplifetime"`
-	IKELifetime     string `json:"ikelifetime"`
-	IPSecPSK        string `json:"ipsecPresharedKey"`
-	IKEVersion      string `json:"ikeVersion"`
-	CIDRList        string `json:"cidrList"`
-	ForceEncap      bool   `json:"forceencap"`
-	SplitConnection bool   `json:"splitConnection"`
-	DPD             bool   `json:"dpd"`
+	Slug               string `json:"slug"`
+	Name               string `json:"name"`
+	Gateway            string `json:"gateway"`
+	IKEPolicy          string `json:"ike_policy"`
+	ESPPolicy          string `json:"esp_policy"`
+	ESPLifetime        string `json:"esp_lifetime"`
+	IKELifetime        string `json:"ike_lifetime"`
+	IPSecPSK           string `json:"ipsec_preshared_key"`
+	IKEVersion         string `json:"ike_version"`
+	CIDRList           string `json:"cidr_list"`
+	ForceEncapsulation bool   `json:"force_encapsulation"`
+	SplitConnections   bool   `json:"split_connections"`
+	DeadPeerDetection  bool   `json:"dead_peer_detection"`
 }
 
-// CustomerGatewayRequest holds parameters for creating a VPN customer gateway.
+// CustomerGatewayRequest holds parameters for creating or updating a VPN customer gateway.
 type CustomerGatewayRequest struct {
-	Name            string `json:"name"`
-	Gateway         string `json:"gateway"`
-	CIDRList        string `json:"cidrlist"`
-	IPSecPSK        string `json:"ipsecpsk"`
-	IKEPolicy       string `json:"ikepolicy"`
-	ESPPolicy       string `json:"esppolicy"`
-	IKELifetime     string `json:"ikelifetime,omitempty"`
-	ESPLifetime     string `json:"esplifetime,omitempty"`
-	IKEEncryption   string `json:"ikeEncryption,omitempty"`
-	IKEHash         string `json:"ikeHash,omitempty"`
-	IKEVersion      string `json:"ikeVersion,omitempty"`
-	ESPEncryption   string `json:"espEncryption,omitempty"`
-	ESPHash         string `json:"espHash,omitempty"`
-	ForceEncap      bool   `json:"forceencap"`
-	SplitConnection bool   `json:"splitConnection"`
-	DPD             bool   `json:"dpd"`
-	CloudProvider   string `json:"cloud_provider,omitempty"`
-	Region          string `json:"region,omitempty"`
-	Project         string `json:"project,omitempty"`
+	Name               string `json:"name"`
+	Gateway            string `json:"gateway"`
+	CIDRList           string `json:"cidr_list"`
+	IPSecPSK           string `json:"ipsec_preshared_key"`
+	IKEPolicy          string `json:"ike_policy"`
+	ESPPolicy          string `json:"esp_policy"`
+	IKELifetime        string `json:"ike_lifetime,omitempty"`
+	ESPLifetime        string `json:"esp_lifetime,omitempty"`
+	IKEEncryption      string `json:"ike_encryption,omitempty"`
+	IKEHash            string `json:"ike_hash,omitempty"`
+	IKEVersion         string `json:"ike_version,omitempty"`
+	IKEDH              string `json:"ike_dh,omitempty"`
+	ESPEncryption      string `json:"esp_encryption,omitempty"`
+	ESPHash            string `json:"esp_hash,omitempty"`
+	ESPDH              string `json:"esp_dh,omitempty"`
+	ESPPFS             string `json:"esp_pfs,omitempty"`
+	ForceEncapsulation bool   `json:"force_encapsulation"`
+	SplitConnections   bool   `json:"split_connections"`
+	DeadPeerDetection  bool   `json:"dead_peer_detection"`
+	CloudProvider      string `json:"cloud_provider,omitempty"`
+	Region             string `json:"region,omitempty"`
+	Project            string `json:"project,omitempty"`
 }
 
 // CustomerGatewayService provides VPN customer gateway API operations.

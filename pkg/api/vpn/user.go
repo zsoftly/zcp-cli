@@ -12,7 +12,7 @@ import (
 // User represents a ZCP VPN user.
 type User struct {
 	Slug     string `json:"slug"`
-	UserName string `json:"userName"`
+	UserName string `json:"username"`
 	Status   string `json:"status"`
 }
 
@@ -61,8 +61,11 @@ func (s *UserService) Create(ctx context.Context, req UserCreateRequest) (*User,
 		return nil, fmt.Errorf("creating VPN user: %w", err)
 	}
 	var u User
-	if err := json.Unmarshal(env.Data, &u); err != nil {
-		return nil, fmt.Errorf("decoding created VPN user: %w", err)
+	// The Create API returns data:null on success — unmarshal is a no-op in that case.
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		if err := json.Unmarshal(env.Data, &u); err != nil {
+			return nil, fmt.Errorf("decoding created VPN user: %w", err)
+		}
 	}
 	return &u, nil
 }
