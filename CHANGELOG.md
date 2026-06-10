@@ -5,7 +5,7 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.0.13] - 2026-06-10
+## [v0.0.14] - 2026-06-10
 
 ### ⚠ Breaking Changes
 
@@ -30,12 +30,12 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
 
 ### Meta
 
-- Release tags now use the `v` prefix (`v0.0.13`, `v0.1.0`, …) to align with Go module
+- Release tags now use the `v` prefix (`v0.0.14`, `v0.1.0`, …) to align with Go module
   and Terraform Registry conventions. The previous tag format (`0.0.12` etc.) is preserved
   for backwards compatibility but will not be used for future releases.
 - CI pipeline updated to trigger on `v[0-9]*` tags
 
-**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.13
+**Full Changelog**: https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.14
 
 ---
 

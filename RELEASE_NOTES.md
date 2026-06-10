@@ -1,4 +1,4 @@
-# zcp v0.0.13 Release Notes
+# zcp v0.0.14 Release Notes
 
 ## ⚠ Breaking Changes — API package paths changed
 
@@ -26,10 +26,10 @@ find . -name '*.go' | xargs sed -i \
   's|github.com/zsoftly/zcp-cli/internal/api/|github.com/zsoftly/zcp-cli/pkg/api/|g'
 ```
 
-Then update your `go.mod` to reference `v0.0.13`:
+Then update your `go.mod` to reference `v0.0.14`:
 
 ```bash
-go get github.com/zsoftly/zcp-cli@v0.0.13
+go get github.com/zsoftly/zcp-cli@v0.0.14
 go mod tidy
 ```
 
@@ -94,7 +94,7 @@ These are CLI-only and are **not** part of the public API:
 
 ## Note on release tag format
 
-Starting with this release, tags use the `v` prefix (`v0.0.13`) to align with
+Starting with this release, tags use the `v` prefix (`v0.0.14`) to align with
 Go module conventions and the Terraform Registry. Previous tags (`0.0.1`–`0.0.12`)
 are preserved but the old format will not be used going forward.
 
@@ -118,11 +118,11 @@ irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | ie
 
 ```bash
 zcp version
-# zcp version v0.0.13
+# zcp version v0.0.14
 ```
 
 ---
 
 ## Full Changelog
 
-https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.13
+https://github.com/zsoftly/zcp-cli/compare/0.0.12...v0.0.14
