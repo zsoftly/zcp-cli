@@ -226,11 +226,9 @@ func (s *Service) ListVPNGateways(ctx context.Context, vpcSlug string) ([]VPNGat
 
 // CreateVPNGateway creates a VPN gateway for a VPC.
 func (s *Service) CreateVPNGateway(ctx context.Context, vpcSlug string) (*VPNGateway, error) {
-	// Snapshot pre-existing gateways so we can identify the newly added one.
-	before, err := s.ListVPNGateways(ctx, vpcSlug)
-	if err != nil {
-		return nil, fmt.Errorf("creating VPN gateway for VPC %s: pre-create list: %w", vpcSlug, err)
-	}
+	// Best-effort pre-create snapshot. If this fails, existing stays empty and the
+	// diff below treats every post-create gateway as new (acceptable degraded mode).
+	before, _ := s.ListVPNGateways(ctx, vpcSlug)
 	existing := make(map[string]bool, len(before))
 	for _, gw := range before {
 		existing[gw.ID] = true

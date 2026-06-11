@@ -117,6 +117,9 @@ func TestCustomerGatewayUpdate(t *testing.T) {
 			// Return metadata envelope (no VPN fields) — Update always falls back to Get.
 			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: vpn.CustomerGateway{Slug: "cgw-1", Name: "updated-cgw"}})
 		case http.MethodGet:
+			if r.URL.Path != "/vpn-customer-gateways/"+fullCG.Slug {
+				t.Errorf("fallback GET path = %q, want %q", r.URL.Path, "/vpn-customer-gateways/"+fullCG.Slug)
+			}
 			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: fullCG})
 		default:
 			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)

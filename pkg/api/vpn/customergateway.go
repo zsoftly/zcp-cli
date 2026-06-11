@@ -103,7 +103,9 @@ func (s *CustomerGatewayService) Create(ctx context.Context, req CustomerGateway
 	// Try to fetch the full config; if the gateway is still provisioning, return partial data.
 	var partial CustomerGateway
 	if len(env.Data) > 0 && string(env.Data) != "null" {
-		_ = json.Unmarshal(env.Data, &partial)
+		if err := json.Unmarshal(env.Data, &partial); err != nil {
+			return nil, fmt.Errorf("creating VPN customer gateway: decoding response: %w", err)
+		}
 	}
 	if partial.Slug != "" {
 		if full, err := s.Get(ctx, partial.Slug); err == nil && full.Gateway != "" {
