@@ -39,8 +39,8 @@ type CreateRequest struct {
 
 // UpdateRequest holds parameters for updating a VPC.
 type UpdateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
 }
 
 // NetworkACL represents a network ACL inside a VPC.
@@ -226,25 +226,37 @@ func (s *Service) ListVPNGateways(ctx context.Context, vpcSlug string) ([]VPNGat
 
 // CreateVPNGateway creates a VPN gateway for a VPC.
 func (s *Service) CreateVPNGateway(ctx context.Context, vpcSlug string) (*VPNGateway, error) {
+	// Snapshot pre-existing gateways so we can identify the newly added one.
+	before, err := s.ListVPNGateways(ctx, vpcSlug)
+	if err != nil {
+		return nil, fmt.Errorf("creating VPN gateway for VPC %s: pre-create list: %w", vpcSlug, err)
+	}
+	existing := make(map[string]bool, len(before))
+	for _, gw := range before {
+		existing[gw.ID] = true
+	}
+
 	var env apiResponse
 	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/vpn-gateways", VPNGatewayCreateRequest{}, &env); err != nil {
 		return nil, fmt.Errorf("creating VPN gateway for VPC %s: %w", vpcSlug, err)
 	}
-	// The Create API may return data:null — list to find the created gateway.
+	// The Create API may return data:null — diff pre/post lists to find the new gateway.
 	var gw VPNGateway
 	if len(env.Data) > 0 && string(env.Data) != "null" {
 		if err := json.Unmarshal(env.Data, &gw); err == nil && gw.ID != "" {
 			return &gw, nil
 		}
 	}
-	gateways, err := s.ListVPNGateways(ctx, vpcSlug)
+	after, err := s.ListVPNGateways(ctx, vpcSlug)
 	if err != nil {
-		return nil, fmt.Errorf("creating VPN gateway for VPC %s: listing after null response: %w", vpcSlug, err)
+		return nil, fmt.Errorf("creating VPN gateway for VPC %s: post-create list: %w", vpcSlug, err)
 	}
-	if len(gateways) == 0 {
-		return nil, fmt.Errorf("creating VPN gateway for VPC %s: no gateway found after create", vpcSlug)
+	for i := range after {
+		if !existing[after[i].ID] {
+			return &after[i], nil
+		}
 	}
-	return &gateways[0], nil
+	return nil, fmt.Errorf("creating VPN gateway for VPC %s: new gateway not found after create", vpcSlug)
 }
 
 // DeleteVPNGateway deletes a VPN gateway from a VPC.

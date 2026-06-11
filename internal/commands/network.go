@@ -163,13 +163,14 @@ func newNetworkUpdateCmd() *cobra.Command {
 		Example: `  zcp network update en-001001-0018 --name new-name
   zcp network update en-001001-0018 --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if name == "" && description == "" {
+			if name == "" && !cmd.Flags().Changed("description") {
 				return fmt.Errorf("at least one of --name or --description is required")
 			}
-			return runNetworkUpdate(cmd, args[0], network.UpdateRequest{
-				Name:        name,
-				Description: description,
-			})
+			req := network.UpdateRequest{Name: name}
+			if cmd.Flags().Changed("description") {
+				req.Description = &description
+			}
+			return runNetworkUpdate(cmd, args[0], req)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "New network name")

@@ -223,14 +223,27 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		ikeEncryption, ikeHash, ikeVersion, ikeDH      string
 		espEncryption, espHash, espDH, espPFS          string
 		forceEncap, splitConnection, dpd               bool
+		cloudProvider, region, project                 string
 	)
 
 	cmd := &cobra.Command{
 		Use:     "update <slug>",
 		Short:   "Update a VPN customer gateway",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey`,
+		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --cloud-provider nimbo --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cloudProvider = resolveCloudProvider(cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			region = resolveRegion(region)
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			project = resolveProject(project)
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
 			return runVPNCGUpdate(cmd, args[0], vpn.CustomerGatewayRequest{
 				Name:               name,
 				Gateway:            gateway,
@@ -251,6 +264,9 @@ func newVPNCGUpdateCmd() *cobra.Command {
 				ForceEncapsulation: forceEncap,
 				SplitConnections:   splitConnection,
 				DeadPeerDetection:  dpd,
+				CloudProvider:      cloudProvider,
+				Region:             region,
+				Project:            project,
 			})
 		},
 	}
@@ -258,6 +274,9 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
 		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 

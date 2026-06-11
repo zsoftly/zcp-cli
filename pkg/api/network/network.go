@@ -123,8 +123,8 @@ type CreateRequest struct {
 
 // UpdateRequest holds parameters for updating a network.
 type UpdateRequest struct {
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description"`
+	Name        string  `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 // CreateEgressRuleRequest holds parameters for creating an egress rule.

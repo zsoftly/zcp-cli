@@ -213,9 +213,10 @@ func TestVPCUpdate(t *testing.T) {
 
 	svc := vpc.NewService(newClient(srv.URL))
 
+	desc := "updated description"
 	req := vpc.UpdateRequest{
 		Name:        "renamed-vpc",
-		Description: "updated description",
+		Description: &desc,
 	}
 
 	v, err := svc.Update(context.Background(), "vpc-upd-1", req)

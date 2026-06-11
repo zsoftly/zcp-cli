@@ -122,14 +122,8 @@ func (s *CustomerGatewayService) Update(ctx context.Context, slug string, req Cu
 	if err := s.client.Put(ctx, "/vpn-customer-gateways/"+slug, nil, req, &env); err != nil {
 		return nil, fmt.Errorf("updating VPN customer gateway %s: %w", slug, err)
 	}
-	// The Update API may return partial/null data — fall back to Get.
-	raw := string(env.Data)
-	if len(env.Data) > 0 && raw != "null" && raw != "[null]" {
-		var cg CustomerGateway
-		if err := json.Unmarshal(env.Data, &cg); err == nil && cg.Slug != "" {
-			return &cg, nil
-		}
-	}
+	// The Update API returns a metadata envelope (slug present but no VPN config fields).
+	// Always fall back to Get to retrieve the full VPN configuration.
 	return s.Get(ctx, slug)
 }
 

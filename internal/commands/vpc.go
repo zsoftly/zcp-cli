@@ -226,10 +226,11 @@ func newVPCUpdateCmd() *cobra.Command {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			return runVPCUpdate(cmd, args[0], vpc.UpdateRequest{
-				Name:        name,
-				Description: description,
-			})
+			req := vpc.UpdateRequest{Name: name}
+			if cmd.Flags().Changed("description") {
+				req.Description = &description
+			}
+			return runVPCUpdate(cmd, args[0], req)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "New VPC name (required)")
