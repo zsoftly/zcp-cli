@@ -82,7 +82,8 @@ func runVPNCGList(cmd *cobra.Command) error {
 }
 
 func addCustomerGatewayFlags(cmd *cobra.Command, name, gateway, cidr, psk, ikePolicy, espPolicy *string,
-	ikeLifetime, espLifetime, ikeEncryption, ikeHash, ikeVersion, espEncryption, espHash *string,
+	ikeLifetime, espLifetime, ikeEncryption, ikeHash, ikeVersion, ikeDH *string,
+	espEncryption, espHash, espDH, espPFS *string,
 	forceEncap, splitConnection, dpd *bool) {
 	cmd.Flags().StringVar(name, "name", "", "Customer gateway name")
 	cmd.Flags().StringVar(gateway, "gateway", "", "Remote gateway IP address")
@@ -95,8 +96,11 @@ func addCustomerGatewayFlags(cmd *cobra.Command, name, gateway, cidr, psk, ikePo
 	cmd.Flags().StringVar(ikeEncryption, "ike-encryption", "", "IKE encryption algorithm")
 	cmd.Flags().StringVar(ikeHash, "ike-hash", "", "IKE hash algorithm")
 	cmd.Flags().StringVar(ikeVersion, "ike-version", "", "IKE version (optional)")
+	cmd.Flags().StringVar(ikeDH, "ike-dh", "", "IKE Diffie-Hellman group")
 	cmd.Flags().StringVar(espEncryption, "esp-encryption", "", "ESP encryption algorithm")
 	cmd.Flags().StringVar(espHash, "esp-hash", "", "ESP hash algorithm")
+	cmd.Flags().StringVar(espDH, "esp-dh", "", "ESP Diffie-Hellman group")
+	cmd.Flags().StringVar(espPFS, "esp-pfs", "", "ESP Perfect Forward Secrecy group")
 	cmd.Flags().BoolVar(forceEncap, "force-encap", false, "Force UDP encapsulation")
 	cmd.Flags().BoolVar(splitConnection, "split-connection", false, "Enable split connection")
 	cmd.Flags().BoolVar(dpd, "dpd", false, "Enable dead peer detection")
@@ -106,8 +110,8 @@ func newVPNCGCreateCmd() *cobra.Command {
 	var (
 		name, gateway, cidr, psk, ikePolicy, espPolicy string
 		ikeLifetime, espLifetime                       string
-		ikeEncryption, ikeHash, ikeVersion             string
-		espEncryption, espHash                         string
+		ikeEncryption, ikeHash, ikeVersion, ikeDH      string
+		espEncryption, espHash, espDH, espPFS          string
 		forceEncap, splitConnection, dpd               bool
 		cloudProvider, region, project                 string
 	)
@@ -148,30 +152,34 @@ func newVPNCGCreateCmd() *cobra.Command {
 				return fmt.Errorf("--project is required")
 			}
 			return runVPNCGCreate(cmd, vpn.CustomerGatewayRequest{
-				Name:            name,
-				Gateway:         gateway,
-				CIDRList:        cidr,
-				IPSecPSK:        psk,
-				IKEPolicy:       ikePolicy,
-				ESPPolicy:       espPolicy,
-				IKELifetime:     ikeLifetime,
-				ESPLifetime:     espLifetime,
-				IKEEncryption:   ikeEncryption,
-				IKEHash:         ikeHash,
-				IKEVersion:      ikeVersion,
-				ESPEncryption:   espEncryption,
-				ESPHash:         espHash,
-				ForceEncap:      forceEncap,
-				SplitConnection: splitConnection,
-				DPD:             dpd,
-				CloudProvider:   cloudProvider,
-				Region:          region,
-				Project:         project,
+				Name:               name,
+				Gateway:            gateway,
+				CIDRList:           cidr,
+				IPSecPSK:           psk,
+				IKEPolicy:          ikePolicy,
+				ESPPolicy:          espPolicy,
+				IKELifetime:        ikeLifetime,
+				ESPLifetime:        espLifetime,
+				IKEEncryption:      ikeEncryption,
+				IKEHash:            ikeHash,
+				IKEVersion:         ikeVersion,
+				IKEDH:              ikeDH,
+				ESPEncryption:      espEncryption,
+				ESPHash:            espHash,
+				ESPDH:              espDH,
+				ESPPFS:             espPFS,
+				ForceEncapsulation: forceEncap,
+				SplitConnections:   splitConnection,
+				DeadPeerDetection:  dpd,
+				CloudProvider:      cloudProvider,
+				Region:             region,
+				Project:            project,
 			})
 		},
 	}
 	addCustomerGatewayFlags(cmd, &name, &gateway, &cidr, &psk, &ikePolicy, &espPolicy,
-		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &espEncryption, &espHash,
+		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
+		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
@@ -212,40 +220,63 @@ func newVPNCGUpdateCmd() *cobra.Command {
 	var (
 		name, gateway, cidr, psk, ikePolicy, espPolicy string
 		ikeLifetime, espLifetime                       string
-		ikeEncryption, ikeHash, ikeVersion             string
-		espEncryption, espHash                         string
+		ikeEncryption, ikeHash, ikeVersion, ikeDH      string
+		espEncryption, espHash, espDH, espPFS          string
 		forceEncap, splitConnection, dpd               bool
+		cloudProvider, region, project                 string
 	)
 
 	cmd := &cobra.Command{
 		Use:     "update <slug>",
 		Short:   "Update a VPN customer gateway",
 		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey`,
+		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --cloud-provider nimbo --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cloudProvider = resolveCloudProvider(cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("--cloud-provider is required")
+			}
+			region = resolveRegion(region)
+			if region == "" {
+				return fmt.Errorf("--region is required")
+			}
+			project = resolveProject(project)
+			if project == "" {
+				return fmt.Errorf("--project is required")
+			}
 			return runVPNCGUpdate(cmd, args[0], vpn.CustomerGatewayRequest{
-				Name:            name,
-				Gateway:         gateway,
-				CIDRList:        cidr,
-				IPSecPSK:        psk,
-				IKEPolicy:       ikePolicy,
-				ESPPolicy:       espPolicy,
-				IKELifetime:     ikeLifetime,
-				ESPLifetime:     espLifetime,
-				IKEEncryption:   ikeEncryption,
-				IKEHash:         ikeHash,
-				IKEVersion:      ikeVersion,
-				ESPEncryption:   espEncryption,
-				ESPHash:         espHash,
-				ForceEncap:      forceEncap,
-				SplitConnection: splitConnection,
-				DPD:             dpd,
+				Name:               name,
+				Gateway:            gateway,
+				CIDRList:           cidr,
+				IPSecPSK:           psk,
+				IKEPolicy:          ikePolicy,
+				ESPPolicy:          espPolicy,
+				IKELifetime:        ikeLifetime,
+				ESPLifetime:        espLifetime,
+				IKEEncryption:      ikeEncryption,
+				IKEHash:            ikeHash,
+				IKEVersion:         ikeVersion,
+				IKEDH:              ikeDH,
+				ESPEncryption:      espEncryption,
+				ESPHash:            espHash,
+				ESPDH:              espDH,
+				ESPPFS:             espPFS,
+				ForceEncapsulation: forceEncap,
+				SplitConnections:   splitConnection,
+				DeadPeerDetection:  dpd,
+				CloudProvider:      cloudProvider,
+				Region:             region,
+				Project:            project,
 			})
 		},
 	}
 	addCustomerGatewayFlags(cmd, &name, &gateway, &cidr, &psk, &ikePolicy, &espPolicy,
-		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &espEncryption, &espHash,
+		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
+		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
 }
 

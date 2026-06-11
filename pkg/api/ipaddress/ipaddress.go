@@ -45,6 +45,7 @@ type CreateRequest struct {
 	Network      string `json:"network,omitempty"`
 	Plan         string `json:"plan"`
 	BillingCycle string `json:"billing_cycle"`
+	Project      string `json:"project,omitempty"`
 }
 
 // StaticNATRequest holds parameters for enabling static NAT.

@@ -187,52 +187,63 @@ func TestVPCCreate(t *testing.T) {
 	}
 }
 
-// TestVPCUpdate verifies that PUT method is used and body is sent correctly.
+// TestVPCUpdate verifies PUT path/body and that Update falls back to GET when the
+// PUT response carries data:null (the production API behaviour).
 func TestVPCUpdate(t *testing.T) {
 	updated := makeVPC("vpc-upd-1", "renamed-vpc")
 
-	var gotMethod string
-	var gotPath string
+	var gotPUTPath string
 	var gotBody map[string]interface{}
+	var sawGET bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/vpcs/vpc-upd-1" {
-			http.NotFound(w, r)
-			return
-		}
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(apiEnvelope{
-			Status: "ok",
-			Data:   updated,
-		})
+		switch r.Method {
+		case http.MethodPut:
+			gotPUTPath = r.URL.Path
+			json.NewDecoder(r.Body).Decode(&gotBody)
+			// Return data:null to exercise the GET fallback in Update().
+			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: nil})
+		case http.MethodGet:
+			// Update.Get() calls List(), which GETs /vpcs.
+			sawGET = true
+			if r.URL.Path != "/vpcs" {
+				http.NotFound(w, r)
+				return
+			}
+			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: []vpc.VPC{updated}})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
 	svc := vpc.NewService(newClient(srv.URL))
 
+	desc := "updated description"
 	req := vpc.UpdateRequest{
 		Name:        "renamed-vpc",
-		Description: "updated description",
+		Description: &desc,
 	}
 
 	v, err := svc.Update(context.Background(), "vpc-upd-1", req)
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
-	if gotMethod != http.MethodPut {
-		t.Errorf("HTTP method = %q, want %q", gotMethod, http.MethodPut)
+	if gotPUTPath != "/vpcs/vpc-upd-1" {
+		t.Errorf("PUT path = %q, want %q", gotPUTPath, "/vpcs/vpc-upd-1")
 	}
-	if gotPath != "/vpcs/vpc-upd-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/vpcs/vpc-upd-1")
+	if !sawGET {
+		t.Error("Update() did not fall back to GET after null PUT response")
 	}
 	if v.Slug != "vpc-upd-1" {
 		t.Errorf("v.Slug = %q, want %q", v.Slug, "vpc-upd-1")
 	}
 	if gotBody["name"] != "renamed-vpc" {
 		t.Errorf("body[name] = %v, want %q", gotBody["name"], "renamed-vpc")
+	}
+	if gotBody["description"] != "updated description" {
+		t.Errorf("body[description] = %v, want %q", gotBody["description"], "updated description")
 	}
 }
 

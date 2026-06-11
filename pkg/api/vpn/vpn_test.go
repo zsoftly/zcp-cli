@@ -104,19 +104,26 @@ func TestCustomerGatewayCreate(t *testing.T) {
 }
 
 func TestCustomerGatewayUpdate(t *testing.T) {
-	updated := vpn.CustomerGateway{Slug: "cgw-1", Name: "updated-cgw", CIDRList: "172.16.0.0/12"}
+	fullCG := vpn.CustomerGateway{Slug: "cgw-1", Name: "updated-cgw", Gateway: "203.0.113.1", CIDRList: "172.16.0.0/12"}
 
 	var gotBody map[string]interface{}
-	var gotPath string
+	var gotPutPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut {
-			http.Error(w, "expected PUT", http.StatusMethodNotAllowed)
-			return
-		}
-		gotPath = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: updated})
+		switch r.Method {
+		case http.MethodPut:
+			gotPutPath = r.URL.Path
+			json.NewDecoder(r.Body).Decode(&gotBody)
+			// Return metadata envelope (no VPN fields) — Update always falls back to Get.
+			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: vpn.CustomerGateway{Slug: "cgw-1", Name: "updated-cgw"}})
+		case http.MethodGet:
+			if r.URL.Path != "/vpn-customer-gateways/"+fullCG.Slug {
+				t.Errorf("fallback GET path = %q, want %q", r.URL.Path, "/vpn-customer-gateways/"+fullCG.Slug)
+			}
+			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: fullCG})
+		default:
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+		}
 	}))
 	defer srv.Close()
 
@@ -129,11 +136,14 @@ func TestCustomerGatewayUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
-	if gotPath != "/vpn-customer-gateways/cgw-1" {
-		t.Errorf("path = %q, want %q", gotPath, "/vpn-customer-gateways/cgw-1")
+	if gotPutPath != "/vpn-customer-gateways/cgw-1" {
+		t.Errorf("path = %q, want %q", gotPutPath, "/vpn-customer-gateways/cgw-1")
 	}
 	if result.Slug != "cgw-1" {
 		t.Errorf("result.Slug = %q, want %q", result.Slug, "cgw-1")
+	}
+	if result.Gateway != "203.0.113.1" {
+		t.Errorf("result.Gateway = %q, want %q", result.Gateway, "203.0.113.1")
 	}
 	if gotBody["name"] != "updated-cgw" {
 		t.Errorf("body name = %v, want %q", gotBody["name"], "updated-cgw")

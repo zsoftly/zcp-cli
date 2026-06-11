@@ -83,7 +83,7 @@ func runIPList(cmd *cobra.Command, vpcSlug string) error {
 }
 
 func newIPAllocateCmd() *cobra.Command {
-	var vpc, network, plan, billingCycle string
+	var vpc, network, plan, billingCycle, project string
 
 	cmd := &cobra.Command{
 		Use:   "allocate",
@@ -103,6 +103,7 @@ func newIPAllocateCmd() *cobra.Command {
 				Network:      network,
 				Plan:         plan,
 				BillingCycle: billingCycle,
+				Project:      resolveProject(project),
 			})
 		},
 	}
@@ -110,6 +111,7 @@ func newIPAllocateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&network, "network", "", "Network slug")
 	cmd.Flags().StringVar(&plan, "plan", "", "IP plan slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug (required, e.g. hourly, monthly)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug")
 	return cmd
 }
 

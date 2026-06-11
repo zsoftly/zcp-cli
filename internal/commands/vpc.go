@@ -226,10 +226,11 @@ func newVPCUpdateCmd() *cobra.Command {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			return runVPCUpdate(cmd, args[0], vpc.UpdateRequest{
-				Name:        name,
-				Description: description,
-			})
+			req := vpc.UpdateRequest{Name: name}
+			if cmd.Flags().Changed("description") {
+				req.Description = &description
+			}
+			return runVPCUpdate(cmd, args[0], req)
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "New VPC name (required)")
@@ -524,14 +525,13 @@ func runVPCVPNGatewayList(cmd *cobra.Command, vpcSlug string) error {
 		return fmt.Errorf("vpc vpn-gateway list: %w", err)
 	}
 
-	headers := []string{"SLUG", "PUBLIC IP", "VPC SLUG", "STATUS"}
+	headers := []string{"ID", "PUBLIC IP", "VPC ID"}
 	rows := make([][]string, 0, len(gateways))
 	for _, g := range gateways {
 		rows = append(rows, []string{
-			g.Slug,
+			g.ID,
 			g.PublicIP,
-			g.VPCSlug,
-			g.Status,
+			g.VPCID,
 		})
 	}
 	return printer.PrintTable(headers, rows)
@@ -567,11 +567,9 @@ func runVPCVPNGatewayCreate(cmd *cobra.Command, vpcSlug string) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
-		{"Slug", g.Slug},
+		{"ID", g.ID},
 		{"Public IP", g.PublicIP},
-		{"VPC Slug", g.VPCSlug},
-		{"Zone Name", g.ZoneName},
-		{"Status", g.Status},
+		{"VPC ID", g.VPCID},
 	}
 	return printer.PrintTable(headers, rows)
 }

@@ -39,8 +39,8 @@ type CreateRequest struct {
 
 // UpdateRequest holds parameters for updating a VPC.
 type UpdateRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
 }
 
 // NetworkACL represents a network ACL inside a VPC.
@@ -72,12 +72,10 @@ type ACLRule struct {
 
 // VPNGateway represents a VPN gateway attached to a VPC.
 type VPNGateway struct {
-	Slug     string `json:"slug"`
-	PublicIP string `json:"publicIpAddress"`
-	VPCUUID  string `json:"vpcUuid"`
-	VPCSlug  string `json:"vpcSlug"`
-	ZoneName string `json:"zoneName"`
-	Status   string `json:"status"`
+	ID       string `json:"id"`
+	PublicIP string `json:"public_ip"`
+	VPCID    string `json:"vpc_id"`
+	VPCName  string `json:"vpc_name"`
 }
 
 // VPNGatewayCreateRequest holds parameters for creating a VPN gateway.
@@ -151,11 +149,14 @@ func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*
 	if err := s.client.Put(ctx, "/vpcs/"+slug, nil, req, &env); err != nil {
 		return nil, fmt.Errorf("updating VPC %s: %w", slug, err)
 	}
-	var v VPC
-	if err := json.Unmarshal(env.Data, &v); err != nil {
-		return nil, fmt.Errorf("decoding updated VPC: %w", err)
+	// The Update API may return data:null — fall back to GET.
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		var v VPC
+		if err := json.Unmarshal(env.Data, &v); err == nil && v.Slug != "" {
+			return &v, nil
+		}
 	}
-	return &v, nil
+	return s.Get(ctx, slug)
 }
 
 // Delete removes a VPC by slug.
@@ -225,15 +226,35 @@ func (s *Service) ListVPNGateways(ctx context.Context, vpcSlug string) ([]VPNGat
 
 // CreateVPNGateway creates a VPN gateway for a VPC.
 func (s *Service) CreateVPNGateway(ctx context.Context, vpcSlug string) (*VPNGateway, error) {
+	// Best-effort pre-create snapshot. If this fails, existing stays empty and the
+	// diff below treats every post-create gateway as new (acceptable degraded mode).
+	before, _ := s.ListVPNGateways(ctx, vpcSlug)
+	existing := make(map[string]bool, len(before))
+	for _, gw := range before {
+		existing[gw.ID] = true
+	}
+
 	var env apiResponse
 	if err := s.client.Post(ctx, "/vpcs/"+vpcSlug+"/vpn-gateways", VPNGatewayCreateRequest{}, &env); err != nil {
 		return nil, fmt.Errorf("creating VPN gateway for VPC %s: %w", vpcSlug, err)
 	}
+	// The Create API may return data:null — diff pre/post lists to find the new gateway.
 	var gw VPNGateway
-	if err := json.Unmarshal(env.Data, &gw); err != nil {
-		return nil, fmt.Errorf("decoding created VPN gateway: %w", err)
+	if len(env.Data) > 0 && string(env.Data) != "null" {
+		if err := json.Unmarshal(env.Data, &gw); err == nil && gw.ID != "" {
+			return &gw, nil
+		}
 	}
-	return &gw, nil
+	after, err := s.ListVPNGateways(ctx, vpcSlug)
+	if err != nil {
+		return nil, fmt.Errorf("creating VPN gateway for VPC %s: post-create list: %w", vpcSlug, err)
+	}
+	for i := range after {
+		if !existing[after[i].ID] {
+			return &after[i], nil
+		}
+	}
+	return nil, fmt.Errorf("creating VPN gateway for VPC %s: new gateway not found after create", vpcSlug)
 }
 
 // DeleteVPNGateway deletes a VPN gateway from a VPC.

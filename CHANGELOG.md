@@ -5,6 +5,38 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.15] - 2026-06-10
+
+### Fixed
+
+- **`zcp vpc vpn-gateway create` — crash on `data:null` API response** — the create endpoint returns `{"data":null}` instead of the created gateway object; the command now falls back to listing gateways and returning the first one found, exactly matching how the portal behaves
+- **`zcp vpc vpn-gateway list/create` — all fields blank** — `VPNGateway` struct had wrong JSON tags (`slug`, `publicIpAddress`, `vpcUuid`, `vpcSlug`, `zoneName`, `status`); corrected to match actual API response (`id`, `public_ip`, `vpc_id`, `vpc_name`); `zcp vpc vpn-gateway list` now displays `ID`, `PUBLIC IP`, and `VPC ID` correctly
+- **`zcp vpc update` — returns empty fields** — PUT `/vpcs/{slug}` returns `data:null`; the command now falls back to a GET to return the updated VPC state
+- **`zcp network update` — crashes with JSON decode error** — PUT `/networks/{slug}` returns `data:[null]` (an array); the command was attempting to unmarshal an array into a struct, causing a fatal error; now falls back to a GET after any non-usable PUT response
+- **`zcp vpn customer-gateway create/update` — all VPN config fields blank** — `CustomerGateway` struct had wrong JSON tags for three fields: `ipsec_preshared_key` → `ipsecpsk`, `force_encapsulation` → `forceencap`, `dead_peer_detection` → `dpd`; and `SplitConnections` was typed as `bool` but the API returns it as a string; all corrected
+- **`zcp vpn customer-gateway create` — shows empty result** — create API returns a metadata-only response (no VPN config); the command now calls GET `/vpn-customer-gateways/{slug}` after creation and falls back gracefully to the partial slug/name when CloudStack provisioning is still in progress
+- **`zcp vpn customer-gateway update` — all VPN fields blank** — PUT response is a metadata-only envelope (no VPN config fields); the command now always falls back to GET `/vpn-customer-gateways/{slug}` to return the full VPN configuration
+- **`zcp vpn customer-gateway update` — `--cloud-provider`/`--region`/`--project` missing** — the API requires these three fields on every PUT; the update command now accepts and validates `--cloud-provider`, `--region`, and `--project` flags (resolving from env vars as with create)
+- **`zcp vpn user list` — Username column always blank** — `User.UserName` had JSON tag `userName` (camelCase); corrected to `username` to match the API response
+- **`zcp network update --description ""` / `zcp vpc update --description ""` ignored** — `description` field in `UpdateRequest` had `omitempty`; clearing a description sent no field and the API ignored it; `omitempty` removed from both structs
+
+### Added
+
+- **`zcp vpn customer-gateway create/update --ike-dh`** — new flag for IKE Diffie-Hellman group (e.g. `modp2048`); required by the API
+- **`zcp vpn customer-gateway create/update --esp-dh`** — new flag for ESP Diffie-Hellman group
+- **`zcp vpn customer-gateway create/update --esp-pfs`** — new flag for ESP Perfect Forward Secrecy group (e.g. `modp2048`); required by the API
+- **`zcp ip allocate --project`** — new optional flag to assign the IP to a specific project at allocation time
+- **`vpn.CustomerGatewayService.Get(ctx, slug)`** — new service method; fetches a single customer gateway's full VPN config from `GET /vpn-customer-gateways/{slug}`
+- **`network.Service.Get(ctx, slug)`** — new service method; fetches a single network by slug using list-and-filter
+
+### Internal
+
+- `pkg/api/vpc.VPNGateway` — removed `Slug`, `VPCUUID`, `ZoneName`, `Status` fields; renamed/added `ID`, `PublicIP`, `VPCID`, `VPCName` with corrected snake_case JSON tags
+- `pkg/api/vpn.CustomerGatewayRequest` — all JSON tags updated to snake_case; `ForceEncap` → `ForceEncapsulation`, `SplitConnection` → `SplitConnections`, `DPD` → `DeadPeerDetection`; new fields `IKEDH`, `ESPDH`, `ESPPFS` added; `Update()` now always calls `Get()` fallback to return full VPN config
+- `pkg/api/ipaddress.CreateRequest` — added `Project string \`json:"project,omitempty"\``
+
+---
+
 ## [v0.0.14] - 2026-06-10
 
 ### ⚠ Breaking Changes

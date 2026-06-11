@@ -1,4 +1,4 @@
-# ZCP CLI Command Taxonomy (v0.0.6)
+# ZCP CLI Command Taxonomy (v0.0.15)
 
 **CLI name**: `zcp`
 **Base URL**: `https://api.zcp.zsoftly.ca/api`
@@ -131,7 +131,7 @@ zcp
 │
 ├── ip                                 Public IP address operations
 │   ├── list                           List IP addresses (--vpc filter)
-│   ├── allocate                       Allocate a new public IP address
+│   ├── allocate                       Allocate a new public IP address (--plan, --billing-cycle, --vpc, --network, --project)
 │   ├── release                        Release a public IP address (--yes to skip prompt)
 │   ├── static-nat                     Static NAT operations
 │   │   └── enable                     Enable static NAT for an IP
@@ -172,8 +172,8 @@ zcp
 ├── vpn                                VPN operations
 │   ├── customer-gateway               VPN customer gateway operations
 │   │   ├── list                       List VPN customer gateways
-│   │   ├── create                     Add a VPN customer gateway
-│   │   ├── update                     Update a VPN customer gateway
+│   │   ├── create                     Add a VPN customer gateway (--name, --gateway, --cidr, --psk, --ike-policy, --esp-policy, --ike-encryption, --ike-hash, --ike-version, --ike-dh, --esp-encryption, --esp-hash, --esp-dh, --esp-pfs, --cloud-provider, --region, --project)
+│   │   ├── update                     Update a VPN customer gateway (same flags as create, including --cloud-provider, --region, --project)
 │   │   └── delete                     Delete a VPN customer gateway
 │   └── user                           VPN remote-access user operations
 │       ├── list                       List VPN users
@@ -385,7 +385,7 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 
 ## Identifier Conventions
 
-v0.0.6 uses **slug-based identifiers** for most resources. Slugs are human-readable
+v0.0.15 uses **slug-based identifiers** for most resources. Slugs are human-readable
 strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
 | Context         | Flag / Argument                   | Example                                  |
