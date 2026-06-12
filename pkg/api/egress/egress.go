@@ -26,6 +26,7 @@ type EgressRule struct {
 	StartPort string `json:"start_port"`
 	EndPort   string `json:"end_port"`
 	CIDR      string `json:"cidr"`
+	DestCIDR  string `json:"destcidr_list"`
 	ICMPType  string `json:"icmp_type"`
 	ICMPCode  string `json:"icmp_code"`
 	Status    string `json:"status"`
@@ -50,6 +51,7 @@ func (r *EgressRule) UnmarshalJSON(b []byte) error {
 		StartPort json.RawMessage `json:"start_port"`
 		EndPort   json.RawMessage `json:"end_port"`
 		CIDR      string          `json:"cidr"`
+		DestCIDR  string          `json:"destcidr_list"`
 		ICMPType  json.RawMessage `json:"icmp_type"`
 		ICMPCode  json.RawMessage `json:"icmp_code"`
 		Status    string          `json:"status"`
@@ -66,6 +68,7 @@ func (r *EgressRule) UnmarshalJSON(b []byte) error {
 	r.StartPort = flexString(v.StartPort)
 	r.EndPort = flexString(v.EndPort)
 	r.CIDR = v.CIDR
+	r.DestCIDR = v.DestCIDR
 	r.ICMPType = flexString(v.ICMPType)
 	r.ICMPCode = flexString(v.ICMPCode)
 	r.Status = v.Status
@@ -127,15 +130,21 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, e
 	}
 	rules, lerr := s.List(ctx, req.NetworkSlug)
 	if lerr != nil {
-		return &resp.Data, nil // creation succeeded; return what we have
+		return nil, fmt.Errorf("egress rule for network %s was created, but fetching it back failed: %w", req.NetworkSlug, lerr)
 	}
 	for i := range rules {
 		r := &rules[i]
-		if r.Protocol == req.Protocol && r.StartPort == req.StartPort && r.EndPort == req.EndPort {
-			return r, nil
+		if r.Protocol != req.Protocol || r.StartPort != req.StartPort || r.EndPort != req.EndPort {
+			continue
 		}
+		// The API echoes the requested CIDR in destcidr_list; top-level cidr
+		// is the network's source CIDR and must not be compared here.
+		if req.CIDR != "" && r.DestCIDR != req.CIDR {
+			continue
+		}
+		return r, nil
 	}
-	return &resp.Data, nil
+	return nil, fmt.Errorf("egress rule for network %s was created, but is not yet visible in the rule list — check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
 }
 
 // Delete removes an egress rule by ID from the given network.
