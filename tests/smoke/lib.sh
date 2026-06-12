@@ -229,8 +229,8 @@ det_ip_plan() {
 det_storage_cat() { printf '%s' "${ZCP_SMOKE_STORAGE_CAT:-pro-nvme}"; }
 det_billing_cycle() { printf '%s' "${ZCP_SMOKE_BILLING_CYCLE:-hourly}"; }
 
-# det_network_category — slug for `network create --category` (may be empty if
-# the account/region has no categories seeded).
+# det_network_category — slug for the legacy `network create --category` flag
+# (the live API returns no categories; network creation uses det_network_plan).
 det_network_category() {
   zcp network categories -o json 2>/dev/null | _jq_first_slug
 }

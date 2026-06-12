@@ -45,9 +45,9 @@ The API has no DELETE for these resource types. Resources can only be removed vi
 
 #### ACL rule CRUD — exists, segment is `network-acl` (resolved 2026-06-11)
 
-The rule routes live under `/network-acl` (singular), not `/rules` — confirmed from the
-backend route table (`Modules\Vpc NetworkAclController`). A `rules` array embedded in the
-ACL-list create POST is still silently ignored; rules must be added one per request after
+The rule routes live under `/network-acl` (singular), not `/rules` — confirmed against
+the live API and matching the portal's behavior. A `rules` array embedded in the
+ACL-list create POST is silently ignored; rules must be added one per request after
 the list is created.
 
 - [x] `GET /vpcs/{slug}/network-acl-list/{acl_list_id}/network-acl` — list ACL rules (`zcp acl rules`, v0.0.16)

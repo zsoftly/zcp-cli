@@ -65,7 +65,11 @@ If the call succeeds, the credentials are valid.`,
 
 			printer := output.NewPrinter(os.Stdout, output.FormatTable, noColor)
 
-			fmt.Fprintf(os.Stdout, "Validating credentials for profile %q against %s...\n", profile.Name, baseURL)
+			if os.Getenv("ZCP_BEARER_TOKEN") != "" {
+				fmt.Fprintf(os.Stdout, "Validating ZCP_BEARER_TOKEN (overrides profile %q) against %s...\n", profile.Name, baseURL)
+			} else {
+				fmt.Fprintf(os.Stdout, "Validating credentials for profile %q against %s...\n", profile.Name, baseURL)
+			}
 
 			_, err = svc.List(ctx)
 			if err != nil {
