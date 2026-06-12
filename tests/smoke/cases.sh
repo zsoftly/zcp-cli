@@ -146,9 +146,9 @@ fx_sshkey() {
 
 fx_network() {
   [[ -n "$FX_NETWORK" ]] && return 0
-  local name out cat; name="$(rname net)"; cat="$(det_network_category)"
-  [[ -z "$cat" ]] && return 1
-  capture out -- zcp network create --name "$name" --category "$cat" \
+  local name out; name="$(rname net)"
+  capture out -- zcp network create --name "$name" --network-plan "$(det_network_plan)" \
+    --billing-cycle "$(det_billing_cycle)" \
     --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" -o json || return 1
   FX_NETWORK="$(_jq_slug <<<"$out")"
   [[ -z "$FX_NETWORK" ]] && FX_NETWORK="$(api_get "/networks?region=$(det_region)" | jq -r --arg n "$name" '.data[]|select(.name==$n)|.slug' | head -1)"
@@ -255,8 +255,8 @@ lc_affinity() {
 }
 
 lc_network()  {
-  [[ -z "$(det_network_category)" ]] && { _mark_skip "network create (no network category in $(det_region))"; return; }
   local s; fx_network; s="$FX_NETWORK"; _lc_result "network" "$s" \
+    && run_case "network get" -- zcp network get "$s" \
     && run_case "network update" -- zcp network update "$s" --description "smoke $(date -u +%H%M)" ; }
 
 lc_vpc() {
@@ -283,9 +283,8 @@ lc_dns() {
 }
 
 lc_ip()       {
-  [[ -z "$(det_network_category)" ]] && { _mark_skip "ip allocate (needs a network; none creatable in $(det_region))"; return; }
   local s; fx_ip; s="$FX_IP"; _lc_result "ip allocate" "$s" \
-    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '[.[]?,.data[]?]|map(.slug)|index(\$s)' >/dev/null"; }
+    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '(if type==\"array\" then . else (.data//[]) end)|map(.slug)|index(\$s)' >/dev/null"; }
 
 lc_instance() {
   local s; fx_vm; s="$FX_VM"
@@ -319,9 +318,11 @@ lc_firewall() {
 lc_egress() {
   local net out s; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && { _mark_skip "egress (no network fixture)"; return; }
   capture out -- zcp egress create --network "$net" --protocol tcp --cidr "0.0.0.0/0" --start-port 80 --end-port 80 -o json
-  s="$(_jq_slug <<<"$out")"
-  [[ -z "$s" ]] && s="$(zcp egress list --network "$net" -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-  _lc_result "egress rule" "$s" && defer egress "$s"
+  # egress rules have IDs, not slugs; create prints FIELD/VALUE rows
+  s="$(jq -r '[.[]?|select(.field=="ID")|.value|select(.!="")][0] // empty' <<<"$out" 2>/dev/null)"
+  # rule creation is async — give CloudStack a moment before the list fallback
+  [[ -z "$s" ]] && { sleep 5; s="$(zcp egress list --network "$net" -o json 2>/dev/null | jq -r '.[0].id // empty')"; }
+  _lc_result "egress rule" "$s" && defer egress "$s" "$net"
 }
 
 lc_portforward() {
@@ -334,12 +335,21 @@ lc_portforward() {
 }
 
 lc_acl() {
-  local net out s; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && { _mark_skip "acl (no network fixture)"; return; }
-  capture out -- zcp acl create "$net" --name "$(rname acl)" -o json
-  s="$(_jq_slug <<<"$out")"
-  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "acl create → $s"; else
-    # acl may apply directly to the network without returning a slug
-    run_case "acl list" -- zcp acl list "$net"; fi
+  local vpc name rule
+  vpc="$(zcp vpc list -o json 2>/dev/null | jq -r '(.[]//.data[]) | .slug' 2>/dev/null | head -1)"
+  [[ -z "$vpc" || "$vpc" == "null" ]] && { _mark_skip "acl (no VPC available)"; return; }
+  name="$(rname acl)"
+  run_case "acl create $name in $vpc" -- zcp acl create "$vpc" --name "$name" --description "smoke" || return
+  run_case "acl create-rule" -- zcp acl create-rule "$vpc" "$name" --number 1 --protocol tcp \
+    --start-port 443 --end-port 443 --cidr 10.99.1.0/24,10.99.2.0/24
+  run_case "acl rules" -- zcp acl rules "$vpc" "$name"
+  rule="$(zcp acl rules "$vpc" "$name" -o json 2>/dev/null | jq -r '.[0].id // empty')"
+  if [[ -n "$rule" ]]; then
+    run_case "acl update-rule" -- zcp acl update-rule "$vpc" "$name" "$rule" --number 1 --protocol tcp \
+      --start-port 443 --end-port 443 --cidr 10.99.3.0/24
+    run_case "acl delete-rule" -- zcp acl delete-rule "$vpc" "$name" "$rule" --yes
+  fi
+  run_case "acl delete" -- zcp acl delete "$vpc" "$name" --yes
 }
 
 lc_vmsnapshot() {

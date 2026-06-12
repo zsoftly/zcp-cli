@@ -168,7 +168,7 @@ func newProfileDeleteCmd() *cobra.Command {
 			if _, ok := cfg.Profiles[name]; !ok {
 				return fmt.Errorf("profile %q not found", name)
 			}
-			if !force {
+			if !force && !autoApproved(cmd) {
 				answer, _ := prompt(fmt.Sprintf("Delete profile %q? [y/N]: ", name), false)
 				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 					fmt.Fprintln(os.Stdout, "Aborted.")

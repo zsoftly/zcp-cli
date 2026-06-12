@@ -123,3 +123,59 @@ func TestEgressDelete(t *testing.T) {
 		t.Errorf("path = %q, want %q", gotPath, want)
 	}
 }
+
+// TestCreateFallbackMatchesDestCIDR verifies the data:null create fallback
+// matches on destcidr_list (the echoed request CIDR), not the top-level cidr
+// (the network's source CIDR), and maps state from _original.
+func TestCreateFallbackMatchesDestCIDR(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			fmt.Fprint(w, `{"status":"Success","message":"Creating egress firewall rule.","data":null}`)
+			return
+		}
+		fmt.Fprint(w, `{"status":"Success","data":[
+			{"id":"other","protocol":"tcp","start_port":80,"end_port":80,"cidr":"10.0.0.0/24","destcidr_list":"192.168.0.0/16","_original":{"state":"Active"}},
+			{"id":"mine","protocol":"tcp","start_port":80,"end_port":80,"cidr":"10.0.0.0/24","destcidr_list":"0.0.0.0/0","_original":{"state":"Active"}}
+		]}`)
+	}))
+	defer srv.Close()
+
+	svc := egress.NewService(newClient(srv.URL))
+
+	rule, err := svc.Create(context.Background(), egress.CreateRequest{
+		NetworkSlug: "my-net", Protocol: "tcp", StartPort: "80", EndPort: "80", CIDR: "0.0.0.0/0",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if rule.ID != "mine" {
+		t.Errorf("Create() matched rule %q, want %q (must match destcidr_list, not cidr)", rule.ID, "mine")
+	}
+	if rule.Status != "Active" {
+		t.Errorf("rule.Status = %q, want %q (from _original.state)", rule.Status, "Active")
+	}
+}
+
+// TestCreateFallbackNoMatchErrors verifies an explicit error when the created
+// rule is not yet visible, instead of an empty-ID success.
+func TestCreateFallbackNoMatchErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+			return
+		}
+		fmt.Fprint(w, `{"status":"Success","data":[]}`)
+	}))
+	defer srv.Close()
+
+	svc := egress.NewService(newClient(srv.URL))
+
+	_, err := svc.Create(context.Background(), egress.CreateRequest{
+		NetworkSlug: "my-net", Protocol: "tcp", StartPort: "80", EndPort: "80", CIDR: "0.0.0.0/0",
+	})
+	if err == nil {
+		t.Fatal("Create() = nil error, want explicit not-yet-visible error")
+	}
+}

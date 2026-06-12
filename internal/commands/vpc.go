@@ -3,7 +3,9 @@ package commands
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -158,6 +160,15 @@ func newVPCCreateCmd() *cobra.Command {
 			if storageCategory == "" {
 				return fmt.Errorf("--storage-category is required")
 			}
+			// The API stores the network address verbatim (e.g. "10.1.0.1/16"
+			// instead of "10.1.0.0/16") — warn when the given address is not
+			// the canonical network base for the chosen size.
+			if _, ipnet, err := net.ParseCIDR(cidr + "/" + size); err == nil {
+				if base := ipnet.IP.String(); base != cidr {
+					fmt.Fprintf(os.Stderr, "Warning: %s is not the network base for /%s; the VPC CIDR will be recorded as %s/%s (network base: %s).\n",
+						cidr, size, cidr, size, base)
+				}
+			}
 			return runVPCCreate(cmd, vpc.CreateRequest{
 				Name:            name,
 				CloudProvider:   cloudProvider,
@@ -303,22 +314,32 @@ func runVPCDelete(cmd *cobra.Command, slug string, yes bool) error {
 
 	if err := svc.Delete(ctx, slug); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "VPC %q not found — already deleted.\n", slug)
+			fmt.Fprintf(cmd.ErrOrStderr(), "VPC %q not found — already deleted.\n", slug)
 			return nil
 		}
 		return fmt.Errorf("vpc delete: %w", err)
 	}
 
-	// Verify deletion
-	time.Sleep(2 * time.Second)
-	if _, err := svc.Get(ctx, slug); err == nil {
-		fmt.Fprintln(os.Stderr, "WARNING: VPC may not have been deleted (e.g. has active network tiers).")
-		fmt.Fprintln(os.Stderr, "         Delete all network tiers first, then retry.")
-		return fmt.Errorf("vpc %q still exists after delete — check dependencies", slug)
+	// Deletion runs as an async CloudStack job — poll for up to ~30s before
+	// drawing any conclusion, with a fresh short context per check so the
+	// command's own timeout can't cut a poll short and fake a result. Only a
+	// confirmed not-found counts as success; transient transport or server
+	// errors keep polling rather than mislabeling the outcome.
+	for attempt := 0; attempt < 6; attempt++ {
+		time.Sleep(5 * time.Second)
+		pollCtx, pollCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		_, gerr := svc.Get(pollCtx, slug)
+		pollCancel()
+		if errors.Is(gerr, vpc.ErrNotFound) || apierrors.IsResourceNotFound(gerr) {
+			printer.Fprintf("VPC %q deleted.\n", slug)
+			return nil
+		}
 	}
 
-	printer.Fprintf("VPC %q deleted.\n", slug)
-	return nil
+	fmt.Fprintf(cmd.ErrOrStderr(), "VPC %q still exists after 30s — deletion may still be in progress, or it is blocked\n", slug)
+	fmt.Fprintf(cmd.ErrOrStderr(), "by remaining dependencies (network tiers must be deleted first).\n")
+	fmt.Fprintf(cmd.ErrOrStderr(), "Check with: zcp vpc get %s — if it remains Enabled, delete its networks and retry.\n", slug)
+	return fmt.Errorf("vpc delete %q: not confirmed within 30s", slug)
 }
 
 func newVPCRestartCmd() *cobra.Command {
@@ -388,14 +409,13 @@ func runVPCACLList(cmd *cobra.Command, vpcSlug string) error {
 		return fmt.Errorf("vpc acl-list: %w", err)
 	}
 
-	headers := []string{"SLUG", "NAME", "DESCRIPTION", "STATUS"}
+	headers := []string{"ID", "NAME", "DESCRIPTION"}
 	rows := make([][]string, 0, len(acls))
 	for _, a := range acls {
 		rows = append(rows, []string{
-			a.Slug,
+			a.ID,
 			a.Name,
 			a.Description,
-			a.Status,
 		})
 	}
 	return printer.PrintTable(headers, rows)
@@ -444,44 +464,27 @@ func runVPCACLCreate(cmd *cobra.Command, vpcSlug string, req vpc.ACLListCreateRe
 }
 
 func newVPCACLReplaceCmd() *cobra.Command {
-	var networkSlug, aclSlug string
+	var networkSlug, aclRef, vpcSlug string
 
 	cmd := &cobra.Command{
-		Use:     "acl-replace",
-		Short:   "Replace the ACL on a network",
-		Example: `  zcp vpc acl-replace --network en-001001-0018 --acl my-vpc-acl`,
+		Use:   "acl-replace",
+		Short: "Replace the ACL on a network",
+		Example: `  zcp vpc acl-replace --network web-tier --acl 5290f39f-5f56-4ca3-b2b5-05a464a081df
+  zcp vpc acl-replace --network web-tier --acl web-acl --vpc my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
-			if aclSlug == "" {
+			if aclRef == "" {
 				return fmt.Errorf("--acl is required")
 			}
-			return runVPCACLReplace(cmd, networkSlug, aclSlug)
+			return runACLReplace(cmd, networkSlug, aclRef, vpcSlug)
 		},
 	}
 	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug (required)")
-	cmd.Flags().StringVar(&aclSlug, "acl", "", "ACL slug (required)")
+	cmd.Flags().StringVar(&aclRef, "acl", "", "ACL ID, or ACL name when --vpc is given (required)")
+	cmd.Flags().StringVar(&vpcSlug, "vpc", "", "VPC slug, used to resolve an ACL name to its ID")
 	return cmd
-}
-
-func runVPCACLReplace(cmd *cobra.Command, networkSlug, aclSlug string) error {
-	_, client, printer, err := buildClientAndPrinter(cmd)
-	if err != nil {
-		return err
-	}
-
-	svc := vpc.NewService(client)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-	defer cancel()
-
-	req := map[string]string{"aclSlug": aclSlug}
-	if err := svc.ReplaceNetworkACL(ctx, networkSlug, req); err != nil {
-		return fmt.Errorf("vpc acl-replace: %w", err)
-	}
-
-	printer.Fprintf("ACL replaced on network %q.\n", networkSlug)
-	return nil
 }
 
 // ─── VPC VPN Gateway subcommands ─────────────────────────────────────────────

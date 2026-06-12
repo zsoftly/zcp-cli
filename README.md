@@ -303,14 +303,17 @@ zcp vm-snapshot revert <slug>
 ```bash
 # Networks
 zcp network list
-zcp network categories
-zcp network create --name my-net --category <slug> --cloud-provider zcp --region yow-1 --project my-project
+zcp network get <slug>                           # provider state: CIDR, state, VPC, attached ACL
+zcp plan network                                 # network plan slugs for --network-plan
+zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly \
+  --cloud-provider zcp --region yow-1 --project my-project
 zcp network update <slug> --name "New Name"
 zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
 
-# VPC tier networks
-zcp network create --name public-tier --cloud-provider zcp --region yow-1 --project my-project \
-  --vpc <vpc-slug> --type Vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --acl-id <acl-id>
+# VPC subnets (tiers) — optionally attach a custom ACL at creation
+zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
+  --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
+  --cloud-provider zcp --region yow-1 --project my-project
 
 # Public IP addresses
 zcp ip list
@@ -353,9 +356,17 @@ zcp vpc create \
   --billing-cycle hourly \
   --storage-category nvme
 
-# Network ACL lists
+# Network ACL lists and rules
 zcp acl list <vpc-slug>
-zcp acl create <vpc-slug> --name my-acl --description "Allow web traffic"
+zcp acl create <vpc-slug> --name web-acl --description "Web tier ACL"
+zcp acl rules <vpc-slug> web-acl
+zcp acl create-rule <vpc-slug> web-acl --number 1 --protocol tcp \
+  --start-port 443 --end-port 443 --cidr 0.0.0.0/0          # --cidr takes comma-separated lists
+zcp acl update-rule <vpc-slug> web-acl <rule-id> --number 1 --protocol tcp \
+  --start-port 443 --end-port 443 --cidr 10.0.1.0/24,10.0.2.0/24
+zcp acl delete-rule <vpc-slug> web-acl <rule-id>
+zcp acl replace --network <network-slug> --acl web-acl --vpc <vpc-slug>
+zcp acl delete <vpc-slug> web-acl
 
 # Public load balancers
 zcp loadbalancer list

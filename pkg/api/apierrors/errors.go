@@ -41,6 +41,11 @@ func IsForbidden(err error) bool {
 	return errors.As(err, &ae) && ae.StatusCode == 403
 }
 
+// providedInvalidRE matches the CMP's route-model-binding miss message,
+// which is exactly "The provided <resource> is invalid." — anchored to the
+// full message so unrelated 403s containing similar words don't match.
+var providedInvalidRE = regexp.MustCompile(`(?i)^the provided [a-z0-9 _-]+ is invalid\.?$`)
+
 // transientRoutingRE matches the CMP's known routing-layer error phrase.
 // Expected format: "The route <path> could not be found."
 var transientRoutingRE = regexp.MustCompile(`(?i)\bthe route\b.*could not be found`)
@@ -61,7 +66,9 @@ func IsTransientRoutingError(err error) bool {
 
 // IsResourceNotFound returns true if the error indicates the resource does not exist.
 // It handles the CMP API's inconsistent use of 403 for not-found responses
-// (e.g. "kubernetes-cluster::k8s.not-found") in addition to the standard 404.
+// in addition to the standard 404: "kubernetes-cluster::k8s.not-found" style
+// translation keys, and route-model-binding misses phrased as
+// "The provided <resource> is invalid."
 func IsResourceNotFound(err error) bool {
 	var ae *APIError
 	if !errors.As(err, &ae) {
@@ -70,7 +77,13 @@ func IsResourceNotFound(err error) bool {
 	if ae.StatusCode == 404 {
 		return true
 	}
-	return ae.StatusCode == 403 && strings.Contains(strings.ToLower(ae.Message), "not-found")
+	if ae.StatusCode != 403 {
+		return false
+	}
+	if strings.Contains(strings.ToLower(ae.Message), "not-found") {
+		return true
+	}
+	return providedInvalidRE.MatchString(strings.TrimSpace(ae.Message))
 }
 
 // apiErrorResponse mirrors the STKCNSL error envelope:

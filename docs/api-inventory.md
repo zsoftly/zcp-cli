@@ -103,16 +103,18 @@
 
 ### Networks
 
-| #   | Path                                          | Method | Summary                     | CLI Group |
-| --- | --------------------------------------------- | ------ | --------------------------- | --------- |
-| 59  | `/networks`                                   | GET    | List networks               | `network` |
-| 60  | `/networks`                                   | POST   | Create network              | `network` |
-| 61  | `/networks/{SLUG}`                            | PUT    | Update network              | `network` |
-| 62  | `/networks/categories`                        | GET    | List network categories     | `network` |
-| 63  | `/networks/{SLUG}/egress-firewall-rules`      | GET    | List egress firewall rules  | `network` |
-| 64  | `/networks/{SLUG}/egress-firewall-rules`      | POST   | Create egress firewall rule | `network` |
-| 65  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | PUT    | Update egress firewall rule | `network` |
-| 66  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | DELETE | Delete egress firewall rule | `network` |
+| #   | Path                                          | Method | Summary                                                                                    | CLI Group |
+| --- | --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------ | --------- |
+| 59  | `/networks`                                   | GET    | List networks                                                                              | `network` |
+| 60  | `/networks`                                   | POST   | Create network (isolated/L2 need `network_plan`+`type`; VPC subnets need `vpc`+`type=Vpc`) | `network` |
+| 61  | `/networks/{SLUG}`                            | GET    | Get network detail (CloudStack `meta`: cidr, state, vpc_id, acl_name)                      | `network` |
+| 61b | `/networks/{SLUG}`                            | PUT    | Update network                                                                             | `network` |
+| 61c | `/networks/{SLUG}/replace-acl-list`           | POST   | Replace network ACL (body: `acl_id`)                                                       | `acl`     |
+| 62  | `/networks/categories`                        | GET    | List network categories                                                                    | `network` |
+| 63  | `/networks/{SLUG}/egress-firewall-rules`      | GET    | List egress firewall rules                                                                 | `network` |
+| 64  | `/networks/{SLUG}/egress-firewall-rules`      | POST   | Create egress firewall rule                                                                | `network` |
+| 65  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | PUT    | Update egress firewall rule                                                                | `network` |
+| 66  | `/networks/{SLUG}/egress-firewall-rules/{ID}` | DELETE | Delete egress firewall rule                                                                | `network` |
 
 ### Virtual Routers
 
@@ -124,20 +126,25 @@
 
 ### VPC
 
-| #   | Path                                 | Method | Summary            | CLI Group |
-| --- | ------------------------------------ | ------ | ------------------ | --------- |
-| 70  | `/vpcs`                              | GET    | List VPCs          | `vpc`     |
-| 71  | `/vpcs`                              | POST   | Create VPC         | `vpc`     |
-| 72  | `/vpcs/{SLUG}`                       | PUT    | Update VPC         | `vpc`     |
-| 73  | `/vpcs/{SLUG}/restart`               | GET    | Restart VPC        | `vpc`     |
-| 74  | `/vpcs/{SLUG}/network-acl-list`      | GET    | List network ACLs  | `vpc`     |
-| 75  | `/vpcs/{SLUG}/network-acl-list`      | POST   | Create network ACL | `vpc`     |
-| 76  | `/vpcs/{SLUG}/network-acl-list/{ID}` | PUT    | Update network ACL | `vpc`     |
-| 77  | `/vpcs/{SLUG}/network-acl-list/{ID}` | DELETE | Delete network ACL | `vpc`     |
-| 78  | `/vpcs/{SLUG}/vpn-gateways`          | GET    | List VPN gateways  | `vpc`     |
-| 79  | `/vpcs/{SLUG}/vpn-gateways`          | POST   | Create VPN gateway | `vpc`     |
-| 80  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | PUT    | Update VPN gateway | `vpc`     |
-| 81  | `/vpcs/{SLUG}/vpn-gateways/{ID}`     | DELETE | Delete VPN gateway | `vpc`     |
+| #   | Path                                                    | Method | Summary                                                                                                                                              | CLI Group |
+| --- | ------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| 70  | `/vpcs`                                                 | GET    | List VPCs                                                                                                                                            | `vpc`     |
+| 71  | `/vpcs`                                                 | POST   | Create VPC                                                                                                                                           | `vpc`     |
+| 72  | `/vpcs/{SLUG}`                                          | PUT    | Update VPC                                                                                                                                           | `vpc`     |
+| 73  | `/vpcs/{SLUG}/restart`                                  | GET    | Restart VPC                                                                                                                                          | `vpc`     |
+| 74  | `/vpcs/{SLUG}/network-acl-list`                         | GET    | List network ACLs                                                                                                                                    | `vpc`     |
+| 75  | `/vpcs/{SLUG}/network-acl-list`                         | POST   | Create network ACL list (an embedded `rules` array is silently ignored — add rules separately)                                                       | `vpc`     |
+| 76  | `/vpcs/{SLUG}/network-acl-list/{ID}`                    | GET    | Get network ACL                                                                                                                                      | `vpc`     |
+| 77  | `/vpcs/{SLUG}/network-acl-list/{ID}`                    | DELETE | Delete network ACL                                                                                                                                   | `vpc`     |
+| 77a | `/vpcs/{SLUG}/network-acl-list/{ID}/network-acl`        | GET    | List ACL rules                                                                                                                                       | `acl`     |
+| 77b | `/vpcs/{SLUG}/network-acl-list/{ID}/network-acl`        | POST   | Create ACL rule (`number`, `protocol`, `cidr_list`, `action`, `traffic_type`, `start_port`/`end_port` for tcp/udp, `icmp_type`/`icmp_code` for icmp) | `acl`     |
+| 77c | `/vpcs/{SLUG}/network-acl-list/{ID}/network-acl/{RULE}` | PUT    | Update ACL rule                                                                                                                                      | `acl`     |
+| 77d | `/vpcs/{SLUG}/network-acl-list/{ID}/network-acl/{RULE}` | DELETE | Delete ACL rule                                                                                                                                      | `acl`     |
+| 77e | `/vpcs/{SLUG}/networks`                                 | GET    | List networks (subnets) in a VPC                                                                                                                     | `vpc`     |
+| 78  | `/vpcs/{SLUG}/vpn-gateways`                             | GET    | List VPN gateways                                                                                                                                    | `vpc`     |
+| 79  | `/vpcs/{SLUG}/vpn-gateways`                             | POST   | Create VPN gateway                                                                                                                                   | `vpc`     |
+| 80  | `/vpcs/{SLUG}/vpn-gateways/{ID}`                        | PUT    | Update VPN gateway                                                                                                                                   | `vpc`     |
+| 81  | `/vpcs/{SLUG}/vpn-gateways/{ID}`                        | DELETE | Delete VPN gateway                                                                                                                                   | `vpc`     |
 
 ### IP Addresses
 

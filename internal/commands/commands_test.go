@@ -452,3 +452,154 @@ func TestNoShorthandCollisions(t *testing.T) {
 	}
 	walk(root)
 }
+
+// ─── network create: VPC subnet vs isolated validation ──────────────────────
+
+func networkCreateExec(t *testing.T, args ...string) error {
+	t.Helper()
+	root := newTestRoot()
+	root.AddCommand(NewNetworkCmd())
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs(append([]string{"network", "create"}, args...))
+	return root.Execute()
+}
+
+func TestNetworkCreateVPCRequiresBillingCycle(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc",
+		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error when --billing-cycle is missing for a VPC subnet")
+	}
+	if !strings.Contains(err.Error(), "--billing-cycle is required") {
+		t.Errorf("error = %q, want '--billing-cycle is required'", err)
+	}
+}
+
+func TestNetworkCreateVPCRequiresGatewayNetmask(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc", "--billing-cycle", "hourly",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error when --gateway/--netmask are missing for a VPC subnet")
+	}
+	if !strings.Contains(err.Error(), "--gateway and --netmask are required") {
+		t.Errorf("error = %q, want '--gateway and --netmask are required'", err)
+	}
+}
+
+func TestNetworkCreateVPCRejectsConflictingType(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc", "--type", "Isolated",
+		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error when --type conflicts with --vpc")
+	}
+	if !strings.Contains(err.Error(), "--type cannot be combined with --vpc") {
+		t.Errorf("error = %q, want '--type cannot be combined with --vpc'", err)
+	}
+}
+
+func TestNetworkCreateVPCRejectsNetworkPlan(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc", "--network-plan", "pnet-yul",
+		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error when --network-plan is combined with --vpc")
+	}
+	if !strings.Contains(err.Error(), "--network-plan cannot be combined with --vpc") {
+		t.Errorf("error = %q, want '--network-plan cannot be combined with --vpc'", err)
+	}
+}
+
+func TestNetworkCreateIsolatedRequiresNetworkPlan(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "my-net",
+		"--cloud-provider", "nimbo", "--region", "yow-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error when --network-plan is missing for an isolated network")
+	}
+	if !strings.Contains(err.Error(), "--network-plan is required") {
+		t.Errorf("error = %q, want '--network-plan is required'", err)
+	}
+}
+
+func TestNetworkCreateRejectsUnknownType(t *testing.T) {
+	err := networkCreateExec(t,
+		"--name", "my-net", "--type", "Shared", "--network-plan", "inet-yow",
+		"--cloud-provider", "nimbo", "--region", "yow-1", "--project", "default")
+	if err == nil {
+		t.Fatal("expected error for unknown --type")
+	}
+	if !strings.Contains(err.Error(), "--type must be Isolated or L2") {
+		t.Errorf("error = %q, want '--type must be Isolated or L2'", err)
+	}
+}
+
+// ─── acl create-rule validation ──────────────────────────────────────────────
+
+func aclCreateRuleExec(t *testing.T, args ...string) error {
+	t.Helper()
+	root := newTestRoot()
+	root.AddCommand(NewACLCmd())
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs(append([]string{"acl", "create-rule", "my-vpc", "web-acl"}, args...))
+	return root.Execute()
+}
+
+func TestACLCreateRuleTCPRequiresPorts(t *testing.T) {
+	err := aclCreateRuleExec(t, "--protocol", "tcp", "--cidr", "0.0.0.0/0")
+	if err == nil {
+		t.Fatal("expected error when tcp rule has no ports")
+	}
+	if !strings.Contains(err.Error(), "--start-port and --end-port are required") {
+		t.Errorf("error = %q, want port requirement message", err)
+	}
+}
+
+func TestACLCreateRuleRejectsBadProtocol(t *testing.T) {
+	err := aclCreateRuleExec(t, "--protocol", "gre", "--cidr", "0.0.0.0/0")
+	if err == nil {
+		t.Fatal("expected error for unknown protocol")
+	}
+	if !strings.Contains(err.Error(), "--protocol must be") {
+		t.Errorf("error = %q, want protocol validation message", err)
+	}
+}
+
+func TestACLCreateRuleRequiresCIDR(t *testing.T) {
+	err := aclCreateRuleExec(t, "--protocol", "all")
+	if err == nil {
+		t.Fatal("expected error when --cidr is missing")
+	}
+	if !strings.Contains(err.Error(), "--cidr is required") {
+		t.Errorf("error = %q, want '--cidr is required'", err)
+	}
+}
+
+func TestACLCreateRuleRejectsInvalidPortValues(t *testing.T) {
+	err := aclCreateRuleExec(t, "--protocol", "tcp", "--cidr", "0.0.0.0/0",
+		"--start-port", "0", "--end-port", "70000")
+	if err == nil {
+		t.Fatal("expected error for out-of-range ports")
+	}
+	if !strings.Contains(err.Error(), "ports must be between 1 and 65535") {
+		t.Errorf("error = %q, want port range message", err)
+	}
+}
+
+func TestACLCreateRuleRejectsInvertedPortRange(t *testing.T) {
+	err := aclCreateRuleExec(t, "--protocol", "tcp", "--cidr", "0.0.0.0/0",
+		"--start-port", "443", "--end-port", "80")
+	if err == nil {
+		t.Fatal("expected error when end-port < start-port")
+	}
+	if !strings.Contains(err.Error(), "must not be lower than") {
+		t.Errorf("error = %q, want inverted-range message", err)
+	}
+}

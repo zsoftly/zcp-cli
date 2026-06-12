@@ -3,6 +3,7 @@ package vpc_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -124,7 +125,9 @@ func TestVPCCreate(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(apiEnvelope{
 			Status: "ok",
@@ -201,7 +204,9 @@ func TestVPCUpdate(t *testing.T) {
 		switch r.Method {
 		case http.MethodPut:
 			gotPUTPath = r.URL.Path
-			json.NewDecoder(r.Body).Decode(&gotBody)
+			if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+				t.Errorf("decoding request body: %v", err)
+			}
 			// Return data:null to exercise the GET fallback in Update().
 			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: nil})
 		case http.MethodGet:
@@ -269,5 +274,67 @@ func TestVPCDelete(t *testing.T) {
 	}
 	if gotPath != "/vpcs/vpc-del-1" {
 		t.Errorf("path = %q, want %q", gotPath, "/vpcs/vpc-del-1")
+	}
+}
+
+// TestVPCGetDetailEndpoint verifies Get uses GET /vpcs/{slug} and maps the
+// CloudStack meta block (state, cidr, zone) that the list endpoint omits.
+func TestVPCGetDetailEndpoint(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/vpcs/my-vpc" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","data":{
+			"slug":"my-vpc","name":"my-vpc","description":"prod",
+			"meta":{"state":"Enabled","cidr":"10.30.0.0/16","zone_name":"yul-1","network_domain":"cs1cloud.internal"}
+		}}`)
+	}))
+	defer srv.Close()
+
+	svc := vpc.NewService(newClient(srv.URL))
+
+	v, err := svc.Get(context.Background(), "my-vpc")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if v.CIDR != "10.30.0.0/16" {
+		t.Errorf("v.CIDR = %q, want %q", v.CIDR, "10.30.0.0/16")
+	}
+	if v.Status != "Enabled" {
+		t.Errorf("v.Status = %q, want %q", v.Status, "Enabled")
+	}
+	if v.ZoneName != "yul-1" {
+		t.Errorf("v.ZoneName = %q, want %q", v.ZoneName, "yul-1")
+	}
+	if v.DomainName != "cs1cloud.internal" {
+		t.Errorf("v.DomainName = %q, want %q", v.DomainName, "cs1cloud.internal")
+	}
+}
+
+// TestVPCGetFallsBackToList verifies Get still works when the detail
+// endpoint is unavailable (older deployments).
+func TestVPCGetFallsBackToList(t *testing.T) {
+	target := makeVPC("target-vpc", "target-vpc")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/vpcs" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(apiEnvelope{Status: "ok", Data: []vpc.VPC{target}})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	svc := vpc.NewService(newClient(srv.URL))
+
+	v, err := svc.Get(context.Background(), "target-vpc")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if v.Slug != "target-vpc" {
+		t.Errorf("v.Slug = %q, want %q", v.Slug, "target-vpc")
 	}
 }
