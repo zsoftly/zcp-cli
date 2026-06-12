@@ -172,7 +172,10 @@ func (s *Service) Resolve(ctx context.Context, vpcSlug, nameOrID string) (string
 		return "", err
 	}
 	for _, a := range acls {
-		if a.ID == nameOrID || a.Name == nameOrID {
+		if a.ID == "" {
+			continue // a match without an ID is unusable for acl_id requests
+		}
+		if a.ID == nameOrID || a.Name == nameOrID || a.Slug == nameOrID {
 			return a.ID, nil
 		}
 	}

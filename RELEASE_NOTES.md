@@ -13,7 +13,7 @@ in the YUL region with per-tier ACLs as the release verification).
 
 ### VPC subnet (tier) creation — `zcp network create --vpc`
 
-```
+```bash
 zcp network create --name web-tier --vpc my-vpc --acl web-acl \
   --gateway 10.30.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
   --cloud-provider nimbo --region yul-1 --project default
@@ -45,7 +45,7 @@ confirmation prompt.
 
 ### ACL rule management — `zcp acl rules` / `create-rule` / `update-rule` / `delete-rule`
 
-```
+```bash
 zcp acl create-rule my-vpc web-acl --number 1 --protocol tcp \
   --start-port 443 --end-port 443 --cidr 0.0.0.0/0 --action allow --traffic-type ingress
 ```

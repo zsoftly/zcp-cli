@@ -12,7 +12,9 @@ package egress
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -27,6 +29,50 @@ type EgressRule struct {
 	ICMPType  string `json:"icmp_type"`
 	ICMPCode  string `json:"icmp_code"`
 	Status    string `json:"status"`
+}
+
+// flexString trims quotes from a raw JSON scalar — the live API returns ports
+// and ICMP fields as numbers (80) while older deployments use strings ("80").
+func flexString(raw json.RawMessage) string {
+	v := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	if v == "null" {
+		return ""
+	}
+	return v
+}
+
+// UnmarshalJSON tolerates number-or-string port/ICMP fields and pulls the
+// rule state from the provider's _original block (the top level has none).
+func (r *EgressRule) UnmarshalJSON(b []byte) error {
+	type raw struct {
+		ID        string          `json:"id"`
+		Protocol  string          `json:"protocol"`
+		StartPort json.RawMessage `json:"start_port"`
+		EndPort   json.RawMessage `json:"end_port"`
+		CIDR      string          `json:"cidr"`
+		ICMPType  json.RawMessage `json:"icmp_type"`
+		ICMPCode  json.RawMessage `json:"icmp_code"`
+		Status    string          `json:"status"`
+		Original  struct {
+			State string `json:"state"`
+		} `json:"_original"`
+	}
+	var v raw
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	r.ID = v.ID
+	r.Protocol = v.Protocol
+	r.StartPort = flexString(v.StartPort)
+	r.EndPort = flexString(v.EndPort)
+	r.CIDR = v.CIDR
+	r.ICMPType = flexString(v.ICMPType)
+	r.ICMPCode = flexString(v.ICMPCode)
+	r.Status = v.Status
+	if r.Status == "" {
+		r.Status = v.Original.State
+	}
+	return nil
 }
 
 // CreateRequest holds parameters for creating an egress rule.
@@ -69,11 +115,25 @@ func (s *Service) List(ctx context.Context, networkSlug string) ([]EgressRule, e
 	return resp.Data, nil
 }
 
-// Create adds a new egress rule to a network.
+// Create adds a new egress rule to a network. The create endpoint returns
+// data:null — fall back to the list and return the rule matching the request.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, error) {
 	var resp singleEgressRuleResponse
 	if err := s.client.Post(ctx, "/networks/"+req.NetworkSlug+"/egress-firewall-rules", req, &resp); err != nil {
 		return nil, fmt.Errorf("creating egress rule for network %s: %w", req.NetworkSlug, err)
+	}
+	if resp.Data.ID != "" {
+		return &resp.Data, nil
+	}
+	rules, lerr := s.List(ctx, req.NetworkSlug)
+	if lerr != nil {
+		return &resp.Data, nil // creation succeeded; return what we have
+	}
+	for i := range rules {
+		r := &rules[i]
+		if r.Protocol == req.Protocol && r.StartPort == req.StartPort && r.EndPort == req.EndPort {
+			return r, nil
+		}
 	}
 	return &resp.Data, nil
 }

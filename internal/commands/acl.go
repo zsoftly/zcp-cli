@@ -241,7 +241,7 @@ func newACLRulesCmd() *cobra.Command {
 			headers := []string{"ID", "NUMBER", "ACTION", "TRAFFIC", "PROTOCOL", "PORTS", "CIDR", "STATE"}
 			rows := make([][]string, 0, len(rules))
 			for _, r := range rules {
-				ports := ""
+				ports := "-"
 				if r.StartPort != "" {
 					ports = r.StartPort + "-" + r.EndPort
 				}

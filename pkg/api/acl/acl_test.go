@@ -275,3 +275,29 @@ func TestUpdateRulePathAndBody(t *testing.T) {
 		t.Errorf("body[cidr_list] = %v, want the full multi-CIDR list", gotBody["cidr_list"])
 	}
 }
+
+// TestResolveSkipsEmptyID verifies a name match without a usable ID is not
+// returned, and that the legacy slug field works as an alias.
+func TestResolveSkipsEmptyID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","data":[
+			{"id":"","name":"ghost-acl","description":"no id"},
+			{"id":"uuid-1","slug":"legacy-slug","name":"web-acl","description":"ok"}
+		]}`)
+	}))
+	defer srv.Close()
+
+	svc := acl.NewService(newClient(srv.URL))
+
+	if _, err := svc.Resolve(context.Background(), "my-vpc", "ghost-acl"); err == nil {
+		t.Error("Resolve(ghost-acl) = nil error, want not-found for an ACL with no ID")
+	}
+	id, err := svc.Resolve(context.Background(), "my-vpc", "legacy-slug")
+	if err != nil {
+		t.Fatalf("Resolve(legacy-slug) error = %v", err)
+	}
+	if id != "uuid-1" {
+		t.Errorf("Resolve(legacy-slug) = %q, want %q", id, "uuid-1")
+	}
+}

@@ -107,10 +107,15 @@ history by placing the export in a locked-down file that your shell rc sources:
 
 ```bash
 mkdir -p ~/.secrets && chmod 700 ~/.secrets
-printf 'export ZCP_BEARER_TOKEN=%q\n' '<your-token>' > ~/.secrets/zcp.zsh
+read -rs ZCP_TOKEN'?Paste ZCP token: '          # read from stdin — never lands in shell history
+printf 'export ZCP_BEARER_TOKEN=%q\n' "$ZCP_TOKEN" > ~/.secrets/zcp.zsh && unset ZCP_TOKEN
 chmod 600 ~/.secrets/zcp.zsh
 echo '[ -f ~/.secrets/zcp.zsh ] && source ~/.secrets/zcp.zsh' >> ~/.zshrc
 ```
+
+(Equivalently, create `~/.secrets/zcp.zsh` in your editor with the single line
+`export ZCP_BEARER_TOKEN='<your-token>'`.) Avoid typing the token directly into
+a command — anything on the command line is recorded in shell history.
 
 The quoting matters: ZCP tokens contain a `|`, which an unquoted `export` line
 treats as a shell pipe when sourced. `printf %q` (or single quotes) handles it.

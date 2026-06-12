@@ -283,9 +283,8 @@ lc_dns() {
 }
 
 lc_ip()       {
-  [[ -z "$(det_network_category)" ]] && { _mark_skip "ip allocate (needs a network; none creatable in $(det_region))"; return; }
   local s; fx_ip; s="$FX_IP"; _lc_result "ip allocate" "$s" \
-    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '[.[]?,.data[]?]|map(.slug)|index(\$s)' >/dev/null"; }
+    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '(if type==\"array\" then . else (.data//[]) end)|map(.slug)|index(\$s)' >/dev/null"; }
 
 lc_instance() {
   local s; fx_vm; s="$FX_VM"
@@ -319,9 +318,11 @@ lc_firewall() {
 lc_egress() {
   local net out s; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && { _mark_skip "egress (no network fixture)"; return; }
   capture out -- zcp egress create --network "$net" --protocol tcp --cidr "0.0.0.0/0" --start-port 80 --end-port 80 -o json
-  s="$(_jq_slug <<<"$out")"
-  [[ -z "$s" ]] && s="$(zcp egress list --network "$net" -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-  _lc_result "egress rule" "$s" && defer egress "$s"
+  # egress rules have IDs, not slugs; create prints FIELD/VALUE rows
+  s="$(jq -r '[.[]?|select(.field=="ID")|.value|select(.!="")][0] // empty' <<<"$out" 2>/dev/null)"
+  # rule creation is async — give CloudStack a moment before the list fallback
+  [[ -z "$s" ]] && { sleep 5; s="$(zcp egress list --network "$net" -o json 2>/dev/null | jq -r '.[0].id // empty')"; }
+  _lc_result "egress rule" "$s" && defer egress "$s" "$net"
 }
 
 lc_portforward() {

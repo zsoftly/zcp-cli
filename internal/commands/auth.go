@@ -65,9 +65,12 @@ If the call succeeds, the credentials are valid.`,
 
 			printer := output.NewPrinter(os.Stdout, output.FormatTable, noColor)
 
-			if os.Getenv("ZCP_BEARER_TOKEN") != "" {
+			switch {
+			case os.Getenv("ZCP_BEARER_TOKEN") != "" && profile.Name != "":
 				fmt.Fprintf(os.Stdout, "Validating ZCP_BEARER_TOKEN (overrides profile %q) against %s...\n", profile.Name, baseURL)
-			} else {
+			case os.Getenv("ZCP_BEARER_TOKEN") != "":
+				fmt.Fprintf(os.Stdout, "Validating ZCP_BEARER_TOKEN against %s...\n", baseURL)
+			default:
 				fmt.Fprintf(os.Stdout, "Validating credentials for profile %q against %s...\n", profile.Name, baseURL)
 			}
 

@@ -115,7 +115,7 @@ destroy_one() {
     vpc)            zcp vpc delete "$slug" -y               >/dev/null 2>&1 ;;
     dns-record)     zcp dns record-delete "$slug" --domain "$extra" -y >/dev/null 2>&1 ;;
     firewall)       zcp firewall delete "$slug" -y         >/dev/null 2>&1 ;;
-    egress)         zcp egress delete "$slug" -y           >/dev/null 2>&1 ;;
+    egress)         zcp egress delete "$slug" --network "$extra" -y >/dev/null 2>&1 ;;
     portforward)    zcp portforward delete "$slug" -y      >/dev/null 2>&1 ;;
     vm-snapshot)    zcp vm-snapshot delete "$slug" -y      >/dev/null 2>&1 ;;
     object-storage) zcp object-storage delete "$slug" -y   >/dev/null 2>&1 ;;
@@ -247,8 +247,9 @@ det_network_plan() {
 # three shapes, never erroring on the wrong one.
 _jq_first_slug() { jq -r 'if type=="array" then (.[0].slug? // empty)
                           else (.slug? // .data?.slug? // (.data? | if type=="array" then .[0].slug? else empty end) // empty) end' 2>/dev/null; }
-# _jq_slug — slug from a create response (object, or {data:{slug}}, or array[0]).
-_jq_slug() { jq -r '(.slug? // .data?.slug? // (if type=="array" then .[0].slug? else empty end)) // empty' 2>/dev/null; }
+# _jq_slug — slug from a create response (object, {data:{slug}}, array[0], or
+# the CLI's FIELD/VALUE table rendered as JSON).
+_jq_slug() { jq -r '(.slug? // .data?.slug? // (if type=="array" then (.[0].slug? // ([.[]?|select(.field?=="Slug")|.value][0])) else empty end)) // empty' 2>/dev/null; }
 
 # ─── misc ────────────────────────────────────────────────────────────────────
 require_jq() { command -v jq >/dev/null 2>&1 || { say "${C_RED}jq is required for the smoke suite${C_RST}"; exit 2; }; }
