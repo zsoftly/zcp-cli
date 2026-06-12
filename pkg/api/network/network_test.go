@@ -88,7 +88,9 @@ func TestNetworkCreate(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "Success",
@@ -130,7 +132,9 @@ func TestNetworkUpdate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotMethod = r.Method
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "Success",
@@ -237,7 +241,9 @@ func TestCreateEgressRule(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
 		gotMethod = r.Method
-		json.NewDecoder(r.Body).Decode(&gotBody)
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "Success",
@@ -419,5 +425,136 @@ func TestDeleteEgressRule(t *testing.T) {
 	want := fmt.Sprintf("/networks/my-network/egress-firewall-rules/%s", "42")
 	if gotPath != want {
 		t.Errorf("path = %q, want %q", gotPath, want)
+	}
+}
+
+// TestNetworkCreateVPCSubnet verifies the POST body for a VPC subnet (tier):
+// the API requires type "Vpc" (exact case) plus the vpc slug, billing cycle,
+// gateway, and netmask — and no network_plan.
+func TestNetworkCreateVPCSubnet(t *testing.T) {
+	created := makeNetwork("web-tier", "web-tier")
+
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   created,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+
+	_, err := svc.Create(context.Background(), network.CreateRequest{
+		Name:          "web-tier",
+		CloudProvider: "nimbo",
+		Region:        "yul-1",
+		Project:       "default",
+		VPC:           "my-vpc",
+		BillingCycle:  "hourly",
+		Type:          "Vpc",
+		Gateway:       "10.30.1.1",
+		Netmask:       "255.255.255.0",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if gotBody["vpc"] != "my-vpc" {
+		t.Errorf("body[vpc] = %v, want %q", gotBody["vpc"], "my-vpc")
+	}
+	if gotBody["type"] != "Vpc" {
+		t.Errorf("body[type] = %v, want %q (exact case is required by the API)", gotBody["type"], "Vpc")
+	}
+	if gotBody["billing_cycle"] != "hourly" {
+		t.Errorf("body[billing_cycle] = %v, want %q", gotBody["billing_cycle"], "hourly")
+	}
+	if _, present := gotBody["network_plan"]; present {
+		t.Errorf("body[network_plan] = %v, want omitted for VPC subnets", gotBody["network_plan"])
+	}
+	if _, present := gotBody["category_slug"]; present {
+		t.Errorf("body[category_slug] = %v, want omitted when empty", gotBody["category_slug"])
+	}
+}
+
+// TestNetworkCreateIsolatedSendsPlan verifies network_plan and type are sent
+// for isolated networks.
+func TestNetworkCreateIsolatedSendsPlan(t *testing.T) {
+	created := makeNetwork("my-net", "my-net")
+
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   created,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+
+	_, err := svc.Create(context.Background(), network.CreateRequest{
+		Name:          "my-net",
+		CloudProvider: "nimbo",
+		Region:        "yow-1",
+		Project:       "default",
+		Type:          "Isolated",
+		NetworkPlan:   "inet-yow",
+		BillingCycle:  "hourly",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if gotBody["network_plan"] != "inet-yow" {
+		t.Errorf("body[network_plan] = %v, want %q", gotBody["network_plan"], "inet-yow")
+	}
+	if gotBody["type"] != "Isolated" {
+		t.Errorf("body[type] = %v, want %q", gotBody["type"], "Isolated")
+	}
+}
+
+// TestNetworkGetDetail verifies GET /networks/{slug} parsing, including the
+// CloudStack meta block that holds CIDR, state, and VPC membership.
+func TestNetworkGetDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks/web-tier" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","data":{
+			"id":"a1","slug":"web-tier","name":"web-tier","network_id":"cs-uuid",
+			"meta":{"cidr":"10.30.1.0/24","netmask":"255.255.255.0","type":"Isolated",
+				"state":"Allocated","vpc_id":"vpc-uuid","acl_name":"default_allow","zone_name":"yul-1"}
+		}}`)
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+
+	d, err := svc.GetDetail(context.Background(), "web-tier")
+	if err != nil {
+		t.Fatalf("GetDetail() error = %v", err)
+	}
+	if d.Meta.CIDR != "10.30.1.0/24" {
+		t.Errorf("Meta.CIDR = %q, want %q", d.Meta.CIDR, "10.30.1.0/24")
+	}
+	if d.Meta.VPCID != "vpc-uuid" {
+		t.Errorf("Meta.VPCID = %q, want %q", d.Meta.VPCID, "vpc-uuid")
+	}
+	if d.Meta.State != "Allocated" {
+		t.Errorf("Meta.State = %q, want %q", d.Meta.State, "Allocated")
+	}
+	if d.Meta.ACLName != "default_allow" {
+		t.Errorf("Meta.ACLName = %q, want %q", d.Meta.ACLName, "default_allow")
 	}
 }

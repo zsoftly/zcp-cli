@@ -1,4 +1,4 @@
-# ZCP CLI Command Taxonomy (v0.0.15)
+# ZCP CLI Command Taxonomy (v0.0.16)
 
 **CLI name**: `zcp`
 **Base URL**: `https://api.zcp.zsoftly.ca/api`
@@ -102,11 +102,12 @@ zcp
 │   ├── delete                         Delete a VM snapshot
 │   └── revert                         Revert an instance to a VM snapshot
 │
-├── network                            Isolated network operations
+├── network                            Network operations (isolated, L2, VPC subnets)
 │   ├── list                           List networks
-│   ├── create                         Create a network
+│   ├── get                            Get a network with provider state (CIDR, state, VPC, ACL)
+│   ├── create                         Create a network (--network-plan for isolated/L2; --vpc [--acl] for VPC subnets)
 │   ├── update                         Update a network
-│   ├── categories                     List network categories
+│   ├── categories                     List network categories (live API returns empty; use plan network)
 │   └── delete                         Delete a network (releases its SOURCE-NAT IP; --yes to skip prompt)
 │
 ├── vpc                                VPC operations
@@ -116,18 +117,23 @@ zcp
 │   ├── update                         Update VPC name/description
 │   ├── delete                         Delete a VPC
 │   ├── restart                        Restart a VPC
-│   ├── acl-list                       List ACL rules for a VPC
+│   ├── acl-list                       List network ACL lists for a VPC (rules: zcp acl rules)
 │   ├── acl-create                     Create a network ACL list in a VPC
-│   ├── acl-replace                    Replace the ACL on a VPC network
+│   ├── acl-replace                    Replace the ACL on a VPC network (--acl ID, or name with --vpc)
 │   └── vpn-gateway                    VPN gateway operations within a VPC
 │       ├── list                       List VPN gateways
 │       ├── create                     Create a VPN gateway
 │       └── delete                     Delete a VPN gateway
 │
 ├── acl                                Network ACL operations
-│   ├── list                           List network ACLs
-│   ├── create-rule                    Create an ACL rule
-│   └── replace                        Replace the ACL on a network
+│   ├── list                           List network ACLs (ID, name, description)
+│   ├── create                         Create an ACL list in a VPC
+│   ├── rules                          List the rules inside an ACL
+│   ├── create-rule                    Add a rule to an ACL (--protocol, --cidr, --start/end-port, --action, --traffic-type)
+│   ├── update-rule                    Update a rule in place (all fields re-sent; rule ID preserved)
+│   ├── delete-rule                    Delete a rule from an ACL
+│   ├── replace                        Replace the ACL on a network (--acl ID, or name with --vpc)
+│   └── delete                         Delete an ACL list from a VPC
 │
 ├── ip                                 Public IP address operations
 │   ├── list                           List IP addresses (--vpc filter)
@@ -307,7 +313,8 @@ zcp
 │   ├── vm-snapshot                    List VM Snapshot plans
 │   ├── template                       List My Template plans
 │   ├── iso                            List ISO plans
-│   └── backup                         List Backup plans
+│   ├── backup                         List Backup plans
+│   └── network                        List Network plans (slugs for network create --network-plan)
 │
 ├── store                              Store and checkout
 │   ├── list                           List store items (--sort, --page, --limit)
@@ -385,21 +392,23 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 
 ## Identifier Conventions
 
-v0.0.15 uses **slug-based identifiers** for most resources. Slugs are human-readable
+v0.0.16 uses **slug-based identifiers** for most resources. Slugs are human-readable
 strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
-| Context         | Flag / Argument                   | Example                                  |
-| --------------- | --------------------------------- | ---------------------------------------- |
-| VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`             |
-| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234` |
-| DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`             |
-| Project         | `--project`                       | `--project my-project`                   |
-| Region          | `--region`                        | `--region yow-1`                         |
-| VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`               |
-| IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`      |
-| Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`         |
+| Context         | Flag / Argument                   | Example                                                                   |
+| --------------- | --------------------------------- | ------------------------------------------------------------------------- |
+| VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`                                              |
+| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234`                                  |
+| DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`                                              |
+| Project         | `--project`                       | `--project my-project`                                                    |
+| Region          | `--region`                        | `--region yow-1`                                                          |
+| VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`             |
+| Network ACL     | name or ID                        | `zcp acl rules my-vpc web-acl` (names resolved to IDs); rules are ID-only |
+| IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`                                       |
+| Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`                                          |
 
-All commands use slug-based identifiers.
+All commands use slug-based identifiers, except network ACLs and ACL rules, which the
+API addresses by ID (UUID) — ACL names are resolved automatically where accepted.
 
 ---
 

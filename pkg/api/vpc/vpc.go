@@ -4,11 +4,17 @@ package vpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
+
+// ErrNotFound is returned by Get when no VPC matches the slug. Callers can
+// distinguish a confirmed missing VPC from transport or server errors with
+// errors.Is(err, ErrNotFound).
+var ErrNotFound = errors.New("VPC not found")
 
 // VPC represents a ZCP Virtual Private Cloud.
 type VPC struct {
@@ -43,8 +49,10 @@ type UpdateRequest struct {
 	Description *string `json:"description,omitempty"`
 }
 
-// NetworkACL represents a network ACL inside a VPC.
+// NetworkACL represents a network ACL inside a VPC. The live API returns
+// id, name, and description; slug/status are kept for older deployments.
 type NetworkACL struct {
+	ID          string `json:"id"`
 	Slug        string `json:"slug"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -116,8 +124,40 @@ func (s *Service) List(ctx context.Context, zoneSlug string) ([]VPC, error) {
 	return vpcs, nil
 }
 
-// Get returns a single VPC by slug.
+// vpcDetail is the GET /vpcs/{slug} response shape. The provider-side state
+// (CIDR, state, zone) lives under "meta", which is the raw CloudStack view;
+// the list endpoint does not include it.
+type vpcDetail struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Meta        struct {
+		CIDR          string `json:"cidr"`
+		State         string `json:"state"`
+		ZoneName      string `json:"zone_name"`
+		NetworkDomain string `json:"network_domain"`
+	} `json:"meta"`
+}
+
+// Get returns a single VPC by slug from GET /vpcs/{slug}, including its
+// CIDR, state, and zone. Falls back to filtering the list endpoint when the
+// detail response cannot be decoded.
 func (s *Service) Get(ctx context.Context, slug string) (*VPC, error) {
+	var env apiResponse
+	if err := s.client.Get(ctx, "/vpcs/"+url.PathEscape(slug), nil, &env); err == nil {
+		var d vpcDetail
+		if jerr := json.Unmarshal(env.Data, &d); jerr == nil && d.Slug != "" {
+			return &VPC{
+				Slug:        d.Slug,
+				Name:        d.Name,
+				Description: d.Description,
+				Status:      d.Meta.State,
+				CIDR:        d.Meta.CIDR,
+				ZoneName:    d.Meta.ZoneName,
+				DomainName:  d.Meta.NetworkDomain,
+			}, nil
+		}
+	}
 	vpcs, err := s.List(ctx, "")
 	if err != nil {
 		return nil, err
@@ -127,7 +167,7 @@ func (s *Service) Get(ctx context.Context, slug string) (*VPC, error) {
 			return &vpcs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("VPC %q not found", slug)
+	return nil, fmt.Errorf("VPC %q: %w", slug, ErrNotFound)
 }
 
 // Create provisions a new VPC.
@@ -139,6 +179,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*VPC, error) {
 	var v VPC
 	if err := json.Unmarshal(env.Data, &v); err != nil {
 		return nil, fmt.Errorf("decoding created VPC: %w", err)
+	}
+	// The create response omits provider-side state (CIDR, status, zone) —
+	// fetch the detail view, keeping the create result if it isn't ready yet.
+	if v.Slug != "" && (v.CIDR == "" || v.Status == "") {
+		if full, err := s.Get(ctx, v.Slug); err == nil {
+			return full, nil
+		}
 	}
 	return &v, nil
 }

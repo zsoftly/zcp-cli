@@ -10,23 +10,25 @@ import (
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
-// Network represents a ZCP isolated network.
+// Network represents a ZCP network (isolated or VPC subnet).
 type Network struct {
-	ID          string `json:"id"`
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	Status      bool   `json:"status"`
-	NetworkType string `json:"type"`
-	Gateway     string `json:"gateway"`
-	CIDR        string `json:"cidr"`
-	Netmask     string `json:"netmask"`
-	DNS1        string `json:"dns1"`
-	DNS2        string `json:"dns2"`
-	ZoneSlug    string `json:"zone_slug"`
-	ZoneName    string `json:"zone_name"`
-	Category    string `json:"category"`
-	Description string `json:"description"`
-	IsDefault   bool   `json:"is_default"`
+	ID           string `json:"id"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	Status       bool   `json:"status"`
+	NetworkType  string `json:"type"`
+	Gateway      string `json:"gateway"`
+	CIDR         string `json:"cidr"`
+	Netmask      string `json:"netmask"`
+	DNS1         string `json:"dns1"`
+	DNS2         string `json:"dns2"`
+	ZoneSlug     string `json:"zone_slug"`
+	ZoneName     string `json:"zone_name"`
+	Category     string `json:"category"`
+	Description  string `json:"description"`
+	IsDefault    bool   `json:"is_default"`
+	VPC          string `json:"vpc"`
+	BillingCycle string `json:"billing_cycle"`
 }
 
 // UnmarshalJSON provides backward-compatible decoding for Network.
@@ -50,7 +52,9 @@ func (n *Network) UnmarshalJSON(b []byte) error {
 		ZoneName       string          `json:"zone_name"`
 		Category       string          `json:"category"`
 		Description    string          `json:"description"`
-		IsDefault      bool            `json:"is_default"`
+		IsDefault      json.RawMessage `json:"is_default"`
+		VPC            string          `json:"vpc"`
+		BillingCycle   string          `json:"billing_cycle"`
 	}
 	var raw networkRaw
 	if err := json.Unmarshal(b, &raw); err != nil {
@@ -68,7 +72,14 @@ func (n *Network) UnmarshalJSON(b []byte) error {
 	n.ZoneName = raw.ZoneName
 	n.Category = raw.Category
 	n.Description = raw.Description
-	n.IsDefault = raw.IsDefault
+	n.VPC = raw.VPC
+	n.BillingCycle = raw.BillingCycle
+
+	// The create endpoint returns is_default as 0/1; list returns true/false.
+	if len(raw.IsDefault) > 0 {
+		d := strings.Trim(string(raw.IsDefault), `"`)
+		n.IsDefault = d == "true" || d == "1"
+	}
 
 	if len(raw.Status) > 0 {
 		s := strings.Trim(string(raw.Status), `"`)
@@ -111,7 +122,7 @@ type EgressRule struct {
 // CreateRequest holds parameters for creating a network.
 type CreateRequest struct {
 	Name          string `json:"name"`
-	CategorySlug  string `json:"category_slug"`
+	CategorySlug  string `json:"category_slug,omitempty"`
 	ZoneSlug      string `json:"zone_slug,omitempty"`
 	Gateway       string `json:"gateway,omitempty"`
 	Netmask       string `json:"netmask,omitempty"`
@@ -119,6 +130,30 @@ type CreateRequest struct {
 	CloudProvider string `json:"cloud_provider"`
 	Region        string `json:"region"`
 	Project       string `json:"project"`
+	VPC           string `json:"vpc,omitempty"`
+	BillingCycle  string `json:"billing_cycle,omitempty"`
+	Type          string `json:"type,omitempty"`
+	NetworkPlan   string `json:"network_plan,omitempty"`
+}
+
+// Detail holds the provider-side state of a network as returned by
+// GET /networks/{slug}. The interesting fields live under "meta", which is
+// the raw CloudStack network view.
+type Detail struct {
+	ID        string `json:"id"`
+	Slug      string `json:"slug"`
+	Name      string `json:"name"`
+	NetworkID string `json:"network_id"`
+	Meta      struct {
+		CIDR     string `json:"cidr"`
+		Netmask  string `json:"netmask"`
+		Gateway  string `json:"gateway"`
+		Type     string `json:"type"`
+		State    string `json:"state"`
+		VPCID    string `json:"vpc_id"`
+		ACLName  string `json:"acl_name"`
+		ZoneName string `json:"zone_name"`
+	} `json:"meta"`
 }
 
 // UpdateRequest holds parameters for updating a network.
@@ -208,6 +243,23 @@ func (s *Service) Get(ctx context.Context, slug string) (*Network, error) {
 		}
 	}
 	return nil, fmt.Errorf("network %q not found", slug)
+}
+
+// GetDetail returns the provider-side detail of a network from
+// GET /networks/{slug}, including its CIDR, state, and VPC membership.
+func (s *Service) GetDetail(ctx context.Context, slug string) (*Detail, error) {
+	type detailResponse struct {
+		Status string `json:"status"`
+		Data   Detail `json:"data"`
+	}
+	var resp detailResponse
+	if err := s.client.Get(ctx, "/networks/"+slug, nil, &resp); err != nil {
+		return nil, fmt.Errorf("getting network %s: %w", slug, err)
+	}
+	if resp.Data.Slug == "" {
+		return nil, fmt.Errorf("network %q not found", slug)
+	}
+	return &resp.Data, nil
 }
 
 // Update modifies a network's mutable attributes.

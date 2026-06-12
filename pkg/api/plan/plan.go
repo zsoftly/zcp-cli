@@ -63,6 +63,7 @@ const (
 	ServiceMyTemplate    ServiceType = "My Template"
 	ServiceISO           ServiceType = "ISO"
 	ServiceBackups       ServiceType = "Backups"
+	ServiceNetwork       ServiceType = "Network"
 )
 
 // Attribute holds the resource attributes embedded in a plan.
@@ -136,6 +137,7 @@ type Plan struct {
 	MonthlyPrice      float64         `json:"monthly_price"`
 	Prices            []Price         `json:"prices"`
 	StorageCategoryID string          `json:"storage_category_id"`
+	NetworkType       string          `json:"network_type"`
 	CreatedAt         string          `json:"created_at"`
 	UpdatedAt         string          `json:"updated_at"`
 }
