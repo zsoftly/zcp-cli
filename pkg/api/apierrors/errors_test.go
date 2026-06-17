@@ -211,3 +211,27 @@ func TestIsTransientRoutingError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsResourceNotFoundProvidedInvalid(t *testing.T) {
+	cases := []struct {
+		status int
+		msg    string
+		want   bool
+	}{
+		// Route-model-binding miss: the API's 403 phrasing for a missing resource.
+		{403, "The provided VPC is invalid.", true},
+		{403, "The provided network is invalid.", true},
+		// Validation errors use "selected", not "provided" — must NOT match.
+		{403, "The selected vpc is invalid.", false},
+		{422, "The provided VPC is invalid.", false},
+		{403, "Something went wrong. Please try again later.", false},
+		// Anchored match: phrase embedded in a longer message must NOT match.
+		{403, "Error: The provided VPC is invalid. Try again.", false},
+	}
+	for _, c := range cases {
+		err := &apierrors.APIError{StatusCode: c.status, Message: c.msg}
+		if got := apierrors.IsResourceNotFound(err); got != c.want {
+			t.Errorf("IsResourceNotFound(%d, %q) = %v, want %v", c.status, c.msg, got, c.want)
+		}
+	}
+}

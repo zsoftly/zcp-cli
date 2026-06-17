@@ -5,6 +5,46 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.16] - 2026-06-11
+
+All fixes below were confirmed against the live API (YUL region) before release.
+
+### Added
+
+- **`zcp network create --vpc <vpc-slug>`** — create a network as a VPC subnet (tier). Sends `type=Vpc` (the exact value the API requires); `--gateway`, `--netmask`, and `--billing-cycle` are validated as required. Previously VPC tiers could not be created from the CLI at all.
+- **`zcp network create --acl <name-or-id>`** — attach a custom network ACL immediately after creating a VPC subnet (the API has no attach-at-create parameter, so the CLI creates the network and then calls the replace-ACL endpoint). ACL names are resolved to IDs automatically.
+- **`zcp network create --network-plan <slug>`** — network plan for isolated/L2 networks (required by the live API; the old `--category` flow never worked because the categories endpoint returns an empty list). `--type Isolated|L2` selects the network type.
+- **`zcp network get <slug>`** — new command showing provider-side state from `GET /networks/{slug}`: CIDR, gateway, netmask, state, VPC ID, and attached ACL. Previously there was no way to see a network's CIDR/state/VPC membership from the CLI.
+- **`zcp plan network`** — new command listing Network plans (pNet/iNet/l2Net) with their slugs and network types; these slugs are the values for `--network-plan`.
+- **`zcp acl delete <vpc-slug> <acl-name-or-id>`** — new command; the platform now supports `DELETE /vpcs/{slug}/network-acl-list/{id}`.
+- **`zcp acl rules` / `zcp acl create-rule` / `zcp acl update-rule` / `zcp acl delete-rule`** — full ACL rule management. `update-rule` replaces a rule in place (the rule ID is preserved) and `--cidr` accepts comma-separated lists (e.g. `10.30.1.0/24,10.30.2.0/24`). The rule endpoints live under `/vpcs/{vpc}/network-acl-list/{acl_list_id}/network-acl` (note the singular segment — `/rules`-style paths do not exist). Rules are added one per request after the ACL list exists; `create-rule` validates the live API contract (ports required for tcp/udp, ICMP type/code for icmp, allow/deny, ingress/egress) and resolves ACL names to IDs.
+- **`zcp acl replace --vpc`** / **`zcp vpc acl-replace --vpc`** — optional flag to resolve an ACL _name_ to its ID; without it, `--acl` must be the ACL ID.
+- **`pkg/api/network.Service.GetDetail`**, **`pkg/api/acl.Service.Resolve`**, **`pkg/api/acl.Service.Delete`** — new service methods.
+
+### Fixed
+
+- **`zcp acl replace` / `zcp vpc acl-replace` — always failed with 403** — the request body used `aclSlug`; the live API requires `acl_id` with the ACL's ID. Both commands now send the correct field and accept names via `--vpc` resolution.
+- **Silent detached-network trap** — sending `type=Isolated` together with `vpc` passes API validation but silently ignores the VPC and creates a standalone isolated network. The CLI now always sends `type=Vpc` when `--vpc` is set and rejects a conflicting `--type`.
+- **`zcp vpc get` — CIDR/Status/Zone always blank** — the command filtered the list endpoint, which omits provider state. It now calls `GET /vpcs/{slug}` and maps the CloudStack `meta` block (state, cidr, zone_name, network_domain), falling back to the list for older deployments.
+- **`zcp vpc create` — blank CIDR/Status in output** — the create response omits provider state; the command now fetches the detail view after creation.
+- **`zcp vpc create` — network-address quirk** — the API records the network address verbatim (e.g. `10.30.0.1/16` instead of `10.30.0.0/16`); the CLI now prints a warning when the given address is not the canonical network base.
+- **`zcp plan router` (and lb/k8s/ip/vm-snapshot/template/iso/backup/storage) — missing SLUG column** — `vpc create --plan` requires a plan slug but no plan table showed one. All plan tables now include SLUG.
+- **`zcp network create` — crash decoding create response** — the create endpoint returns `is_default` as `0/1` while the list endpoint returns `true/false`; the decoder now accepts both.
+- **`zcp acl list` / `zcp vpc acl-list` — SLUG/STATUS columns always blank** — the live API returns `id`, `name`, `description`; tables now show ID (needed for `acl replace`/`acl delete`).
+- **`zcp vpc delete` — false "may not have been deleted" warning** — deletion is an async CloudStack job, but the command checked existence once after 2s and reported failure (with a misleading "delete all network tiers first" hint) while the job was still completing. It now polls for up to 30s, reports success when the VPC is gone, and otherwise says the deletion may still be in progress or blocked, with the exact command to check.
+- **`zcp network update --description` — failed with a 500** — the API requires `name` on every PUT; a description-only update now re-sends the current name automatically.
+- **Cryptic errors when deleting already-deleted resources** — the API reports missing resources as `403 "The provided <resource> is invalid."`; this is now recognized as not-found, so `vpc delete`, `acl delete`, and `acl delete-rule` print "already deleted" and exit 0 instead of surfacing a raw 403 (validation errors, which use "selected", are unaffected).
+- **`zcp profile delete` — ignored `-y`/`--auto-approve`** — the global auto-approve flag now skips the confirmation prompt (it previously only honored its own `--yes`).
+- **`zcp network create` — required `--category`** — the flag is now optional (legacy); the live API ignores it and requires `network_plan` + `type` instead.
+
+### Known platform limitations (not CLI bugs)
+
+- An embedded `rules` array on ACL-list create is silently ignored — create the list first, then add rules one per request (`zcp acl create-rule`).
+- VPCs are limited to 3 subnets (CloudStack `vpc.max.networks`); the 4th create returns a generic 403.
+- VPC `description` is not persisted by the API.
+
+---
+
 ## [v0.0.15] - 2026-06-10
 
 ### Fixed

@@ -80,8 +80,9 @@ ZCP_SMOKE_BILLING_CYCLE     billing cycle slug           (default: hourly)
 ZCP_SMOKE_LIFECYCLE=1       same as passing --lifecycle
 ```
 
-> **Slug gotcha:** the CLI `plan` list views show a human _name_ (`ca2.s`), but
-> create endpoints want the _slug_ (`ca2s`), and templates/plans are
+> **Slug gotcha:** create endpoints want the _slug_, not the display name
+> (`ca2s`, not `ca2.s`). Since v0.0.16 every `zcp plan <svc>` table includes a
+> SLUG column. Templates/plans are also
 > region-scoped (the YUL Ubuntu template is `ubuntu-2404-lts-1`, not
 > `ubuntu-2404-lts`). The suite resolves these from the API automatically; the
 > env overrides above are the escape hatch when auto-detection picks wrong.

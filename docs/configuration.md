@@ -100,6 +100,32 @@ export ZCP_OUTPUT=json
 zcp volume create --name my-disk --plan 50-gb-2 --billing-cycle hourly
 ```
 
+### Local development: a sourced secrets file
+
+For day-to-day terminal use, keep the token out of `.zshrc`/`.bashrc` and shell
+history by placing the export in a locked-down file that your shell rc sources:
+
+```bash
+mkdir -p ~/.secrets && chmod 700 ~/.secrets
+read -rs ZCP_TOKEN'?Paste ZCP token: '          # read from stdin — never lands in shell history
+printf 'export ZCP_BEARER_TOKEN=%q\n' "$ZCP_TOKEN" > ~/.secrets/zcp.zsh && unset ZCP_TOKEN
+chmod 600 ~/.secrets/zcp.zsh
+echo '[ -f ~/.secrets/zcp.zsh ] && source ~/.secrets/zcp.zsh' >> ~/.zshrc
+```
+
+(Equivalently, create `~/.secrets/zcp.zsh` in your editor with the single line
+`export ZCP_BEARER_TOKEN='<your-token>'`.) Avoid typing the token directly into
+a command — anything on the command line is recorded in shell history.
+
+The quoting matters: ZCP tokens contain a `|`, which an unquoted `export` line
+treats as a shell pipe when sourced. `printf %q` (or single quotes) handles it.
+Verify with an interactive subshell — `zsh -ic 'zcp auth validate'` — since
+non-interactive `zsh -c` does not read `~/.zshrc`. When the env override is
+active, `zcp auth validate` reports it explicitly
+("Validating ZCP_BEARER_TOKEN (overrides profile …)"). To rotate, edit the
+secrets file and open a new shell; to remove, delete the file (the rc line
+checks existence first).
+
 ---
 
 ## Multiple Profiles

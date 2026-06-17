@@ -32,7 +32,53 @@ with their resource attributes and pricing.`,
 	cmd.AddCommand(newPlanTemplateCmd())
 	cmd.AddCommand(newPlanISOCmd())
 	cmd.AddCommand(newPlanBackupCmd())
+	cmd.AddCommand(newPlanNetworkCmd())
 	return cmd
+}
+
+// ---------------------------------------------------------------------------
+// Network
+// ---------------------------------------------------------------------------
+
+func newPlanNetworkCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "network",
+		Short: "List Network plans",
+		Long: `List Network plans (isolated and L2 network offerings).
+
+The plan slug is the value for "zcp network create --network-plan".`,
+		Example: `  zcp plan network
+  zcp plan network --output json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := plan.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			plans, err := svc.List(ctx, plan.ServiceNetwork)
+			if err != nil {
+				return fmt.Errorf("plan network: %w", err)
+			}
+
+			headers := []string{"ID", "SLUG", "NAME", "NETWORK TYPE", "HOURLY", "MONTHLY", "ACTIVE"}
+			rows := make([][]string, 0, len(plans))
+			for _, p := range plans {
+				rows = append(rows, []string{
+					p.ID,
+					p.Slug,
+					p.Name,
+					p.NetworkType,
+					formatPrice(p.HourlyPrice),
+					formatPrice(p.MonthlyPrice),
+					strconv.FormatBool(p.Status),
+				})
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -103,11 +149,12 @@ func newPlanRouterCmd() *cobra.Command {
 				return fmt.Errorf("plan router: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "CPU", "MEMORY", "NETWORK RATE", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "CPU", "MEMORY", "NETWORK RATE", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.Attribute.CPU.String(),
 					p.Attribute.FormattedMemory,
@@ -154,7 +201,7 @@ func newPlanStorageCmd() *cobra.Command {
 				}
 			}
 
-			headers := []string{"NAME", "STORAGE CATEGORY", "CEPH POOL", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"SLUG", "NAME", "STORAGE CATEGORY", "CEPH POOL", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				slug := catSlug[p.StorageCategoryID]
@@ -162,6 +209,7 @@ func newPlanStorageCmd() *cobra.Command {
 					slug = p.StorageCategoryID
 				}
 				rows = append(rows, []string{
+					p.Slug,
 					p.Name,
 					slug,
 					p.Attribute.StorageTags,
@@ -199,11 +247,12 @@ func newPlanLBCmd() *cobra.Command {
 				return fmt.Errorf("plan lb: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.ParsedTag(),
 					formatPrice(p.HourlyPrice),
@@ -241,11 +290,12 @@ func newPlanK8sCmd() *cobra.Command {
 				return fmt.Errorf("plan kubernetes: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "CPU", "MEMORY", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "CPU", "MEMORY", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.Attribute.FormattedCPU.String(),
 					p.Attribute.FormattedMemory,
@@ -283,11 +333,12 @@ func newPlanIPCmd() *cobra.Command {
 				return fmt.Errorf("plan ip: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.ParsedTag(),
 					formatPrice(p.HourlyPrice),
@@ -324,11 +375,12 @@ func newPlanVMSnapshotCmd() *cobra.Command {
 				return fmt.Errorf("plan vm-snapshot: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					formatPrice(p.HourlyPrice),
 					formatPrice(p.MonthlyPrice),
@@ -364,11 +416,12 @@ func newPlanTemplateCmd() *cobra.Command {
 				return fmt.Errorf("plan template: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.ParsedTag(),
 					formatPrice(p.HourlyPrice),
@@ -405,11 +458,12 @@ func newPlanISOCmd() *cobra.Command {
 				return fmt.Errorf("plan iso: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.ParsedTag(),
 					formatPrice(p.HourlyPrice),
@@ -446,11 +500,12 @@ func newPlanBackupCmd() *cobra.Command {
 				return fmt.Errorf("plan backup: %w", err)
 			}
 
-			headers := []string{"ID", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
+					p.Slug,
 					p.Name,
 					p.ParsedTag(),
 					formatPrice(p.HourlyPrice),
