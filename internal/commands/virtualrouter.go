@@ -76,8 +76,8 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a virtual router",
-		Example: `  zcp virtual-router create --name my-router --network en-001001-0018 --cloud-provider nimbo --region yow-1 --project my-project
-  zcp virtual-router create --name my-router --network en-001001-0018 --plan vr-plan-1 --cloud-provider nimbo --region yow-1 --project my-project`,
+		Example: `  zcp virtual-router create --name my-router --network en-001001-0018 --region yow-1 --project my-project
+  zcp virtual-router create --name my-router --network en-001001-0018 --plan vr-plan-1 --region yow-1 --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -85,9 +85,9 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 			if networkSlug == "" {
 				return fmt.Errorf("--network is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -150,7 +150,7 @@ func newVirtualRouterRebootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reboot <slug>",
 		Short: "Reboot a virtual router",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp virtual-router reboot my-router
   zcp vr reboot my-router --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

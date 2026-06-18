@@ -271,11 +271,17 @@ lc_vpc() {
 }
 
 lc_dns() {
-  local dom out s; dom="smoke-${SMOKE_RID}.example.com"
-  capture out -- zcp dns create --name "$dom" --cloud-provider "$(det_cp)" \
-    --project "$(det_project)" --region "$(det_region)" -o json
+  local dom out s dnsr; dom="smoke-${SMOKE_RID}.example.com"
+  # DNS is served by the dedicated "dns" provider, whose region is "default"
+  # (verified live: cloud_provider=dns + region=default creates the domain,
+  # whereas the compute provider/region returns HTTP 500 "Target class
+  # [dns.nimbo] does not exist"). det_cp/det_region resolve the *compute*
+  # provider, so they must not be used here.
+  dnsr="$(api_get '/regions' | jq -r '.data[]|select((.cloud_provider.slug//"")=="dns")|.slug' | head -1)"
+  capture out -- zcp dns create --name "$dom" --cloud-provider dns \
+    --project "$(det_project)" --region "${dnsr:-default}" -o json
   s="$(_jq_slug <<<"$out")"
-  [[ -z "$s" ]] && s="$(api_get '/dns-domains' | jq -r --arg n "$dom" '.data[]?|select(.name==$n)|.slug' | head -1)"
+  [[ -z "$s" ]] && s="$(api_get '/dns/domains' | jq -r --arg n "$dom" '.data[]?|select(.name==$n)|.slug' | head -1)"
   if _lc_result "dns domain" "$s"; then
     defer dns "$s"
     run_case "dns record-create" -- zcp dns record-create --domain "$s" --name www --type A --content "1.2.3.4"
@@ -421,6 +427,43 @@ lc_objectstorage() {
     || { _mark_fail "object-storage object put"; rm -f "$tmpfile"; return; }
   _mark_pass "object-storage object put"
 
+  # S3-direct operations (CLI-only — these talk straight to the Ceph RADOS Gateway
+  # over the S3 protocol and are NOT exposed via the ZCP REST API or Web UI).
+  # Non-fatal: a failure is recorded but the round-trip continues so cleanup runs.
+  capture out -- zcp object-storage object stat "$s" "$bkt" smoke-test.txt \
+    && _mark_pass "object-storage object stat" || _mark_fail "object-storage object stat"
+
+  capture out -- zcp object-storage object copy "$s" "$bkt" smoke-test.txt "$bkt" smoke-copy.txt \
+    && _mark_pass "object-storage object copy" || _mark_fail "object-storage object copy"
+  capture out -- zcp object-storage object delete "$s" "$bkt" smoke-copy.txt -y >/dev/null 2>&1 || true
+
+  capture out -- zcp object-storage object url "$s" "$bkt" smoke-test.txt --expires 10m \
+    && _mark_pass "object-storage object url (presign)" || _mark_fail "object-storage object url (presign)"
+
+  capture out -- zcp object-storage bucket versioning enable "$s" "$bkt" \
+    && _mark_pass "object-storage bucket versioning enable" || _mark_fail "object-storage bucket versioning enable"
+  capture out -- zcp object-storage bucket versioning status "$s" "$bkt" \
+    && _mark_pass "object-storage bucket versioning status" || _mark_fail "object-storage bucket versioning status"
+
+  capture out -- zcp object-storage bucket tag set "$s" "$bkt" --tag smoke=true \
+    && _mark_pass "object-storage bucket tag set" || _mark_fail "object-storage bucket tag set"
+  capture out -- zcp object-storage bucket tag delete "$s" "$bkt" >/dev/null 2>&1 || true
+
+  capture out -- zcp object-storage bucket encryption enable "$s" "$bkt" \
+    && _mark_pass "object-storage bucket encryption enable" || _mark_fail "object-storage bucket encryption enable"
+  capture out -- zcp object-storage bucket encryption disable "$s" "$bkt" >/dev/null 2>&1 || true
+
+  capture out -- zcp object-storage bucket lifecycle expire "$s" "$bkt" --days 30 \
+    && _mark_pass "object-storage bucket lifecycle expire" || _mark_fail "object-storage bucket lifecycle expire"
+  capture out -- zcp object-storage bucket lifecycle delete "$s" "$bkt" >/dev/null 2>&1 || true
+
+  capture out -- zcp object-storage bucket cors set "$s" "$bkt" --origin '*' --method GET \
+    && _mark_pass "object-storage bucket cors set" || _mark_fail "object-storage bucket cors set"
+  capture out -- zcp object-storage bucket cors delete "$s" "$bkt" >/dev/null 2>&1 || true
+
+  capture out -- zcp object-storage bucket uploads list "$s" "$bkt" \
+    && _mark_pass "object-storage bucket uploads list" || _mark_fail "object-storage bucket uploads list"
+
   capture out -- zcp object-storage object list "$s" "$bkt" -o json
   if echo "$out" | jq -e '(.[]//.data[]) | select(.key == "smoke-test.txt")' >/dev/null 2>&1; then
     _mark_pass "object-storage object list (smoke-test.txt present)"
@@ -433,9 +476,11 @@ lc_objectstorage() {
   _mark_pass "object-storage object delete"
   rm -f "$tmpfile"
 
-  capture out -- zcp object-storage bucket delete "$s" "$bkt" -y \
-    || { _mark_fail "object-storage bucket delete"; return; }
-  _mark_pass "object-storage bucket delete"
+  # --purge empties objects + versions first (versioning was enabled above, so a
+  # plain delete would be blocked by the remaining versions/delete-markers).
+  capture out -- zcp object-storage bucket delete "$s" "$bkt" --purge -y \
+    || { _mark_fail "object-storage bucket delete --purge"; return; }
+  _mark_pass "object-storage bucket delete --purge"
 }
 
 lc_iso() {

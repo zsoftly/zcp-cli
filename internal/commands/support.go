@@ -155,7 +155,7 @@ func newTicketShowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a support ticket",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp support ticket show 12345
   zcp support ticket show 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -202,7 +202,7 @@ func newTicketDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
 		Short: "Delete a support ticket",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp support ticket delete 12345
   zcp support ticket delete 12345 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -293,7 +293,7 @@ func newTicketReplyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "reply <ticket-id>",
 		Short:   "Reply to a support ticket",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp support ticket reply 12345 --message "Here is more detail..."`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if message == "" {
@@ -338,7 +338,7 @@ func newTicketRepliesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replies <ticket-id>",
 		Short: "List replies for a support ticket",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp support ticket replies 12345
   zcp support ticket replies 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -382,7 +382,7 @@ func newTicketFeedbackCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "feedback <ticket-id>",
 		Short: "Get feedback for a support ticket",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp support ticket feedback 12345
   zcp support ticket feedback 12345 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -427,7 +427,7 @@ func newTicketFeedbackSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "feedback-submit <ticket-id>",
 		Short: "Submit feedback for a support ticket",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp support ticket feedback-submit 12345 --rating 5
   zcp support ticket feedback-submit 12345 --rating 4 --comment "Quick resolution"`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -159,7 +159,7 @@ func newEgressDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
 		Short: "Delete an egress rule",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp egress delete 42 --network en-001001-0018
   zcp egress delete 42 --network en-001001-0018 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -24,6 +24,9 @@ type Profile struct {
 	BearerToken string `yaml:"bearer_token"`
 	APIURL      string `yaml:"api_url,omitempty"`
 	DefaultZone string `yaml:"default_zone,omitempty"`
+	// CloudProvider is the account's brand cloud-provider slug, auto-detected at
+	// `auth validate` / `profile add` time so create commands need not ask for it.
+	CloudProvider string `yaml:"cloud_provider,omitempty"`
 }
 
 // Config is the top-level config structure stored on disk.

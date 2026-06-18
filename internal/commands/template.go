@@ -147,7 +147,7 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "account-create",
 		Short: "Create an account template",
-		Example: `  zcp template account-create --name my-template --cloud-provider nimbo \
+		Example: `  zcp template account-create --name my-template \
     --region yow-1 --project my-project --os-type-id <uuid> \
     --image-type "Operating System" --os ubuntu --os-version "22.04 LTS" \
     --billing-cycle hourly --url https://example.com/image.qcow2 --format QCOW2`,
@@ -155,9 +155,9 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -236,7 +236,7 @@ func newTemplateAccountDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "account-delete <slug>",
 		Short: "Delete an account template",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp template account-delete my-template
   zcp template account-delete my-template --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -216,6 +216,9 @@ func TestResolveProfileNoActive(t *testing.T) {
 }
 
 func TestResolveProfileMissingCredentials(t *testing.T) {
+	// Clear the env override so a developer's exported token doesn't mask the
+	// missing-credentials path (ResolveProfile falls back to ZCP_BEARER_TOKEN).
+	t.Setenv("ZCP_BEARER_TOKEN", "")
 	cfg := &config.Config{
 		ActiveProfile: "dev",
 		Profiles: map[string]config.Profile{

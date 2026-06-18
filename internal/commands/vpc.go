@@ -84,7 +84,7 @@ func newVPCGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "get <slug>",
 		Short:   "Get details of a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc get my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCGet(cmd, args[0])
@@ -127,15 +127,15 @@ func newVPCCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPC",
-		Example: `  zcp vpc create --name my-vpc --cloud-provider nimbo --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
-  zcp vpc create --name my-vpc --cloud-provider nimbo --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
+		Example: `  zcp vpc create --name my-vpc --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
+  zcp vpc create --name my-vpc --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -231,7 +231,7 @@ func newVPCUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update <slug>",
 		Short:   "Update a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc update my-vpc --name new-name --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -280,7 +280,7 @@ func newVPCDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a VPC",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vpc delete my-vpc
   zcp vpc delete my-vpc --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -346,7 +346,7 @@ func newVPCRestartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "restart <slug>",
 		Short:   "Restart a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc restart my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCRestart(cmd, args[0])
@@ -385,7 +385,7 @@ func newVPCACLListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "acl-list <vpc-slug>",
 		Short:   "List network ACLs for a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc acl-list my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCACLList(cmd, args[0])
@@ -427,7 +427,7 @@ func newVPCACLCreateRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "acl-create <vpc-slug>",
 		Short:   "Create a network ACL list in a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc acl-create my-vpc --name allow-web --description "Allow HTTP traffic"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -504,7 +504,7 @@ func newVPCVPNGatewayListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list <vpc-slug>",
 		Short:   "List VPN gateways for a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc vpn-gateway list my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCVPNGatewayList(cmd, args[0])
@@ -544,7 +544,7 @@ func newVPCVPNGatewayCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create <vpc-slug>",
 		Short:   "Create a VPN gateway for a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp vpc vpn-gateway create my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCVPNGatewayCreate(cmd, args[0])
@@ -583,7 +583,7 @@ func newVPCVPNGatewayDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <vpc-slug> <gateway-id>",
 		Short: "Delete a VPN gateway from a VPC",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2),
 		Example: `  zcp vpc vpn-gateway delete my-vpc gw-001
   zcp vpc vpn-gateway delete my-vpc gw-001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

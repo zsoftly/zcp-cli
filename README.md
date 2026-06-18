@@ -56,605 +56,57 @@ Requirements: Go 1.26.4+, GNU Make.
 ## Quick Start
 
 ```bash
-# 1. Install (see above)
-
-# 2. Add your first profile — prompts for bearer token
+# 1. Add your first profile — prompts for bearer token
 zcp profile add default
 
-# 3. Confirm your credentials work
+# 2. Confirm your credentials work
 zcp auth validate
 
-# 4. Discover available regions
+# 3. Discover available regions
 zcp region list
 
-# 5. List your instances
+# 4. List your instances
 zcp instance list
+```
+
+Your cloud provider is auto-detected and saved to your profile by `zcp auth validate`, so you never pass it. To also avoid repeating `--region` and `--project` on create commands, export them once:
+
+```bash
+export ZCP_REGION=yow-1
+export ZCP_PROJECT=default
 ```
 
 ---
 
 ## Configuration
 
-### Adding a Profile
-
-Run the interactive setup to create your first profile:
-
-```bash
-zcp profile add default
-```
-
-You will be prompted for:
-
-- Bearer token
-- API URL (leave blank to use the default)
-
-To add a named profile non-interactively:
-
-```bash
-zcp profile add staging --bearer-token YOUR_TOKEN
-```
-
-### Config File Location
+Profiles store your bearer token (and optional API URL) and are written to a `0600` config file:
 
 | Platform    | Path                        |
 | ----------- | --------------------------- |
 | Linux/macOS | `~/.config/zcp/config.yaml` |
 | Windows     | `%AppData%\zcp\config.yaml` |
 
-The file is created with `0600` permissions (owner read/write only) to protect credentials.
-
-### Managing Profiles
-
 ```bash
-# List all configured profiles
-zcp profile list
-
-# Show details of the active profile (credentials are masked)
-zcp profile show
-
-# Show details of a specific profile
-zcp profile show staging
-
-# Switch to a different active profile
-zcp profile use staging
-
-# Update credentials or API URL on an existing profile
-zcp profile update prod --bearer-token <new-token>
-zcp profile update prod --api-url-override https://custom.api.url
-
-# Rename a profile
-zcp profile rename staging prod
-
-# Delete a profile
-zcp profile delete old-profile
+zcp profile add default                       # interactive (prompts for token)
+zcp profile add staging --bearer-token TOKEN  # non-interactive
+zcp profile list                              # list profiles
+zcp profile use staging                       # switch active profile
 ```
 
-### Environment Variables
-
-You can override configuration and flags using environment variables:
-
-- `ZCP_BEARER_TOKEN`: Overrides profile credentials.
-- `ZCP_API_URL`: Overrides the API base URL.
-- `ZCP_PROJECT`: Sets the default project slug.
-- `ZCP_REGION`: Sets the default region slug.
-- `ZCP_CLOUD_PROVIDER`: Sets the default cloud provider.
-- `ZCP_OUTPUT`: Sets the default output format (`json`, `yaml`, `table`).
-- `ZCP_DEBUG`: Set to `true` to enable verbose debug output.
-
-See [docs/configuration.md](docs/configuration.md) for the full list and usage examples.
+See **[docs/configuration.md](docs/configuration.md)** for full profile management, all environment variables, and precedence rules.
 
 ---
 
-## Commands Reference
+## Commands
 
-Use `zcp <command> --help` for the full flag list of any command.
+Run `zcp <command> --help` for the full flag list of any command, and `zcp --help` for the complete command tree.
 
-### Discovery
+For copy-paste examples covering every resource — compute, storage, networking, VPCs, Kubernetes, object storage, DNS, billing, and more — see **[docs/commands.md](docs/commands.md)**.
 
-```bash
-# Regions
-zcp region list
+> **Object storage is partly CLI-only.** Instance and basic bucket management go through the ZCP REST API and are mirrored in the Web UI, but the advanced S3 operations (versioning, policy, tagging, encryption, lifecycle, CORS, presigned URLs, copy/move, multipart cleanup, and all object uploads/downloads) talk directly to the Ceph RADOS Gateway over the S3 protocol and are available **only through this CLI** — the CMP has not yet exposed them via the REST API or Web UI. See [docs/commands.md](docs/commands.md#two-backends--and-what-is-cli-only).
 
-# Plans by service type (preferred over legacy 'offering' commands)
-zcp plan vm                # Virtual Machine plans
-zcp plan storage           # Block Storage plans — shows storage category slug and Ceph pool per plan
-zcp plan kubernetes        # Kubernetes plans
-zcp plan lb                # Load Balancer plans
-zcp plan router            # Virtual Router plans
-zcp plan ip                # IP Address plans
-zcp plan vm-snapshot       # VM Snapshot plans
-zcp plan template          # My Template plans
-zcp plan iso               # ISO plans
-zcp plan backup            # Backup plans
-
-# Discovery helpers
-zcp cloud-provider list    # Available cloud providers
-zcp server list            # Available servers
-zcp currency list          # Available currencies
-zcp billing-cycle list     # Available billing cycles
-zcp storage-category list  # Available storage categories
-
-# VM templates
-zcp template list
-
-# Marketplace
-zcp marketplace list
-
-# ISO images
-zcp iso list
-
-# Store
-zcp store list
-```
-
-### Compute
-
-```bash
-# List and inspect
-zcp instance list
-zcp instance get <slug>
-
-# Create — use --wait to block until the instance is Running
-zcp instance create \
-  --name my-vm \
-  --cloud-provider zcp \
-  --project my-project \
-  --region yow-1 \
-  --template ubuntu-22f \
-  --plan bp-4vc-8gb \
-  --billing-cycle hourly \
-  --storage-category nvme \
-  --blockstorage-plan 50-gb-2 \
-  --ssh-key mykey
-
-zcp instance create ... --wait
-
-# Lifecycle
-zcp instance start <slug>
-zcp instance stop <slug>
-zcp instance reboot <slug>
-zcp instance reset <slug>            # Hard reset (prompts for confirmation)
-
-# Change plan (instance must be stopped)
-zcp instance change-plan <slug> --plan <new-plan> --billing-cycle hourly
-
-# Change hostname
-zcp instance change-hostname <slug> --hostname new-hostname
-
-# Change OS (DESTRUCTIVE — reinstalls the VM)
-zcp instance change-os <slug> --template ubuntu-22f
-
-# Change startup script
-zcp instance change-script <slug> --user-data "#!/bin/bash\napt update"
-
-# Change password
-zcp instance change-password <slug> --password "newSecureP@ss"
-
-# Add a network to a running instance
-zcp instance add-network <slug> --network <network-slug>
-
-# Activity logs
-zcp instance logs <slug>
-
-# Tags
-zcp instance tag-create <slug> --key env --value prod
-zcp instance tag-delete <slug> --key env
-
-# Addons
-zcp instance addons <slug>
-
-# Open an SSH session directly from the CLI
-zcp instance ssh <slug>
-zcp instance ssh <slug> --user ubuntu
-zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
-
-# Delete an instance permanently
-zcp instance delete <slug>
-zcp instance delete <slug> --yes                # skip confirmation
-zcp instance delete <slug> --force --yes        # force-expunge from hypervisor immediately
-```
-
-The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance reaches the target state, printing progress to stderr.
-
-### Storage
-
-```bash
-# Volumes
-zcp volume list
-zcp volume create \
-  --name my-disk \
-  --project my-project \
-  --cloud-provider zcp \
-  --region yow-1 \
-  --billing-cycle hourly \
-  --storage-category nvme \
-  --plan 50-gb-2
-zcp volume create ... --vm <vm-slug>   # Attach on creation
-zcp volume attach <volume-slug> --vm <vm-slug>
-zcp volume detach <volume-slug>
-
-# Snapshots
-zcp snapshot list
-zcp snapshot create \
-  --volume <slug> \
-  --name my-snapshot \
-  --plan snapshot-per-gb \
-  --cloud-provider zcp \
-  --region yow-1 \
-  --billing-cycle hourly \
-  --project my-project
-zcp snapshot revert <snapshot-slug> --volume <volume-slug>
-
-# VM snapshots (whole-instance checkpoint)
-zcp vm-snapshot list
-zcp vm-snapshot create \
-  --vm <slug> \
-  --name my-checkpoint \
-  --plan basic \
-  --billing-cycle hourly \
-  --project my-project \
-  --cloud-provider zcp \
-  --region yow-1
-zcp vm-snapshot revert <slug>
-```
-
-### Networking
-
-```bash
-# Networks
-zcp network list
-zcp network get <slug>                           # provider state: CIDR, state, VPC, attached ACL
-zcp plan network                                 # network plan slugs for --network-plan
-zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly \
-  --cloud-provider zcp --region yow-1 --project my-project
-zcp network update <slug> --name "New Name"
-zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
-
-# VPC subnets (tiers) — optionally attach a custom ACL at creation
-zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
-  --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
-  --cloud-provider zcp --region yow-1 --project my-project
-
-# Public IP addresses
-zcp ip list
-zcp ip allocate --network <slug>
-zcp ip release <slug>
-zcp ip static-nat enable <slug> --instance <slug> --network <slug>
-
-# Firewall rules (ingress)
-zcp firewall list
-zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
-
-# Egress rules
-zcp egress list
-zcp egress create --network <slug> --protocol tcp
-
-# Port forwarding
-zcp portforward list
-zcp portforward create \
-  --ip <slug> \
-  --protocol tcp \
-  --public-port 2222 \
-  --private-port 22 \
-  --instance <slug>
-
-```
-
-### Advanced Networking
-
-```bash
-# VPCs
-zcp vpc list
-zcp vpc create \
-  --name my-vpc \
-  --cloud-provider zcp \
-  --region yow-1 \
-  --project my-project \
-  --plan vpc-1 \
-  --network-address 10.1.0.1 \
-  --size 16 \
-  --billing-cycle hourly \
-  --storage-category nvme
-
-# Network ACL lists and rules
-zcp acl list <vpc-slug>
-zcp acl create <vpc-slug> --name web-acl --description "Web tier ACL"
-zcp acl rules <vpc-slug> web-acl
-zcp acl create-rule <vpc-slug> web-acl --number 1 --protocol tcp \
-  --start-port 443 --end-port 443 --cidr 0.0.0.0/0          # --cidr takes comma-separated lists
-zcp acl update-rule <vpc-slug> web-acl <rule-id> --number 1 --protocol tcp \
-  --start-port 443 --end-port 443 --cidr 10.0.1.0/24,10.0.2.0/24
-zcp acl delete-rule <vpc-slug> web-acl <rule-id>
-zcp acl replace --network <network-slug> --acl web-acl --vpc <vpc-slug>
-zcp acl delete <vpc-slug> web-acl
-
-# Public load balancers
-zcp loadbalancer list
-zcp loadbalancer create --ip <slug> --name my-lb --algorithm roundrobin
-zcp loadbalancer delete <slug>
-
-# VPN gateways and connections
-zcp vpn list
-zcp vpn create --vpc <slug> --name my-vpn
-zcp vpn delete <slug>
-```
-
-### Security and Access
-
-```bash
-# SSH keys
-zcp ssh-key list
-zcp ssh-key create --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)"
-zcp ssh-key delete <slug>
-
-# Affinity groups
-zcp affinity-group list
-zcp affinity-group create --name my-ag --type host-affinity
-zcp affinity-group delete <slug>
-```
-
-### DNS
-
-```bash
-# Domains
-zcp dns list
-zcp dns show <slug>
-
-# Create a domain
-zcp dns create --name example.com --project my-project --cloud-provider zcp --region yow-1 --dns-provider dns-provider
-
-# Create a record
-zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
-zcp dns record-create --domain <domain-slug> --name mail --type MX --content mail.example.com --ttl 3600
-
-# Delete a record or domain
-zcp dns record-delete --domain <domain-slug> --record-id 42
-zcp dns delete <domain-slug>
-```
-
-### Backup
-
-```bash
-zcp backup list
-zcp backup get <slug>
-zcp backup create --instance <slug> --name my-backup
-zcp backup restore <slug>
-zcp backup delete <slug>
-```
-
-### Autoscale
-
-```bash
-zcp autoscale list
-zcp autoscale get <slug>
-zcp autoscale create --name my-policy --min 1 --max 5 --cloud-provider zcp --region yow-1 --project my-project
-zcp autoscale delete <slug>
-```
-
-### Monitoring
-
-```bash
-zcp monitoring list
-zcp monitoring get <slug>
-zcp monitoring create --instance <slug> --type cpu --threshold 80
-zcp monitoring delete <slug>
-```
-
-### Project
-
-```bash
-zcp project list
-zcp project create --name my-project --icon cloud-15 --purpose "Development"
-zcp project update <slug> --name "New Name" --description "Updated description"
-zcp project delete <slug>
-zcp project dashboard <slug>
-
-# Project users
-zcp project user list <slug>
-zcp project user add <slug> --email alice@example.com --role admin
-
-# Project icons
-zcp project icon list
-```
-
-### Kubernetes
-
-```bash
-# 'k8s' is accepted as an alias for 'kubernetes'
-zcp kubernetes list
-zcp kubernetes create \
-  --name my-cluster \
-  --version v1.36.1 \
-  --plan k8s-li-yow-1 \
-  --region yow-1 \
-  --project default \
-  --cloud-provider nimbo \
-  --billing-cycle hourly \
-  --workers 3 \
-  --storage-category pro-nvme \
-  --ssh-key mykey
-
-# HA cluster with multiple control nodes
-zcp kubernetes create \
-  --name ha-cluster \
-  --version v1.36.1 \
-  --plan k8s-li-yow-1 \
-  --region yow-1 \
-  --project default \
-  --cloud-provider nimbo \
-  --billing-cycle hourly \
-  --workers 3 \
-  --control-nodes 3 \
-  --ha \
-  --storage-category pro-nvme \
-  --ssh-key mykey
-
-# Start / stop / upgrade
-zcp kubernetes start <slug>
-zcp kubernetes stop <slug>
-zcp kubernetes upgrade <slug> --plan k8s-plan-2
-
-# To cancel/delete a cluster, use billing cancel-service:
-zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
-```
-
-### Object Storage
-
-```bash
-# List and inspect
-zcp object-storage list
-zcp object-storage get <slug>
-
-# Create an object storage instance
-zcp object-storage create \
-  --name my-store \
-  --project my-project \
-  --cloud-provider zcp \
-  --region yow-1 \
-  --billing-cycle hourly \
-  --storage-category nvme \
-  --plan os-100gb
-
-# Resize (change allocated GB)
-zcp object-storage resize <slug> --size 200
-
-# Show S3 credentials (access key + secret)
-zcp object-storage credentials <slug>
-
-# Delete an object storage instance
-zcp object-storage delete <slug>
-
-# Buckets
-zcp object-storage bucket list <slug>
-zcp object-storage bucket get <slug> <bucket-slug>
-zcp object-storage bucket create <slug> --name my-bucket
-zcp object-storage bucket set-acl <slug> <bucket-slug> --acl public-read
-zcp object-storage bucket delete <slug> <bucket-slug>
-
-# Objects — list and inspect via ZCP REST API
-zcp object-storage object list <slug> <bucket-slug>
-zcp object-storage object get <slug> <bucket-slug> <key>
-
-# Objects — upload and delete via S3 protocol
-zcp object-storage object put <slug> <bucket-name> --file ./photo.jpg
-zcp object-storage object put <slug> <bucket-name> --file ./report.pdf --key reports/2026/q2.pdf --content-type application/pdf
-zcp object-storage object delete <slug> <bucket-name> <key>
-```
-
-Object `put` and `delete` use the S3 protocol (AWS Signature V4) against the region's S3 endpoint. The CLI derives credentials from the same `object-storage get` response, so no separate S3 configuration is needed.
-
-ACL values for `bucket set-acl`: `private`, `public-read`, `public-read-write`, `authenticated-read`.
-
-### Billing and Admin
-
-```bash
-# Account balance and costs
-zcp billing balance
-zcp billing costs
-zcp billing monthly-usage
-zcp billing usage
-zcp billing credit-limit
-zcp billing service-counts
-zcp billing free-credits
-
-# Invoices and payments
-zcp billing invoices
-zcp billing invoices --page 2
-zcp billing invoices-count
-zcp billing payments
-
-# Subscriptions
-zcp billing subscriptions active
-zcp billing subscriptions inactive
-zcp billing contracts
-zcp billing trials
-
-# Cancel a service (instances, volumes, IPs, etc.)
-zcp billing cancel-service <subscription-slug> --service "Virtual Machine" --reason not_needed_anymore
-zcp billing cancel-service <subscription-slug> --service "Block Storage" --reason not_needed_anymore --type Immediate
-zcp billing cancel-requests
-
-# Coupons
-zcp billing coupons
-zcp billing redeem-coupon SAVE50
-
-# Budget alerts
-zcp billing budget-alert
-zcp billing budget-alert-set --amount 500 --threshold 80 --enabled
-
-```
-
-### Support
-
-```bash
-zcp support list
-zcp support get <ticket-id>
-zcp support create --subject "Issue title" --description "Details"
-zcp support close <ticket-id>
-```
-
-### Dashboard
-
-```bash
-zcp dashboard summary
-zcp dashboard status
-```
-
-### Auth
-
-```bash
-# Validate that the active profile credentials are accepted by the API
-zcp auth validate
-```
-
----
-
-## Output Formats
-
-All listing commands support three output formats controlled by the `--output` (or `-o`) flag.
-
-**Table (default)**
-
-```bash
-zcp region list
-```
-
-```
-SLUG       NAME      COUNTRY  ACTIVE
-----       ----      -------  ------
-toronto    Toronto   Canada   true
-montreal   Montreal  Canada   true
-```
-
-**JSON**
-
-```bash
-zcp region list --output json
-```
-
-```json
-[
-  {
-    "slug": "toronto",
-    "name": "Toronto",
-    "country_name": "Canada",
-    "is_active": "true"
-  }
-]
-```
-
-**YAML**
-
-```bash
-zcp region list --output yaml
-```
-
-```yaml
-- slug: toronto
-  name: Toronto
-  country_name: Canada
-  is_active: "true"
-```
+Every listing command supports `--output table|json|yaml` (`-o` for short).
 
 ---
 
@@ -677,33 +129,20 @@ These flags are available on every command:
 
 ## Shell Completions
 
-`zcp` ships with completion scripts for Bash, Zsh, Fish, and PowerShell.
+`zcp` ships with completion scripts for Bash, Zsh, Fish, and PowerShell:
 
 ```bash
-# Bash (add to ~/.bashrc)
-source <(zcp completion bash)
-
-# Zsh (add to ~/.zshrc)
-source <(zcp completion zsh)
-
-# Fish
-zcp completion fish | source
-
-# PowerShell
-zcp completion powershell | Out-String | Invoke-Expression
+source <(zcp completion bash)    # Bash (add to ~/.bashrc)
+source <(zcp completion zsh)     # Zsh  (add to ~/.zshrc)
+zcp completion fish | source     # Fish
+zcp completion powershell | Out-String | Invoke-Expression   # PowerShell
 ```
+
+See [docs/completions.md](docs/completions.md) for details.
 
 ---
 
 ## Development
-
-### Requirements
-
-- Go 1.26.4 (toolchain, as specified in `go.mod`)
-- GNU Make
-- Git
-
-### Build Targets
 
 ```bash
 make build        # Build for the current platform → bin/zcp
@@ -712,13 +151,11 @@ make test         # Run all tests with -v
 make test-race    # Run all tests with the race detector
 make fmt          # Format all Go source files with gofmt
 make vet          # Run go vet
-make tidy         # Tidy go.mod / go.sum
 make lint         # Run staticcheck (must be installed separately)
 make install      # Install zcp to /usr/local/bin
-make clean        # Remove the bin/ directory
 ```
 
-See `docs/development.md` for the full development guide.
+Requirements: Go 1.26.4, GNU Make, Git. See **[docs/development.md](docs/development.md)** for the full development guide.
 
 ---
 

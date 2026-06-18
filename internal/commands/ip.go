@@ -149,7 +149,7 @@ func newIPReleaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "release <slug>",
 		Short: "Release a public IP address",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp ip release 1234567890
   zcp ip release 1234567890 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -192,7 +192,7 @@ func newIPStaticNATEnableCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "enable <ip-slug>",
 		Short:   "Enable static NAT on an IP address",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp ip static-nat enable 1036521143 --instance my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
@@ -237,7 +237,7 @@ func newIPVPNListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list <ip-slug>",
 		Short:   "List remote access VPNs on an IP address",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp ip vpn list 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPVPNList(cmd, args[0])
@@ -278,7 +278,7 @@ func newIPVPNEnableCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "enable <ip-slug>",
 		Short:   "Enable remote access VPN on an IP address",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp ip vpn enable 1036521143`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runIPVPNEnable(cmd, args[0])
@@ -318,7 +318,7 @@ func newIPVPNDisableCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disable <ip-slug> <vpn-id>",
 		Short: "Disable remote access VPN on an IP address",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2),
 		Example: `  zcp ip vpn disable 1036521143 vpn-user-1
   zcp ip vpn disable 1036521143 vpn-user-1 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

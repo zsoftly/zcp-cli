@@ -104,13 +104,15 @@ destroy_one() {
   local type="$1" slug="$2" extra="${3:-}"
   info "teardown ${type} ${slug}"
   case "$type" in
-    # NOTE: ssh-key/dns/affinity-group/iso `delete` subcommands currently PANIC
-    # (a `-y` shorthand collides with the global -y/--auto-approve). Until that
-    # is fixed, tear these down via the API so the suite doesn't leak.
-    ssh-key)        api_delete "/ssh-keys/$slug" "/ssh-key/$slug" ;;
-    affinity-group) api_delete "/affinity-groups/$slug" "/affinity-group/$slug" ;;
-    dns)            api_delete "/dns-domains/$slug" "/dns/$slug" ;;
-    iso)            api_delete "/isos/$slug" "/iso/$slug" ;;
+    # These were torn down via raw API calls to work around a `-y` shorthand
+    # panic in their `delete` subcommands. That panic is fixed, and the hand-
+    # written API paths had drifted from the real ones (dns and ssh-key were
+    # wrong, leaking resources), so use the CLI, which knows the correct
+    # endpoints and identifiers.
+    ssh-key)        zcp ssh-key delete "$slug" -y          >/dev/null 2>&1 ;;
+    affinity-group) zcp affinity-group delete "$slug" -y   >/dev/null 2>&1 ;;
+    dns)            zcp dns delete "$slug" -y               >/dev/null 2>&1 ;;
+    iso)            zcp iso delete "$slug" -y               >/dev/null 2>&1 ;;
     network)        zcp network delete "$slug" -y          >/dev/null 2>&1 ;;
     vpc)            zcp vpc delete "$slug" -y               >/dev/null 2>&1 ;;
     dns-record)     zcp dns record-delete "$slug" --domain "$extra" -y >/dev/null 2>&1 ;;

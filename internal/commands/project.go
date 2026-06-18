@@ -144,7 +144,7 @@ func newProjectUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <slug>",
 		Short: "Update an existing project",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp project update my-project --name "New Name"
   zcp project update my-project --description "Updated description" --icon 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -194,7 +194,7 @@ func newProjectDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a project",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp project delete my-project
   zcp project delete my-project --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -237,7 +237,7 @@ func newProjectDashboardCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "dashboard <slug>",
 		Short:   "Show project dashboard services",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp project dashboard my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectDashboard(cmd, args[0])
@@ -335,7 +335,7 @@ func newProjectUserListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list <slug>",
 		Short:   "List users in a project",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp project user list my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectUserList(cmd, args[0])
@@ -378,7 +378,7 @@ func newProjectUserAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <slug>",
 		Short: "Add a user to a project",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp project user add my-project --email alice@example.com
   zcp project user add my-project --email alice@example.com --role admin`,
 		RunE: func(cmd *cobra.Command, args []string) error {

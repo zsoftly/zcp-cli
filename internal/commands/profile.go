@@ -2,13 +2,16 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/config"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 	"golang.org/x/term"
 )
 
@@ -39,7 +42,7 @@ func newProfileAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add or update a profile",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp profile add default
   zcp profile add prod --bearer-token <token>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -87,6 +90,23 @@ func newProfileAddCmd() *cobra.Command {
 			if cfg.ActiveProfile == name {
 				fmt.Fprintln(os.Stdout, "Set as active profile.")
 			}
+
+			// Interactive setup: best-effort auto-detect of the account's cloud
+			// provider so create commands need not ask for it. Skipped in
+			// non-interactive/automation mode and silent on any failure.
+			if !nonInteractive {
+				prof := cfg.Profiles[name]
+				opts := httpclient.Options{
+					BaseURL:     config.ActiveAPIURL(&prof, ""),
+					BearerToken: prof.BearerToken,
+					Timeout:     15 * time.Second,
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
+				defer cancel()
+				if slug, derr := detectCloudProvider(ctx, httpclient.New(opts), cfg, name); derr == nil && slug != "" {
+					fmt.Fprintf(os.Stdout, "Cloud provider detected: %s\n", slug)
+				}
+			}
 			return nil
 		},
 	}
@@ -131,7 +151,7 @@ func newProfileUseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "use <name>",
 		Short:             "Set the active profile",
-		Args:              cobra.ExactArgs(1),
+		Args:              exactArgs(1),
 		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -157,7 +177,7 @@ func newProfileDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "delete <name>",
 		Short:             "Delete a profile",
-		Args:              cobra.ExactArgs(1),
+		Args:              exactArgs(1),
 		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
@@ -194,7 +214,7 @@ func newProfileShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "show [name]",
 		Short:             "Show profile details (credentials are masked)",
-		Args:              cobra.MaximumNArgs(1),
+		Args:              maxArgs(1),
 		ValidArgsFunction: completeProfileNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -237,7 +257,7 @@ func newProfileUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <name>",
 		Short: "Update fields of an existing profile",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp profile update prod --bearer-token <new-token>
   zcp profile update prod --api-url-override https://new.api.url`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -279,7 +299,7 @@ func newProfileRenameCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rename <old-name> <new-name>",
 		Short: "Rename a profile",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			oldName, newName := args[0], args[1]
 			cfg, err := config.Load()

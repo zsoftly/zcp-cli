@@ -57,13 +57,12 @@ func runDNSList(cmd *cobra.Command) error {
 		return fmt.Errorf("dns list: %w", err)
 	}
 
-	headers := []string{"SLUG", "NAME", "DNS PROVIDER", "STATUS", "CREATED"}
+	headers := []string{"SLUG", "NAME", "STATUS", "CREATED"}
 	rows := make([][]string, 0, len(domains))
 	for _, d := range domains {
 		rows = append(rows, []string{
 			d.Slug,
 			d.Name,
-			d.DNSProvider,
 			strconv.FormatBool(d.Status),
 			d.CreatedAt,
 		})
@@ -75,7 +74,7 @@ func newDNSShowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <slug>",
 		Short: "Show DNS domain details and records",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp dns show example-com-1
   zcp dns show example-com-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -105,7 +104,6 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 	detailRows := [][]string{
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
-		{"DNS Provider", domain.DNSProvider},
 		{"Status", strconv.FormatBool(domain.Status)},
 		{"Created", domain.CreatedAt},
 		{"Updated", domain.UpdatedAt},
@@ -140,10 +138,9 @@ func newDNSCreateCmd() *cobra.Command {
 	var cloudProvider, region string
 
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a DNS domain",
-		Example: `  zcp dns create --name example.com --project my-project --dns-provider powerdns --cloud-provider nimbo --region yow-1
-  zcp dns create --name example.com --project my-project --cloud-provider nimbo --region yow-1`,
+		Use:     "create",
+		Short:   "Create a DNS domain",
+		Example: `  zcp dns create --name example.com --project my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -152,13 +149,18 @@ func newDNSCreateCmd() *cobra.Command {
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			// DNS is served by the dedicated "dns" cloud provider, which has a
+			// single region ("default"). Both are verified against the live
+			// /cloud-providers and /regions endpoints (region "default" maps to
+			// provider "dns"). Default to them so DNS is hands-off; an explicit
+			// --cloud-provider / --region still overrides. ZCP_REGION is ignored
+			// here because it targets compute regions, which DNS cannot use.
+			cloudProvider = cloudProviderFlagOrEnv(cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				cloudProvider = "dns"
 			}
-			region = resolveRegion(region)
 			if region == "" {
-				return fmt.Errorf("--region is required")
+				region = "default"
 			}
 			if dnsProvider == "" {
 				dnsProvider = "powerdns"
@@ -174,9 +176,12 @@ func newDNSCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Domain name (required, e.g. example.com)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required, e.g. my-project)")
-	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS provider (default: powerdns)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
-	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
+	// --dns-provider selects the DNS backend; it is an internal detail with a
+	// working default, so it is hidden from help (still usable as an override).
+	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS backend (internal; optional override)")
+	_ = cmd.Flags().MarkHidden("dns-provider")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (default: dns)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (default: default, the DNS region)")
 	return cmd
 }
 
@@ -199,7 +204,6 @@ func runDNSCreate(cmd *cobra.Command, req dns.CreateDomainRequest) error {
 	rows := [][]string{
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
-		{"DNS Provider", domain.DNSProvider},
 		{"Status", strconv.FormatBool(domain.Status)},
 		{"Created", domain.CreatedAt},
 	}
@@ -212,7 +216,7 @@ func newDNSDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a DNS domain",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp dns delete example-com-1
   zcp dns delete example-com-1 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

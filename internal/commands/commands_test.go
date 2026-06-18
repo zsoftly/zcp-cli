@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/config"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
 // newTestRoot creates a minimal root command with all persistent flags that
@@ -108,7 +111,7 @@ func TestResolveCloudProviderFlagTakesPrecedence(t *testing.T) {
 	os.Setenv("ZCP_CLOUD_PROVIDER", "env-cp")
 	defer os.Unsetenv("ZCP_CLOUD_PROVIDER")
 
-	result := resolveCloudProvider("flag-cp")
+	result := cloudProviderFlagOrEnv("flag-cp")
 	if result != "flag-cp" {
 		t.Errorf("resolveCloudProvider = %q, want %q", result, "flag-cp")
 	}
@@ -118,7 +121,7 @@ func TestResolveCloudProviderFallsBackToEnv(t *testing.T) {
 	os.Setenv("ZCP_CLOUD_PROVIDER", "env-cp")
 	defer os.Unsetenv("ZCP_CLOUD_PROVIDER")
 
-	result := resolveCloudProvider("")
+	result := cloudProviderFlagOrEnv("")
 	if result != "env-cp" {
 		t.Errorf("resolveCloudProvider = %q, want %q", result, "env-cp")
 	}
@@ -127,7 +130,7 @@ func TestResolveCloudProviderFallsBackToEnv(t *testing.T) {
 func TestResolveCloudProviderEmptyWhenNeitherSet(t *testing.T) {
 	os.Unsetenv("ZCP_CLOUD_PROVIDER")
 
-	result := resolveCloudProvider("")
+	result := cloudProviderFlagOrEnv("")
 	if result != "" {
 		t.Errorf("resolveCloudProvider = %q, want empty", result)
 	}
@@ -601,5 +604,196 @@ func TestACLCreateRuleRejectsInvertedPortRange(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "must not be lower than") {
 		t.Errorf("error = %q, want inverted-range message", err)
+	}
+}
+
+// ─── Cloud provider auto-detection (Option A) ───────────────────────────────
+
+// providersServer returns an httptest server that serves the given JSON array
+// (the `data` payload) at /cloud-providers.
+func providersServer(t *testing.T, dataJSON string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/cloud-providers" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":"Success","message":"OK","data":%s}`, dataJSON)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestDetectCloudProviderSingleActivePersists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.Config{
+		ActiveProfile: "default",
+		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	// One active provider, one inactive — only the active one counts.
+	srv := providersServer(t, `[{"slug":"nimbo","status":true},{"slug":"ceph","status":false}]`)
+	client := httpclient.New(httpclient.Options{BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second})
+
+	slug, err := detectCloudProvider(context.Background(), client, cfg, "default")
+	if err != nil {
+		t.Fatalf("detectCloudProvider error: %v", err)
+	}
+	if slug != "nimbo" {
+		t.Fatalf("slug = %q, want nimbo", slug)
+	}
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got.Profiles["default"].CloudProvider != "nimbo" {
+		t.Fatalf("persisted CloudProvider = %q, want nimbo", got.Profiles["default"].CloudProvider)
+	}
+}
+
+// Mirrors the real production catalog: ceph (Object Storage), dns (Dns Domain),
+// nimbo (Virtual Machine + infra). The compute provider must be picked by the
+// "Virtual Machine" service regardless of catalog order.
+func TestDetectCloudProviderPicksComputeProvider(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.Config{
+		ActiveProfile: "default",
+		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	srv := providersServer(t, `[
+		{"slug":"ceph","status":true,"services":["Object Storage"]},
+		{"slug":"dns","status":true,"services":["Dns Domain"]},
+		{"slug":"nimbo","status":true,"services":["Block Storage","Virtual Machine","VPC"]}
+	]`)
+	client := httpclient.New(httpclient.Options{BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second})
+
+	slug, err := detectCloudProvider(context.Background(), client, cfg, "default")
+	if err != nil {
+		t.Fatalf("detectCloudProvider error: %v", err)
+	}
+	if slug != "nimbo" {
+		t.Fatalf("slug = %q, want nimbo (the Virtual Machine provider)", slug)
+	}
+	got, _ := config.Load()
+	if got.Profiles["default"].CloudProvider != "nimbo" {
+		t.Fatalf("persisted CloudProvider = %q, want nimbo", got.Profiles["default"].CloudProvider)
+	}
+}
+
+// When several providers are active but none advertises compute, do not guess.
+func TestDetectCloudProviderAmbiguousNoComputeDoesNotPersist(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.Config{
+		ActiveProfile: "default",
+		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	srv := providersServer(t, `[
+		{"slug":"ceph","status":true,"services":["Object Storage"]},
+		{"slug":"dns","status":true,"services":["Dns Domain"]}
+	]`)
+	client := httpclient.New(httpclient.Options{BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second})
+
+	slug, err := detectCloudProvider(context.Background(), client, cfg, "default")
+	if err != nil {
+		t.Fatalf("detectCloudProvider error: %v", err)
+	}
+	if slug != "" {
+		t.Fatalf("slug = %q, want empty (no compute provider, must not guess)", slug)
+	}
+	got, _ := config.Load()
+	if got.Profiles["default"].CloudProvider != "" {
+		t.Fatalf("CloudProvider should not be persisted, got %q", got.Profiles["default"].CloudProvider)
+	}
+}
+
+func TestResolveCloudProviderFallsBackToProfile(t *testing.T) {
+	t.Setenv("ZCP_CLOUD_PROVIDER", "")
+	t.Setenv("ZCP_BEARER_TOKEN", "")
+	t.Setenv("ZCP_PROFILE", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cfg := &config.Config{
+		ActiveProfile: "default",
+		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t", CloudProvider: "nimbo"}},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	root := newTestRoot()
+
+	if got := resolveCloudProvider(root, ""); got != "nimbo" {
+		t.Errorf("resolveCloudProvider with stored profile = %q, want nimbo", got)
+	}
+	if got := resolveCloudProvider(root, "override"); got != "override" {
+		t.Errorf("explicit flag must win, got %q", got)
+	}
+}
+
+// ─── object-storage command-layer validation (fails before any API call) ────
+
+func TestParseKVTags(t *testing.T) {
+	m, err := parseKVTags([]string{"env=prod", "team=data", "blank="})
+	if err != nil {
+		t.Fatalf("parseKVTags error = %v", err)
+	}
+	if m["env"] != "prod" || m["team"] != "data" {
+		t.Errorf("parsed = %v, want env=prod team=data", m)
+	}
+	if v, ok := m["blank"]; !ok || v != "" {
+		t.Errorf("empty value should be allowed, got %v ok=%v", v, ok)
+	}
+	if _, err := parseKVTags([]string{"noequals"}); err == nil {
+		t.Error("expected error for a tag without '='")
+	}
+	if _, err := parseKVTags([]string{"=v"}); err == nil {
+		t.Error("expected error for an empty key")
+	}
+}
+
+// runOS executes the full object-storage command tree with the given args and
+// returns the error. Used to exercise flag validation that runs before any
+// network call.
+func runOS(args ...string) error {
+	root := newTestRoot()
+	root.AddCommand(NewObjectStorageCmd())
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	root.SetArgs(append([]string{"object-storage"}, args...))
+	return root.Execute()
+}
+
+func TestOSFlagValidation(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"lifecycle expire requires --days", []string{"bucket", "lifecycle", "expire", "s", "b"}, "--days"},
+		{"object url rejects --expires 0", []string{"object", "url", "s", "b", "k", "--expires", "0"}, "--expires"},
+		{"object url rejects > 7 days", []string{"object", "url", "s", "b", "k", "--expires", "200h"}, "--expires"},
+		{"object put-url rejects --expires 0", []string{"object", "put-url", "s", "b", "k", "--expires", "0"}, "--expires"},
+		{"lifecycle expire requires a duration flag", []string{"bucket", "lifecycle", "expire", "s", "b"}, "at least one"},
+		{"set-acl rejects bad value", []string{"bucket", "set-acl", "s", "b", "--acl", "bogus"}, "unsupported"},
+		{"cors set requires origin+method", []string{"bucket", "cors", "set", "s", "b", "--origin", "*"}, "--method"},
+		{"bucket tag set requires --tag", []string{"bucket", "tag", "set", "s", "b"}, "--tag"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := runOS(c.args...)
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error = %q, want it to mention %q", err.Error(), c.want)
+			}
+		})
 	}
 }

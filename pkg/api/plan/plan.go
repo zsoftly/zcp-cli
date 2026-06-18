@@ -64,6 +64,7 @@ const (
 	ServiceISO           ServiceType = "ISO"
 	ServiceBackups       ServiceType = "Backups"
 	ServiceNetwork       ServiceType = "Network"
+	ServiceObjectStorage ServiceType = "Object Storage"
 )
 
 // Attribute holds the resource attributes embedded in a plan.

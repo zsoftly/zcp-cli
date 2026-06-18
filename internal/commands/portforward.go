@@ -176,7 +176,7 @@ func newPortForwardDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <rule-id>",
 		Short: "Delete a port forwarding rule",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp portforward delete 42 --ip 1036521143
   zcp portforward delete 42 --ip 1036521143 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

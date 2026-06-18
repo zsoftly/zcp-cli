@@ -89,7 +89,7 @@ func newK8sClusterGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "get <slug>",
 		Short:   "Show details for a Kubernetes cluster",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp kubernetes get my-cluster`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runK8sClusterGet(cmd, args[0])
@@ -190,8 +190,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
-  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --cloud-provider nimbo --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
+  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -202,9 +202,9 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -308,7 +308,7 @@ func newK8sClusterStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "start <slug>",
 		Short:   "Start a stopped Kubernetes cluster",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp kubernetes start my-cluster`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runK8sClusterStart(cmd, args[0])
@@ -341,7 +341,7 @@ func newK8sClusterStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop <slug>",
 		Short: "Stop a running Kubernetes cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes stop my-cluster
   zcp kubernetes stop my-cluster --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -388,7 +388,7 @@ func newK8sClusterScaleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scale <slug>",
 		Short: "Scale the number of worker nodes on a Kubernetes cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes scale my-cluster --workers 5
   zcp k8s scale my-cluster --workers 3 --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -482,7 +482,7 @@ func newK8sGetConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get-config <slug>",
 		Short: "Download the kubeconfig for a Kubernetes cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes get-config my-cluster                      # prints kubeconfig to stdout
   zcp kubernetes get-config my-cluster --output ~/.kube/zcp  # saves to a file`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -533,7 +533,7 @@ func newK8sClusterUpgradeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upgrade <slug>",
 		Short: "Upgrade (change plan of) a Kubernetes cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes upgrade my-cluster --plan k8s-plan-2
   zcp kubernetes upgrade my-cluster --plan k8s-plan-2 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -554,7 +554,7 @@ func newK8sClusterDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Permanently delete a Kubernetes cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes delete my-cluster
   zcp kubernetes delete my-cluster --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -597,7 +597,7 @@ func newK8sClusterUpgradeVersionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upgrade-version <cluster-slug>",
 		Short: "Upgrade the Kubernetes version of a cluster",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp kubernetes upgrade-version my-cluster --version v1.35.1
   zcp kubernetes upgrade-version my-cluster --version v1.36.1`,
 		RunE: func(cmd *cobra.Command, args []string) error {

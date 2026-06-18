@@ -54,7 +54,7 @@ func runVMBackupList(cmd *cobra.Command) error {
 		return fmt.Errorf("vm-backup list: %w", err)
 	}
 
-	headers := []string{"ID", "NAME", "SLUG", "STATE", "SERVICE", "VM ID", "CREATED"}
+	headers := []string{"ID", "NAME", "SLUG", "STATE", "VM ID", "CREATED"}
 	rows := make([][]string, 0, len(backups))
 	for _, b := range backups {
 		rows = append(rows, []string{
@@ -62,7 +62,6 @@ func runVMBackupList(cmd *cobra.Command) error {
 			b.Name,
 			b.Slug,
 			b.State,
-			b.ServiceName,
 			b.VirtualMachineID,
 			b.CreatedAt,
 		})
@@ -90,13 +89,13 @@ func newVMBackupCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp vm-backup create my-vm --interval daily --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default
-  zcp vm-backup create my-vm --interval daily --immediate 1 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default`,
+		Args:  exactArgs(1),
+		Example: `  zcp vm-backup create my-vm --interval daily --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default
+  zcp vm-backup create my-vm --interval daily --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -159,7 +158,7 @@ func newVMBackupDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <backup-slug>",
 		Short: "Permanently delete a VM backup",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vm-backup delete vmb-001001-0001
   zcp vm-backup delete vmb-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

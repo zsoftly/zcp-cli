@@ -93,7 +93,7 @@ func newISOCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create (register) an ISO image",
 		Example: `  zcp iso create --name my-iso --url https://example.com/my.iso \
-    --cloud-provider nimbo --project my-project --region yow-1 \
+    --project my-project --region yow-1 \
     --os-type-id <uuid> --image-type "Operating System" \
     --os ubuntu --os-version "22.04 LTS" --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -103,9 +103,9 @@ func newISOCreateCmd() *cobra.Command {
 			if isoURL == "" {
 				return fmt.Errorf("--url is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			project = resolveProject(project)
 			if project == "" {
@@ -190,7 +190,7 @@ func newISOUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <slug>",
 		Short: "Update ISO permissions",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp iso update my-iso --bootable --password-enabled
   zcp iso update my-iso --extractable=false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -232,7 +232,7 @@ func newISODeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete an ISO image",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp iso delete my-iso
   zcp iso delete my-iso --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

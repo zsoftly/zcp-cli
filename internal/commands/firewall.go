@@ -157,7 +157,7 @@ func newFirewallDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <rule-id>",
 		Short: "Delete a firewall rule",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp firewall delete 42 --ip 1036521143
   zcp firewall delete 42 --ip 1036521143 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
