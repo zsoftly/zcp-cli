@@ -28,7 +28,7 @@ export ZCP_REGION=yow-1
 export ZCP_PROJECT=default
 ```
 
-With those set, `zcp instance create --name my-vm --template ubuntu-22f ...` no longer
+With those set, `zcp instance create --name my-vm --template ubuntu-2604-lts ...` no longer
 needs `--region` or `--project`. The examples below pass them explicitly so each one
 works on its own; drop them if you have exported the variables. See
 [configuration.md](configuration.md) for the full list of environment variables.
@@ -83,11 +83,11 @@ zcp instance create \
   --name my-vm \
   --project default \
   --region yow-1 \
-  --template ubuntu-22f \
-  --plan bp-4vc-8gb \
+  --template ubuntu-2604-lts \
+  --plan ci1l \
   --billing-cycle hourly \
   --storage-category nvme \
-  --blockstorage-plan 50-gb-2 \
+  --blockstorage-plan b1g1 \
   --ssh-key mykey
 
 zcp instance create ... --wait
@@ -105,7 +105,7 @@ zcp instance change-plan <slug> --plan <new-plan> --billing-cycle hourly
 zcp instance change-hostname <slug> --hostname new-hostname
 
 # Change OS (DESTRUCTIVE — reinstalls the VM)
-zcp instance change-os <slug> --template ubuntu-22f
+zcp instance change-os <slug> --template ubuntu-2604-lts
 
 # Change startup script
 zcp instance change-script <slug> --user-data "#!/bin/bash\napt update"
@@ -153,13 +153,14 @@ zcp volume create \
   --region yow-1 \
   --billing-cycle hourly \
   --storage-category nvme \
-  --plan 50-gb-2
+  --plan b1g1
 zcp volume create ... --vm <vm-slug>   # Attach on creation
 zcp volume attach <volume-slug> --vm <vm-slug>
 zcp volume detach <volume-slug>
 
 # Snapshots
 zcp snapshot list
+# Note: snapshot-per-gb is a real plan, currently disabled in the catalog (enable to use)
 zcp snapshot create \
   --volume <slug> \
   --name my-snapshot \
@@ -174,7 +175,7 @@ zcp vm-snapshot list
 zcp vm-snapshot create \
   --vm <slug> \
   --name my-checkpoint \
-  --plan basic \
+  --plan vm-snapshot-yow \
   --billing-cycle hourly \
   --project default \
   --region yow-1
@@ -235,7 +236,7 @@ zcp vpc create \
   --name my-vpc \
   --region yow-1 \
   --project default \
-  --plan vpc-1 \
+  --plan virtual-private-cloud-vpc-1 \
   --network-address 10.1.0.1 \
   --size 16 \
   --billing-cycle hourly \
@@ -389,7 +390,7 @@ zcp kubernetes create \
 # Start / stop / upgrade
 zcp kubernetes start <slug>
 zcp kubernetes stop <slug>
-zcp kubernetes upgrade <slug> --plan k8s-plan-2
+zcp kubernetes upgrade <slug> --plan k8s-xli-yow-1
 
 # To cancel/delete a cluster, use billing cancel-service:
 zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
@@ -412,7 +413,7 @@ zcp object-storage create \
   --project default \
   --region os-yow \
   --billing-cycle hourly \
-  --plan o1100g
+  --plan o2100g
 
 # Resize (change allocated GB)
 zcp object-storage resize <slug> --storage-gb 200

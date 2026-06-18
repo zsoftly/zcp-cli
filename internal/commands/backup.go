@@ -66,6 +66,9 @@ func newBackupCreateCmd() *cobra.Command {
 	var blockstorageSlug, interval, cloudProvider, region, billingCycle, plan, pseudoService, project string
 	var at, immediate int
 
+	// TODO(disabled-plan): `backup-1` is a real plan but backup plans are not yet
+	// enabled in the catalog (`zcp plan backup` returns []). Keep the example/help
+	// as-is — it works once backup plans are enabled.
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",

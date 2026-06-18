@@ -101,7 +101,7 @@ export ZCP_REGION=yow-1
 export ZCP_OUTPUT=json
 
 # Create a volume without passing repetitive flags
-zcp volume create --name my-disk --plan 50-gb-2 --billing-cycle hourly
+zcp volume create --name my-disk --plan b1g1 --billing-cycle hourly
 ```
 
 ### Local development: a sourced secrets file

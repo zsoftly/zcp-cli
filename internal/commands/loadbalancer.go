@@ -107,8 +107,8 @@ func newLBCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
-  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
+		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle hourly --acquire-new-ip
+  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle monthly --ip existing-ip-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

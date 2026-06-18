@@ -86,6 +86,9 @@ func newVMBackupCreateCmd() *cobra.Command {
 		coupon        string
 	)
 
+	// TODO(disabled-plan): `backup-basic` is a real plan but backup plans are not
+	// yet enabled in the catalog (`zcp plan backup` returns []). Keep the example
+	// as-is — it works once backup plans are enabled.
 	cmd := &cobra.Command{
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",

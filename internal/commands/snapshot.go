@@ -65,6 +65,9 @@ func newSnapshotListCmd() *cobra.Command {
 func newSnapshotCreateCmd() *cobra.Command {
 	var blockstorageSlug, name, plan, project, cloudProvider, region, billingCycle, coupon string
 
+	// TODO(disabled-plan): `snapshot-per-gb` is a real plan but block-snapshot
+	// plans are not yet enabled in the catalog (no `zcp plan snapshot` listing).
+	// Keep the example/help as-is — it works once snapshot plans are enabled.
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a block storage snapshot",

@@ -239,8 +239,8 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
-  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
+		Example: `  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly
+  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -816,7 +816,7 @@ func newInstanceChangePlanCmd() *cobra.Command {
 		Use:     "change-plan <slug>",
 		Short:   "Change the plan of a virtual machine",
 		Args:    exactArgs(1),
-		Example: `  zcp instance change-plan my-vm --plan box2cm4 --billing-cycle hourly`,
+		Example: `  zcp instance change-plan my-vm --plan ci1m --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -867,8 +867,8 @@ func newInstanceChangeOSCmd() *cobra.Command {
 		Use:   "change-os <slug>",
 		Short: "Change the OS template of a virtual machine (DESTRUCTIVE)",
 		Args:  exactArgs(1),
-		Example: `  zcp instance change-os my-vm --template ubuntu-22f
-  zcp instance change-os my-vm --template ubuntu-22f --yes`,
+		Example: `  zcp instance change-os my-vm --template ubuntu-2604-lts
+  zcp instance change-os my-vm --template ubuntu-2604-lts --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if template == "" {
 				return fmt.Errorf("--template is required")

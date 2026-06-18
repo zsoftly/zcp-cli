@@ -534,8 +534,8 @@ func newK8sClusterUpgradeCmd() *cobra.Command {
 		Use:   "upgrade <slug>",
 		Short: "Upgrade (change plan of) a Kubernetes cluster",
 		Args:  exactArgs(1),
-		Example: `  zcp kubernetes upgrade my-cluster --plan k8s-plan-2
-  zcp kubernetes upgrade my-cluster --plan k8s-plan-2 --billing-cycle hourly`,
+		Example: `  zcp kubernetes upgrade my-cluster --plan k8s-xli-yow-1
+  zcp kubernetes upgrade my-cluster --plan k8s-xli-yow-1 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")

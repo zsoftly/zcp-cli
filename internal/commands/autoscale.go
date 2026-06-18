@@ -104,8 +104,8 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new autoscale group",
-		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1 --region yow-1 --project default
-  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --region yow-1 --project default`,
+		Example: `  zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts --min 1 --max 5 --zone yow-1 --region yow-1 --project default
+  zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -279,7 +279,7 @@ func newAutoscaleChangePlanCmd() *cobra.Command {
 		Use:     "change-plan <slug>",
 		Short:   "Change the compute plan of an autoscale group",
 		Args:    exactArgs(1),
-		Example: `  zcp autoscale change-plan web-group --plan medium`,
+		Example: `  zcp autoscale change-plan web-group --plan ci1m`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -322,7 +322,7 @@ func newAutoscaleChangeTemplateCmd() *cobra.Command {
 		Use:     "change-template <slug>",
 		Short:   "Change the template of an autoscale group",
 		Args:    exactArgs(1),
-		Example: `  zcp autoscale change-template web-group --template ubuntu-24`,
+		Example: `  zcp autoscale change-template web-group --template ubuntu-2604-lts`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if template == "" {
 				return fmt.Errorf("--template is required")
