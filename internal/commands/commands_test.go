@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -625,8 +626,21 @@ func providersServer(t *testing.T, dataJSON string) *httptest.Server {
 	return srv
 }
 
+// isolateConfigDir points config Save/Load at a temp dir on every platform.
+// Windows resolves the config path from APPDATA (XDG_CONFIG_HOME is ignored), so
+// setting only XDG would leak writes into the real user config on Windows.
+func isolateConfigDir(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", dir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+}
+
 func TestDetectCloudProviderSingleActivePersists(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfigDir(t)
 	cfg := &config.Config{
 		ActiveProfile: "default",
 		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
@@ -658,7 +672,7 @@ func TestDetectCloudProviderSingleActivePersists(t *testing.T) {
 // nimbo (Virtual Machine + infra). The compute provider must be picked by the
 // "Virtual Machine" service regardless of catalog order.
 func TestDetectCloudProviderPicksComputeProvider(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfigDir(t)
 	cfg := &config.Config{
 		ActiveProfile: "default",
 		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
@@ -688,7 +702,7 @@ func TestDetectCloudProviderPicksComputeProvider(t *testing.T) {
 
 // When several providers are active but none advertises compute, do not guess.
 func TestDetectCloudProviderAmbiguousNoComputeDoesNotPersist(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfigDir(t)
 	cfg := &config.Config{
 		ActiveProfile: "default",
 		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t"}},
@@ -719,7 +733,7 @@ func TestResolveCloudProviderFallsBackToProfile(t *testing.T) {
 	t.Setenv("ZCP_CLOUD_PROVIDER", "")
 	t.Setenv("ZCP_BEARER_TOKEN", "")
 	t.Setenv("ZCP_PROFILE", "")
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateConfigDir(t)
 	cfg := &config.Config{
 		ActiveProfile: "default",
 		Profiles:      map[string]config.Profile{"default": {Name: "default", BearerToken: "t", CloudProvider: "nimbo"}},
