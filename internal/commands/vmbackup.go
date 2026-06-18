@@ -141,7 +141,7 @@ func newVMBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&interval, "interval", "daily", "Backup interval (e.g. daily, weekly)")
 	cmd.Flags().IntVar(&at, "at", 0, "Hour of day for scheduled backup (0-23)")
 	cmd.Flags().IntVar(&immediate, "immediate", 0, "Run backup immediately (1=yes, 0=no)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Backup plan slug (required)")

@@ -69,8 +69,8 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",
-		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project
-  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project`,
+		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-1 --project default
+  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --region yow-1 --billing-cycle hourly --plan backup-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -139,7 +139,7 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&interval, "interval", "", "Backup interval, e.g. dailyAt (required)")
 	cmd.Flags().IntVar(&at, "at", 1, "Hour at which the backup triggers (e.g. 1 for 1 AM)")
 	cmd.Flags().IntVar(&immediate, "immediate", 0, "Run backup immediately: 1 for yes, 0 for no")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. backup-1 (required)")

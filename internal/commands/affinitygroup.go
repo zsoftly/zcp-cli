@@ -81,7 +81,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create an affinity group",
 		Example: `  zcp affinity-group create --name my-group --type "host affinity" \
-    --project my-project --region yow-1`,
+    --project default --region yow-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -117,7 +117,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Group description")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	return cmd
 }
 

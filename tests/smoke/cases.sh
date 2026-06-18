@@ -277,7 +277,7 @@ lc_dns() {
   # whereas the compute provider/region returns HTTP 500 "Target class
   # [dns.nimbo] does not exist"). det_cp/det_region resolve the *compute*
   # provider, so they must not be used here.
-  dnsr="$(api_get '/regions' | jq -r '.data[]|select((.cloud_provider.slug//"")=="dns")|.slug' | head -1)"
+  dnsr="$(api_get '/regions' | jq -r '.data[]|select(.status==true)|select((.cloud_provider.slug//"")=="dns")|.slug' | head -1)"
   capture out -- zcp dns create --name "$dom" --cloud-provider dns \
     --project "$(det_project)" --region "${dnsr:-default}" -o json
   s="$(_jq_slug <<<"$out")"

@@ -84,6 +84,9 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 			project = resolveProject(project)
 			region = resolveRegion(region)
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
+			}
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err

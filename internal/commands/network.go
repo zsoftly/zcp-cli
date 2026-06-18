@@ -215,7 +215,7 @@ the VPC default ACL before the replacement is applied).`,
 	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required with --vpc)")
 	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask, e.g. 255.255.255.0 (required with --vpc)")
 	cmd.Flags().StringVar(&description, "description", "", "Network description")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd

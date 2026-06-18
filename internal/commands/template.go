@@ -148,7 +148,7 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 		Use:   "account-create",
 		Short: "Create an account template",
 		Example: `  zcp template account-create --name my-template \
-    --region yow-1 --project my-project --os-type-id <uuid> \
+    --region yow-1 --project default --os-type-id <uuid> \
     --image-type "Operating System" --os ubuntu --os-version "22.04 LTS" \
     --billing-cycle hourly --url https://example.com/image.qcow2 --format QCOW2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -189,7 +189,7 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Template name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "Template description")
 	cmd.Flags().StringVar(&templateURL, "url", "", "URL to the template image")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&osTypeID, "os-type-id", "", "OS type UUID")

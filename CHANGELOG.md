@@ -10,9 +10,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Added
 
 - **`zcp object-storage object download <storage> <bucket> <key>`** — download an object's contents to a local file over the S3 protocol (minio-go `FGetObject`). `--dest` sets the destination (a file path, or a directory to write the object's base name into); it defaults to the base name in the current directory. Previously the CLI could upload, list, delete, and show object metadata, but had no way to fetch an object's bytes (`object get` returns metadata only).
-
-### Added
-
 - **Object-storage S3 feature build-out (Tier 1 + Tier 2 lifecycle), all via the existing minio-go S3 client.** These operations talk directly to the Ceph RADOS Gateway and are **CLI-only** — the CMP has not yet exposed them on the ZCP REST API or Web UI:
   - **Versioning workflows:** `object versions` (list versions + delete markers), `object download`/`object delete --version-id`, and `object restore` (undelete by removing the latest delete marker) — versioning is now usable, not just toggleable.
   - **`object copy` / `object move`** — server-side copy (and copy-then-delete), no download/upload round-trip.
@@ -44,7 +41,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **Actionable errors for missing/extra arguments** — every command that takes positional arguments (128 subcommands across 30 command groups) now prints what's wrong, the correct usage line, and the command's own examples instead of cobra's terse default. Previously `zcp profile add` printed only `Error: accepts 1 arg(s), received 0`; it now prints:
 
-  ```
+  ```text
   Error: missing required argument: <name>
 
   Usage:
@@ -59,7 +56,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **Unknown subcommands now error instead of silently printing help** — running a command group with an invalid subcommand (e.g. `zcp region lists`) used to print the group's help text and exit `0`, which hides the typo and lets scripts treat a mistake as success. It now prints an error to stderr and exits non-zero. The message adapts to the group: a group with a single subcommand points straight at it (with its example), while a group with several lists the valid subcommands and suggests the closest match:
 
-  ```
+  ```text
   Error: unknown subcommand "lists" for "zcp region"
 
   Run this instead:

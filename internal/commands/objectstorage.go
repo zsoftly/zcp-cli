@@ -174,7 +174,7 @@ func newOSCreateCmd() *cobra.Command {
 		Short: "Create a new object storage instance",
 		Example: `  zcp object-storage create --name my-storage --region os-yul --billing-cycle hourly --storage-gb 100
   zcp object-storage create --name my-storage --region os-yow --billing-cycle hourly --plan my-plan
-  zcp object-storage create --name my-storage --region os-yul --billing-cycle hourly --storage-gb 100 --project my-project`,
+  zcp object-storage create --name my-storage --region os-yul --billing-cycle hourly --storage-gb 100 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

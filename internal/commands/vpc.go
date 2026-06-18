@@ -127,8 +127,8 @@ func newVPCCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPC",
-		Example: `  zcp vpc create --name my-vpc --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
-  zcp vpc create --name my-vpc --region yow-1 --project my-project --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
+		Example: `  zcp vpc create --name my-vpc --region yow-1 --project default --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
+  zcp vpc create --name my-vpc --region yow-1 --project default --plan vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -186,7 +186,7 @@ func newVPCCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "VPC name (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug (required, see: zcp plan router)")

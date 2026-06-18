@@ -68,7 +68,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a block storage snapshot",
-		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --region yow-1 --billing-cycle hourly --project my-project`,
+		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --region yow-1 --billing-cycle hourly --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -130,7 +130,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&blockstorageSlug, "volume", "", "Block storage volume slug to snapshot (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Snapshot name (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. snapshot-per-gb (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")

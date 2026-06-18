@@ -95,9 +95,9 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
-		Example: `  zcp volume create --name my-disk --project my-project --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
-  zcp volume create --name my-disk --project my-project --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
-  zcp volume create --name my-disk --project my-project --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
+		Example: `  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
+  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
+  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -172,7 +172,7 @@ func newVolumeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Volume name (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. nvme (required)")

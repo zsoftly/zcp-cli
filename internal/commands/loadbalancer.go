@@ -107,8 +107,8 @@ func newLBCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --project my-project --region yul-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
-  zcp loadbalancer create --name my-lb --project my-project --region yul-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
+		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan load-balancer --billing-cycle hourly --acquire-new-ip
+  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan load-balancer --billing-cycle monthly --ip existing-ip-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -155,7 +155,7 @@ func newLBCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Load balancer name (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&network, "network", "", "Network slug (required)")
@@ -431,8 +431,8 @@ func newLBAttachVMCmd() *cobra.Command {
 		Use:   "attach-vm <lb-slug> <rule-id>",
 		Short: "Attach VMs to a load balancer rule",
 		Args:  exactArgs(2),
-		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --region yul-1 --project my-project
-  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --region yul-1 --project my-project --yes`,
+		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --region yul-1 --project default
+  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --region yul-1 --project default --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(vmSlugs) == 0 {
 				return fmt.Errorf("at least one --vm is required")
@@ -473,7 +473,7 @@ func newLBAttachVMCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArrayVar(&vmSlugs, "vm", nil, "VM slug to attach (can be repeated, required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().Bool("yes", false, "Skip confirmation prompt")

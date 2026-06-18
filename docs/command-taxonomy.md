@@ -425,7 +425,7 @@ strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 | VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`                                                    |
 | Volume          | `--volume`                        | `zcp snapshot create --volume root-1234`                                        |
 | DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`                                                    |
-| Project         | `--project`                       | `--project my-project`                                                          |
+| Project         | `--project`                       | `--project default`                                                             |
 | Region          | `--region`                        | `--region yow-1`                                                                |
 | Cloud provider  | auto-detected (hidden override)   | saved to the profile by `zcp auth validate`; rarely passed (`--cloud-provider`) |
 | VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`                   |

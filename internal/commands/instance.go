@@ -345,7 +345,7 @@ func newInstanceCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "VM name (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&template, "template", "", "Template slug (required)")
@@ -1093,7 +1093,7 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd.Flags().StringVar(&vmSlug, "vm", "", "VM slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&addonSlug, "addon-slug", "", "Addon slug (required)")
 	cmd.Flags().StringVar(&addonCategory, "addon-category", "", "Addon category slug (optional)")
 	cmd.Flags().StringVar(&addonID, "addon-id", "", "Addon ID (required)")

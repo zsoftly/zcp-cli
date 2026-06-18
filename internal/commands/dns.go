@@ -140,7 +140,7 @@ func newDNSCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a DNS domain",
-		Example: `  zcp dns create --name example.com --project my-project`,
+		Example: `  zcp dns create --name example.com --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -175,7 +175,7 @@ func newDNSCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Domain name (required, e.g. example.com)")
-	cmd.Flags().StringVar(&project, "project", "", "Project slug (required, e.g. my-project)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required, e.g. default)")
 	// --dns-provider selects the DNS backend; it is an internal detail with a
 	// working default, so it is hidden from help (still usable as an override).
 	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS backend (internal; optional override)")

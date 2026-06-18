@@ -93,7 +93,7 @@ func newISOCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create (register) an ISO image",
 		Example: `  zcp iso create --name my-iso --url https://example.com/my.iso \
-    --project my-project --region yow-1 \
+    --project default --region yow-1 \
     --os-type-id <uuid> --image-type "Operating System" \
     --os ubuntu --os-version "22.04 LTS" --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -138,7 +138,7 @@ func newISOCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "ISO name (required)")
 	cmd.Flags().StringVar(&description, "description", "", "ISO description")
 	cmd.Flags().StringVar(&isoURL, "url", "", "URL to the ISO file (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&osTypeID, "os-type-id", "", "OS type UUID")

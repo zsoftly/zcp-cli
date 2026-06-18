@@ -160,7 +160,7 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&cooldownPeriod, "cooldown", 0, "Cooldown period in seconds between scaling actions")
 	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug (required)")
 	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd

@@ -181,7 +181,7 @@ func newVPNCGCreateCmd() *cobra.Command {
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
 		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -274,7 +274,7 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
 		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -464,7 +464,7 @@ func newVPNUserCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&username, "username", "", "VPN username (required)")
 	cmd.Flags().StringVar(&password, "password", "", "VPN password (prompted if not provided)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd

@@ -27,6 +27,8 @@ func exactArgs(n int) cobra.PositionalArgs {
 }
 
 // minArgs enforces at least n positional arguments.
+//
+//nolint:unused // part of the drop-in args-validator toolkit; retained for callers
 func minArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) < n {
@@ -47,6 +49,8 @@ func maxArgs(n int) cobra.PositionalArgs {
 }
 
 // rangeArgs enforces between min and max positional arguments (inclusive).
+//
+//nolint:unused // part of the drop-in args-validator toolkit; retained for callers
 func rangeArgs(min, max int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		switch {

@@ -341,7 +341,7 @@ zcp monitoring delete <slug>
 
 ```bash
 zcp project list
-zcp project create --name my-project --icon cloud-15 --purpose "Development"
+zcp project create --name default --icon cloud-15 --purpose "Development"
 zcp project update <slug> --name "New Name" --description "Updated description"
 zcp project delete <slug>
 zcp project dashboard <slug>
