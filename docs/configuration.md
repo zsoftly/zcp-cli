@@ -55,11 +55,12 @@ profiles:
 
 Each profile supports the following fields:
 
-| Field        | YAML Key       | Required | Description                                                         |
-| ------------ | -------------- | -------- | ------------------------------------------------------------------- |
-| Name         | `name`         | Yes      | Must match the map key. Used for display in `zcp profile list`.     |
-| Bearer Token | `bearer_token` | Yes      | Your ZCP API bearer token. Obtained from the ZSoftly Cloud Portal.  |
-| API URL      | `api_url`      | No       | Override the API base URL for this profile. Blank uses the default. |
+| Field          | YAML Key         | Required | Description                                                                                                                                                                 |
+| -------------- | ---------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name           | `name`           | Yes      | Must match the map key. Used for display in `zcp profile list`.                                                                                                             |
+| Bearer Token   | `bearer_token`   | Yes      | Your ZCP API bearer token. Obtained from the ZSoftly Cloud Portal.                                                                                                          |
+| API URL        | `api_url`        | No       | Override the API base URL for this profile. Blank uses the default.                                                                                                         |
+| Cloud Provider | `cloud_provider` | No       | Auto-detected and saved by `zcp auth validate` / `zcp profile add`; used by create commands so you need not pass `--cloud-provider`. Leave blank to let the CLI fill it in. |
 
 The default API URL when `api_url` is blank or omitted is:
 
@@ -73,19 +74,21 @@ https://api.zcp.zsoftly.ca/api
 
 The following environment variables are evaluated at runtime and take precedence over the corresponding config file values and global flags.
 
-| Variable             | Overrides                           | Description                                       |
-| -------------------- | ----------------------------------- | ------------------------------------------------- |
-| `ZCP_PROFILE`        | `--profile` flag / active profile   | Profile name to use for the current invocation.   |
-| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token, bypassing the config file entirely. |
-| `ZCP_API_URL`        | Profile `api_url` / default URL     | API base URL override.                            |
-| `ZCP_PROJECT`        | `--project` flag                    | Default project slug for all resource commands.   |
-| `ZCP_REGION`         | `--region` flag                     | Default region slug for all resource commands.    |
-| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag             | Default cloud provider slug (e.g., `zcp`).        |
-| `ZCP_OUTPUT`         | `--output` / `-o` flag              | Default output format (`table`, `json`, `yaml`).  |
-| `ZCP_DEBUG`          | `--debug` flag                      | Set to `true` to enable debug output (stderr).    |
-| `XDG_CONFIG_HOME`    | Config file directory (Linux/macOS) | Overrides the base directory for the config file. |
+| Variable             | Overrides                           | Description                                                                                                                                         |
+| -------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ZCP_PROFILE`        | `--profile` flag / active profile   | Profile name to use for the current invocation.                                                                                                     |
+| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token, bypassing the config file entirely.                                                                                                   |
+| `ZCP_API_URL`        | Profile `api_url` / default URL     | API base URL override.                                                                                                                              |
+| `ZCP_PROJECT`        | `--project` flag                    | Default project slug for all resource commands.                                                                                                     |
+| `ZCP_REGION`         | `--region` flag                     | Default region slug for all resource commands.                                                                                                      |
+| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag / profile   | Cloud provider slug. Optional — auto-detected by `auth validate`; set only to override (multi-provider accounts, or CI that skips `auth validate`). |
+| `ZCP_OUTPUT`         | `--output` / `-o` flag              | Default output format (`table`, `json`, `yaml`).                                                                                                    |
+| `ZCP_DEBUG`          | `--debug` flag                      | Set to `true` to enable debug output (stderr).                                                                                                      |
+| `XDG_CONFIG_HOME`    | Config file directory (Linux/macOS) | Overrides the base directory for the config file.                                                                                                   |
 
 Environment variables are useful for CI/CD pipelines and scripting where you do not want to pass repetitive flags or store credentials in a file on disk.
+
+> **Object storage uses its own provider and regions.** `object-storage` commands default to the `ceph` cloud provider (compute commands default to the auto-detected `nimbo`), so you do not normally set `ZCP_CLOUD_PROVIDER` for them. They also run in object-storage regions (`os-yul`, `os-yow`) rather than compute regions (`yul-1`, `yow-1`). Advanced bucket and object operations additionally connect **directly to the Ceph S3 (RGW) endpoint** read from the instance details — keep that endpoint reachable from any host (or CI runner) behind a proxy or firewall.
 
 Example usage in a pipeline:
 
@@ -93,11 +96,12 @@ Example usage in a pipeline:
 export ZCP_BEARER_TOKEN=ci-bearer-token
 export ZCP_PROJECT=prod-project
 export ZCP_REGION=yow-1
-export ZCP_CLOUD_PROVIDER=zcp
+# Cloud provider is auto-detected by 'zcp auth validate'. In CI that skips it,
+# set ZCP_CLOUD_PROVIDER to your provider slug (see 'zcp cloud-provider list').
 export ZCP_OUTPUT=json
 
 # Create a volume without passing repetitive flags
-zcp volume create --name my-disk --plan 50-gb-2 --billing-cycle hourly
+zcp volume create --name my-disk --plan b1g1 --billing-cycle hourly
 ```
 
 ### Local development: a sourced secrets file

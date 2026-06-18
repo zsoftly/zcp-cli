@@ -34,7 +34,7 @@ func newACLListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list <vpc-slug>",
 		Short:   "List network ACLs for a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp acl list my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runACLList(cmd, args[0])
@@ -76,7 +76,7 @@ func newACLCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create <vpc-slug>",
 		Short:   "Create a network ACL in a VPC",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp acl create my-vpc --name allow-web --description "Allow HTTP traffic"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
@@ -173,7 +173,7 @@ func newACLDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <vpc-slug> <acl-name-or-id>",
 		Short: "Delete a network ACL from a VPC",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2),
 		Example: `  zcp acl delete my-vpc web-acl
   zcp acl delete my-vpc 5290f39f-5f56-4ca3-b2b5-05a464a081df --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -218,7 +218,7 @@ func newACLRulesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rules <vpc-slug> <acl-name-or-id>",
 		Short:   "List the rules inside a network ACL",
-		Args:    cobra.ExactArgs(2),
+		Args:    exactArgs(2),
 		Example: `  zcp acl rules my-vpc web-acl`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
@@ -340,7 +340,7 @@ func newACLCreateRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create-rule <vpc-slug> <acl-name-or-id>",
 		Short: "Add a rule to a network ACL",
-		Args:  cobra.ExactArgs(2),
+		Args:  exactArgs(2),
 		Example: `  zcp acl create-rule my-vpc web-acl --number 1 --protocol tcp --start-port 80 --end-port 80 --cidr 0.0.0.0/0
   zcp acl create-rule my-vpc web-acl --number 2 --protocol icmp --cidr 10.30.1.0/24,10.30.2.0/24
   zcp acl create-rule my-vpc web-acl --number 3 --protocol all --cidr 0.0.0.0/0 --traffic-type egress`,
@@ -384,7 +384,7 @@ func newACLUpdateRuleCmd() *cobra.Command {
 
 All rule fields must be provided (the API replaces the whole rule); use
 "zcp acl rules" to see the current values and the rule ID.`,
-		Args: cobra.ExactArgs(3),
+		Args: exactArgs(3),
 		Example: `  zcp acl rules my-vpc web-acl
   zcp acl update-rule my-vpc web-acl <rule-id> --number 3 --protocol icmp --cidr 10.30.1.0/24,10.30.2.0/24,10.30.3.0/24`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -423,7 +423,7 @@ func newACLDeleteRuleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "delete-rule <vpc-slug> <acl-name-or-id> <rule-id>",
 		Short:   "Delete a rule from a network ACL",
-		Args:    cobra.ExactArgs(3),
+		Args:    exactArgs(3),
 		Example: `  zcp acl delete-rule my-vpc web-acl 71b2bf4d-dffc-4956-9ea3-8befedc5b0a1 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			vpcSlug, aclRef, ruleID := args[0], args[1], args[2]

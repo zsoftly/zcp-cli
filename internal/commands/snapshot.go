@@ -46,14 +46,13 @@ func newSnapshotListCmd() *cobra.Command {
 				return fmt.Errorf("snapshot list: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "SERVICE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME ID", "CREATED"}
 			rows := make([][]string, 0, len(snapshots))
 			for _, s := range snapshots {
 				rows = append(rows, []string{
 					s.Slug,
 					s.Name,
 					s.BlockstorageID,
-					s.ServiceDisplayName,
 					s.CreatedAt,
 				})
 			}
@@ -66,10 +65,13 @@ func newSnapshotListCmd() *cobra.Command {
 func newSnapshotCreateCmd() *cobra.Command {
 	var blockstorageSlug, name, plan, project, cloudProvider, region, billingCycle, coupon string
 
+	// TODO(disabled-plan): `snapshot-per-gb` is a real plan but block-snapshot
+	// plans are not yet enabled in the catalog (no `zcp plan snapshot` listing).
+	// Keep the example/help as-is — it works once snapshot plans are enabled.
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a block storage snapshot",
-		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --cloud-provider nimbo --region yow-1 --billing-cycle hourly --project my-project`,
+		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --region yow-1 --billing-cycle hourly --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -80,9 +82,9 @@ func newSnapshotCreateCmd() *cobra.Command {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -118,12 +120,11 @@ func newSnapshotCreateCmd() *cobra.Command {
 				return fmt.Errorf("snapshot create: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "SERVICE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME ID", "CREATED"}
 			rows := [][]string{{
 				snap.Slug,
 				snap.Name,
 				snap.BlockstorageID,
-				snap.ServiceDisplayName,
 				snap.CreatedAt,
 			}}
 			return printer.PrintTable(headers, rows)
@@ -132,7 +133,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&blockstorageSlug, "volume", "", "Block storage volume slug to snapshot (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Snapshot name (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. snapshot-per-gb (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
@@ -147,7 +148,7 @@ func newSnapshotRevertCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "revert <snapshot-slug>",
 		Short: "Revert a block storage volume to a snapshot state (DESTRUCTIVE)",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp snapshot revert ss-001001-0001 --volume bs-001001-0042
   zcp snapshot revert ss-001001-0001 --volume bs-001001-0042 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -178,12 +179,11 @@ func newSnapshotRevertCmd() *cobra.Command {
 				return fmt.Errorf("snapshot revert: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "SERVICE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME ID", "CREATED"}
 			rows := [][]string{{
 				snap.Slug,
 				snap.Name,
 				snap.BlockstorageID,
-				snap.ServiceDisplayName,
 				snap.CreatedAt,
 			}}
 			return printer.PrintTable(headers, rows)
@@ -200,7 +200,7 @@ func newSnapshotDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <snapshot-slug>",
 		Short: "Permanently delete a block storage snapshot",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp snapshot delete ss-001001-0001
   zcp snapshot delete ss-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

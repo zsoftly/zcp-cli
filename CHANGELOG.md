@@ -5,6 +5,84 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.17] - 2026-06-17
+
+### Added
+
+- **`zcp object-storage object download <storage> <bucket> <key>`** — download an object's contents to a local file over the S3 protocol (minio-go `FGetObject`). `--dest` sets the destination (a file path, or a directory to write the object's base name into); it defaults to the base name in the current directory. Previously the CLI could upload, list, delete, and show object metadata, but had no way to fetch an object's bytes (`object get` returns metadata only).
+- **Object-storage S3 feature build-out (Tier 1 + Tier 2 lifecycle), all via the existing minio-go S3 client.** These operations talk directly to the Ceph RADOS Gateway and are **CLI-only** — the CMP has not yet exposed them on the ZCP REST API or Web UI:
+  - **Versioning workflows:** `object versions` (list versions + delete markers), `object download`/`object delete --version-id`, and `object restore` (undelete by removing the latest delete marker) — versioning is now usable, not just toggleable.
+  - **`object copy` / `object move`** — server-side copy (and copy-then-delete), no download/upload round-trip.
+  - **`object stat`** — full S3 metadata via HEAD (size, content-type, ETag, storage class, user metadata); `object put` gains `--content-type` and `--metadata key=value` (sets `x-amz-meta-*`).
+  - **`object put-url`** — pre-signed URL for client uploads (HTTP PUT), the symmetric half of `object url`.
+  - **`bucket uploads list|abort`** — see and reclaim storage held by incomplete multipart uploads.
+  - **Richer lifecycle:** `bucket lifecycle expire` gains `--noncurrent-days` (expire old versions) and `--abort-multipart-days` (clean up stalled uploads), pairing with versioning.
+  - `bucket policy get` / `lifecycle get` / `cors get` now honor `-o yaml` (JSON document is converted to YAML; table falls back to JSON).
+- **Object-storage bucket management built out on the S3 protocol (minio-go), all confirmed against live Ceph RGW:**
+  - `bucket tag get|set|delete` and `object tag get|set|delete` — bucket and object tags (`--tag key=value`, repeatable).
+  - `bucket encryption status|enable|disable` — default SSE-S3 encryption.
+  - `bucket lifecycle expire --days N [--prefix P] | get | delete` — object-expiration rules.
+  - `bucket cors set --origin --method [--header --max-age] | get | delete` — cross-origin rules for browser apps.
+  - `bucket empty` and `bucket delete --purge` — remove all objects **and object versions**, fixing the case where a bucket that ever had versioning enabled could not be deleted (its versions/delete-markers blocked the REST delete with a vague 403).
+- **`zcp object-storage bucket versioning enable|suspend|status`** — manage S3 object versioning on a bucket (minio-go). Verified supported on Ceph RGW.
+- **`zcp object-storage bucket policy get|set|delete`** — read, set (from a JSON file or `--file -` stdin), or remove a bucket's raw S3 policy, for fine-grained access beyond the canned `set-acl` public/private. Verified against live Ceph RGW.
+- **`zcp object-storage object url <storage> <bucket> <key>`** — generate a pre-signed, time-limited HTTPS URL (minio-go) that a client can use to download an object with no ZCP credentials, even when the bucket is private. `--expires` sets the lifetime (default `1h`, max `168h`/7 days).
+- **`zcp object-storage bucket set-acl --acl public-read|public-read-write|private`** now makes a bucket genuinely public/private by applying an S3 **bucket policy** via minio-go (the mechanism Ceph honors for anonymous object access). Previously it called a REST endpoint that 500'd, and a bucket canned ACL would not have granted anonymous `s3:GetObject` anyway.
+- **`zcp plan object-storage`** — list Object Storage plans (the slugs for `object-storage create --plan`), with storage size and pricing.
+
+### Fixed
+
+- **`zcp object-storage bucket create` always failed with a 500** — the request sent only `{name}`, but the API requires an initial ACL grant (`The acl grantee field is required`). It now sends `acl_grantee: "Owner"` + `acl_permission: "FULL_CONTROL"` (a private bucket owned by the creator; make it public later with `bucket set-acl`).
+- **`zcp object-storage create --plan` required a matching `--storage-category` or failed with `Invalid Storage Category`** — the category is now derived automatically from the plan (the API rejects a mismatch and requires a non-empty category even with a plan), so `--storage-category` is optional. Object-storage regions are `os-yul`/`os-yow`; custom `--storage-gb` is not configured there, so use a `--plan`.
+
+  All of the above were verified end-to-end against the live Ceph object storage in YOW: create instance (plan-only) → create bucket → upload → download (content verified) → make public (anonymous GET 200) → pre-signed URL (200) → make private (anonymous GET 403) → delete.
+
+### Changed
+
+- **Actionable errors for missing/extra arguments** — every command that takes positional arguments (128 subcommands across 30 command groups) now prints what's wrong, the correct usage line, and the command's own examples instead of cobra's terse default. Previously `zcp profile add` printed only `Error: accepts 1 arg(s), received 0`; it now prints:
+
+  ```text
+  Error: missing required argument: <name>
+
+  Usage:
+    zcp profile add <name> [flags]
+
+  Examples:
+    zcp profile add default
+    zcp profile add prod --bearer-token <token>
+  ```
+
+  Multi-argument commands name each missing placeholder (e.g. `missing required arguments: <vpc-slug>, <acl-name-or-id>`), and supplying too many arguments reports `too many arguments: expected N, got M` with the same usage/examples block. This is purely a messaging change — which commands accept how many arguments is unchanged.
+
+- **Unknown subcommands now error instead of silently printing help** — running a command group with an invalid subcommand (e.g. `zcp region lists`) used to print the group's help text and exit `0`, which hides the typo and lets scripts treat a mistake as success. It now prints an error to stderr and exits non-zero. The message adapts to the group: a group with a single subcommand points straight at it (with its example), while a group with several lists the valid subcommands and suggests the closest match:
+
+  ```text
+  Error: unknown subcommand "lists" for "zcp region"
+
+  Run this instead:
+    zcp region list    List available regions
+
+  Example:
+    zcp region list
+  ```
+
+  Running a group with no arguments still prints its help and exits `0`.
+
+- **`--cloud-provider` is now auto-detected** — the cloud provider slug is no longer something customers pass. `zcp auth validate` and `zcp profile add` detect the account's compute provider (the one whose service catalog includes "Virtual Machine" — `nimbo` in production) and persist it to the profile (`cloud_provider` field); create commands read it automatically. Verified against the production `/cloud-providers` catalog, which has three providers: `nimbo` (Cloud Stack, all compute/storage/networking), `ceph` (Object Storage), and `dns` (Dns Domain). Object storage and DNS default to their own providers (`ceph` and `dns`) automatically. The flag is hidden from help but still works as an override, and `ZCP_CLOUD_PROVIDER` is still honored. When the provider can't be determined, create commands now print `could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider …` instead of the old terse `--cloud-provider is required`. All three provider values were verified against the live API: every region maps 1:1 to a provider (`yow-1`/`yul-1`→`nimbo`, `default`→`dns`, `os-yow`/`os-yul`→`ceph`), and a real instance and volume both store `cloud_provider: nimbo`.
+
+- **`dns create` is now hands-off and uses the correct region** — it defaults `--region` to `default` (the only region the `dns` provider serves) and ignores the compute-oriented `ZCP_REGION`, so `zcp dns create --name example.com --project default` works on its own. Previously the docs/examples paired DNS with `--region yow-1` and `--cloud-provider nimbo`, which belong to the compute provider and would mismatch. Object-storage examples likewise now use object-storage regions (`os-yul`/`os-yow`) instead of `yul-1`.
+
+### Removed
+
+- **Backend technology is no longer shown in command output** — display-only columns that surfaced the underlying platform (e.g. "Cloud Stack", "Ceph", "Dns", "PowerDNS") have been removed: the `PROVIDER`/`COMING SOON` columns from `region list`, `SERVICE` from `backup list`, `snapshot list`, and `vm-backup list`, the `Service` row from `instance get`, `DISPLAY NAME` from `cloud-provider list`, and the `DNS PROVIDER` column / `DNS Provider` row from `dns list`, `dns show`, and `dns create`. The `--dns-provider` flag (which named the backend, e.g. `powerdns`) is likewise hidden from help, keeping its working default. These fields were informational only — resource creation uses the provider/region **slug**, which is retained. Billing/dashboard/project "SERVICE" columns are unaffected (they name billing categories like "Virtual Machine", not backend tech).
+
+### Internal
+
+- Added `internal/commands/args.go` with drop-in `exactArgs`/`minArgs`/`maxArgs`/`rangeArgs` validators replacing `cobra.ExactArgs`/`MaximumNArgs` throughout the `commands` package. Missing-argument names are derived from each command's `Use` line and examples from its `Example` field, so the helpers need no per-command wiring.
+- `EnforceSubcommandErrors` in the same file walks the command tree once (called from `root.go` after all subcommands are registered) and installs the unknown-subcommand handler on every group, so new command groups get the behavior automatically.
+
+---
+
 ## [v0.0.16] - 2026-06-11
 
 All fixes below were confirmed against the live API (YUL region) before release.

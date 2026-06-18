@@ -21,6 +21,26 @@ git push origin main
 git branch -d release/<version>
 ```
 
+## Update the public docs changelog
+
+The documentation site carries a unified, user-facing changelog at
+`zcp-docs/src/content/docs/changelog/index.md` and its French mirror
+`zcp-docs/src/content/docs/fr/changelog/index.md`. It is **maintained by hand** (not
+generated). After cutting a release, add the new version to the **CLI (`zcp`)** section of
+**both** files:
+
+1. Add a `### vX.Y.Z — <Month DD, YYYY>` entry at the top of the CLI section, summarizing
+   the **user-facing** highlights only — skip internal struct/JSON-tag/test changes.
+2. **Keep it vendor-neutral.** Public Cloud docs must not name internal backends (Ceph,
+   RGW, CloudStack, etc.). Use "S3-compatible", "the platform API", and the like.
+3. In `zcp-docs`, run `pnpm fmt && pnpm build` (the build validates internal links).
+
+> **Future automation — gated.** Auto-generating the docs CLI section from this repo's
+> `CHANGELOG.md` is intentionally **not** wired up. The prerequisite is making **this
+> `CHANGELOG.md` vendor-neutral at the source** — until it carries no internal backend
+> names, the docs changelog must stay a curated hand-written mirror. Treat "neutral source
+> changelog" as the gate before building any pull-from-GitHub generation.
+
 ## Version Format
 
 `<major>.<minor>.<patch>` (semver, no `v` prefix)

@@ -33,6 +33,7 @@ with their resource attributes and pricing.`,
 	cmd.AddCommand(newPlanISOCmd())
 	cmd.AddCommand(newPlanBackupCmd())
 	cmd.AddCommand(newPlanNetworkCmd())
+	cmd.AddCommand(newPlanObjectStorageCmd())
 	return cmd
 }
 
@@ -437,6 +438,47 @@ func newPlanTemplateCmd() *cobra.Command {
 // ---------------------------------------------------------------------------
 // ISO
 // ---------------------------------------------------------------------------
+
+func newPlanObjectStorageCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "object-storage",
+		Short: "List Object Storage plans (slugs for object-storage create --plan)",
+		Example: `  zcp plan object-storage
+  zcp plan object-storage --output json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := plan.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+
+			plans, err := svc.List(ctx, plan.ServiceObjectStorage)
+			if err != nil {
+				return fmt.Errorf("plan object-storage: %w", err)
+			}
+
+			headers := []string{"SLUG", "NAME", "STORAGE", "HOURLY", "MONTHLY", "ACTIVE"}
+			rows := make([][]string, 0, len(plans))
+			for _, p := range plans {
+				storage := p.Attribute.FormattedStorage
+				if storage == "" {
+					storage = p.Attribute.Storage.String() + " " + p.Attribute.StorageUnit
+				}
+				rows = append(rows, []string{
+					p.Slug,
+					p.Name,
+					storage,
+					formatPrice(p.HourlyPrice),
+					formatPrice(p.MonthlyPrice),
+					strconv.FormatBool(p.Status),
+				})
+			}
+			return printer.PrintTable(headers, rows)
+		},
+	}
+}
 
 func newPlanISOCmd() *cobra.Command {
 	return &cobra.Command{

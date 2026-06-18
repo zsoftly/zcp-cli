@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -283,6 +284,14 @@ func TestCreateBucket(t *testing.T) {
 	if gotBody["name"] != "new-bucket" {
 		t.Errorf("body name = %v, want new-bucket", gotBody["name"])
 	}
+	// The API rejects a bucket create without an initial ACL grant
+	// ("The acl grantee field is required"); the request must carry both fields.
+	if gotBody["acl_grantee"] != "Owner" {
+		t.Errorf("body acl_grantee = %v, want Owner", gotBody["acl_grantee"])
+	}
+	if gotBody["acl_permission"] != "FULL_CONTROL" {
+		t.Errorf("body acl_permission = %v, want FULL_CONTROL", gotBody["acl_permission"])
+	}
 }
 
 func TestDeleteBucket(t *testing.T) {
@@ -335,35 +344,6 @@ func TestUpdateBucket(t *testing.T) {
 	}
 	if gotBody["acl"] != "public-read" {
 		t.Errorf("body acl = %v, want public-read", gotBody["acl"])
-	}
-	if bucket.ID != "b-1" {
-		t.Errorf("bucket.ID = %q, want b-1", bucket.ID)
-	}
-}
-
-func TestSetBucketACL(t *testing.T) {
-	expected := objectstorage.Bucket{ID: "b-1", Name: "my-bucket", Slug: "my-bucket"}
-
-	var gotBody map[string]interface{}
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotBody)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(bucketSingleResponse{Status: "Success", Message: "OK", Data: expected})
-	}))
-	defer srv.Close()
-
-	svc := objectstorage.NewService(newTestClient(t, srv))
-	bucket, err := svc.SetBucketACL(context.Background(), "my-storage-1", "my-bucket", "private")
-	if err != nil {
-		t.Fatalf("SetBucketACL() error = %v", err)
-	}
-	if gotPath != "/object-storages/my-storage-1/buckets/my-bucket/acl" {
-		t.Errorf("path = %q, want /object-storages/my-storage-1/buckets/my-bucket/acl", gotPath)
-	}
-	if gotBody["acl"] != "private" {
-		t.Errorf("body acl = %v, want private", gotBody["acl"])
 	}
 	if bucket.ID != "b-1" {
 		t.Errorf("bucket.ID = %q, want b-1", bucket.ID)
@@ -640,7 +620,7 @@ func TestPutObject(t *testing.T) {
 	f.Close()
 
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	size, err := svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "")
+	size, err := svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil)
 	if err != nil {
 		t.Fatalf("PutObject() error = %v", err)
 	}
@@ -674,7 +654,7 @@ func TestPutObject_DefaultKey(t *testing.T) {
 	f.Close()
 
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	_, err = svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "", "")
+	_, err = svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "", "", nil)
 	if err != nil {
 		t.Fatalf("PutObject() error = %v", err)
 	}
@@ -696,7 +676,7 @@ func TestDeleteObject(t *testing.T) {
 	mgmt, _ := newS3TestPair(t, s3Handler)
 
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	err := svc.DeleteObject(context.Background(), "my-storage-1", "my-bucket", "report.pdf")
+	err := svc.DeleteObject(context.Background(), "my-storage-1", "my-bucket", "report.pdf", "")
 	if err != nil {
 		t.Fatalf("DeleteObject() error = %v", err)
 	}
@@ -705,5 +685,431 @@ func TestDeleteObject(t *testing.T) {
 	}
 	if gotPath != "/my-bucket/report.pdf" {
 		t.Errorf("S3 path = %q, want /my-bucket/report.pdf", gotPath)
+	}
+}
+
+func TestDownloadObject(t *testing.T) {
+	content := []byte("hello download zcp")
+	var gotMethods []string
+
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethods = append(gotMethods, r.Method)
+		w.Header().Set("ETag", `"abc123"`)
+		w.Header().Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", fmt.Sprint(len(content)))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			w.Write(content) //nolint: errcheck
+		}
+	})
+
+	mgmt, _ := newS3TestPair(t, s3Handler)
+
+	dest := filepath.Join(t.TempDir(), "out.txt")
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	path, size, err := svc.DownloadObject(context.Background(), "my-storage-1", "my-bucket", "hello.txt", dest, "")
+	if err != nil {
+		t.Fatalf("DownloadObject() error = %v", err)
+	}
+	if path != dest {
+		t.Errorf("returned path = %q, want %q", path, dest)
+	}
+	if size != int64(len(content)) {
+		t.Errorf("returned size = %d, want %d", size, len(content))
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("reading downloaded file: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("downloaded content = %q, want %q", got, content)
+	}
+}
+
+// TestDownloadObject_DefaultsToBaseName verifies that an empty dest writes the
+// object's base name into a directory dest.
+func TestDownloadObject_DefaultsToBaseName(t *testing.T) {
+	content := []byte("x")
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"e"`)
+		w.Header().Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", fmt.Sprint(len(content)))
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodGet {
+			w.Write(content) //nolint: errcheck
+		}
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+
+	dir := t.TempDir()
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	path, _, err := svc.DownloadObject(context.Background(), "my-storage-1", "my-bucket", "nested/logo.png", dir, "")
+	if err != nil {
+		t.Fatalf("DownloadObject() error = %v", err)
+	}
+	if want := filepath.Join(dir, "logo.png"); path != want {
+		t.Errorf("path = %q, want %q (base name inside dir)", path, want)
+	}
+}
+
+func TestSetBucketVisibilityPublicRead(t *testing.T) {
+	// public-read PUTs a bucket policy; private (below) DELETEs it. The shared
+	// S3 test harness drains the request body, so the policy JSON content is
+	// covered by the live end-to-end test rather than asserted here.
+	var gotMethod, gotQuery string
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	if err := svc.SetBucketVisibility(context.Background(), "my-storage-1", "my-bucket", "public-read"); err != nil {
+		t.Fatalf("SetBucketVisibility(public-read) error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT (set bucket policy)", gotMethod)
+	}
+	if !strings.Contains(gotQuery, "policy") {
+		t.Errorf("query = %q, want it to target the policy subresource", gotQuery)
+	}
+}
+
+func TestSetBucketVisibilityPrivate(t *testing.T) {
+	var gotMethod, gotQuery string
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	if err := svc.SetBucketVisibility(context.Background(), "my-storage-1", "my-bucket", "private"); err != nil {
+		t.Fatalf("SetBucketVisibility(private) error = %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("method = %q, want DELETE (remove bucket policy)", gotMethod)
+	}
+	if !strings.Contains(gotQuery, "policy") {
+		t.Errorf("query = %q, want it to target the policy subresource", gotQuery)
+	}
+}
+
+func TestSetBucketVisibilityInvalid(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	err := svc.SetBucketVisibility(context.Background(), "my-storage-1", "my-bucket", "authenticated-read")
+	if err == nil || !strings.Contains(err.Error(), "unsupported visibility") {
+		t.Fatalf("expected unsupported-visibility error, got %v", err)
+	}
+}
+
+func TestPresignObjectURL(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	u, err := svc.PresignObjectURL(context.Background(), "my-storage-1", "my-bucket", "file.txt", time.Hour)
+	if err != nil {
+		t.Fatalf("PresignObjectURL error = %v", err)
+	}
+	if !strings.Contains(u, "my-bucket/file.txt") {
+		t.Errorf("presigned URL missing bucket/key: %s", u)
+	}
+	if !strings.Contains(u, "X-Amz-Signature") {
+		t.Errorf("presigned URL missing SigV4 signature: %s", u)
+	}
+}
+
+func TestSetBucketVersioningEnable(t *testing.T) {
+	var gotMethod, gotQuery string
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	if err := svc.SetBucketVersioning(context.Background(), "my-storage-1", "my-bucket", true); err != nil {
+		t.Fatalf("SetBucketVersioning error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT", gotMethod)
+	}
+	if !strings.Contains(gotQuery, "versioning") {
+		t.Errorf("query = %q, want the versioning subresource", gotQuery)
+	}
+}
+
+func TestGetBucketVersioning(t *testing.T) {
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "versioning") {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	status, err := svc.GetBucketVersioning(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("GetBucketVersioning error = %v", err)
+	}
+	if status != "Enabled" {
+		t.Errorf("status = %q, want Enabled", status)
+	}
+}
+
+func TestGetBucketPolicy(t *testing.T) {
+	policyJSON := `{"Version":"2012-10-17","Statement":[]}`
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "policy") {
+			fmt.Fprint(w, policyJSON)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	got, err := svc.GetBucketPolicy(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("GetBucketPolicy error = %v", err)
+	}
+	if got != policyJSON {
+		t.Errorf("policy = %q, want %q", got, policyJSON)
+	}
+}
+
+func TestPutBucketPolicy(t *testing.T) {
+	var gotMethod, gotQuery string
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+
+	if err := svc.PutBucketPolicy(context.Background(), "my-storage-1", "my-bucket", `{"Version":"2012-10-17","Statement":[]}`); err != nil {
+		t.Fatalf("PutBucketPolicy error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT", gotMethod)
+	}
+	if !strings.Contains(gotQuery, "policy") {
+		t.Errorf("query = %q, want the policy subresource", gotQuery)
+	}
+}
+
+func TestSetBucketTagging(t *testing.T) {
+	var gotMethod, gotQuery string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	if err := svc.SetBucketTagging(context.Background(), "my-storage-1", "my-bucket", map[string]string{"env": "prod"}); err != nil {
+		t.Fatalf("SetBucketTagging error = %v", err)
+	}
+	if gotMethod != http.MethodPut || !strings.Contains(gotQuery, "tagging") {
+		t.Errorf("got %s ?%s, want PUT ?tagging", gotMethod, gotQuery)
+	}
+}
+
+func TestSetBucketEncryption(t *testing.T) {
+	var gotMethod, gotQuery string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	if err := svc.SetBucketEncryption(context.Background(), "my-storage-1", "my-bucket"); err != nil {
+		t.Fatalf("SetBucketEncryption error = %v", err)
+	}
+	if gotMethod != http.MethodPut || !strings.Contains(gotQuery, "encryption") {
+		t.Errorf("got %s ?%s, want PUT ?encryption", gotMethod, gotQuery)
+	}
+}
+
+func TestGetBucketEncryption(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "encryption") {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	alg, err := svc.GetBucketEncryption(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("GetBucketEncryption error = %v", err)
+	}
+	if alg != "AES256" {
+		t.Errorf("algorithm = %q, want AES256", alg)
+	}
+}
+
+func TestSetBucketExpiry(t *testing.T) {
+	var gotMethod, gotQuery string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	if err := svc.SetBucketExpiry(context.Background(), "my-storage-1", "my-bucket", "logs/", 30, 0, 0); err != nil {
+		t.Fatalf("SetBucketExpiry error = %v", err)
+	}
+	if gotMethod != http.MethodPut || !strings.Contains(gotQuery, "lifecycle") {
+		t.Errorf("got %s ?%s, want PUT ?lifecycle", gotMethod, gotQuery)
+	}
+}
+
+func TestSetBucketCORS(t *testing.T) {
+	var gotMethod, gotQuery string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotQuery = r.Method, r.URL.RawQuery
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	err := svc.SetBucketCORS(context.Background(), "my-storage-1", "my-bucket", []string{"*"}, []string{"GET"}, nil, 0)
+	if err != nil {
+		t.Fatalf("SetBucketCORS error = %v", err)
+	}
+	if gotMethod != http.MethodPut || !strings.Contains(gotQuery, "cors") {
+		t.Errorf("got %s ?%s, want PUT ?cors", gotMethod, gotQuery)
+	}
+}
+
+func TestGetBucketCORS(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "cors") {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<CORSConfiguration><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod></CORSRule></CORSConfiguration>`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	out, err := svc.GetBucketCORS(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil {
+		t.Fatalf("GetBucketCORS error = %v", err)
+	}
+	if !strings.Contains(out, "AllowedOrigin") || !strings.Contains(out, "GET") {
+		t.Errorf("CORS JSON missing expected fields: %s", out)
+	}
+}
+
+func TestPresignPutURL(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	u, err := svc.PresignPutURL(context.Background(), "my-storage-1", "my-bucket", "up.bin", time.Hour)
+	if err != nil {
+		t.Fatalf("PresignPutURL error = %v", err)
+	}
+	if !strings.Contains(u, "my-bucket/up.bin") || !strings.Contains(u, "X-Amz-Signature") {
+		t.Errorf("unexpected presigned PUT url: %s", u)
+	}
+}
+
+func TestStatObject(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", "42")
+			w.Header().Set("Content-Type", "application/pdf")
+			w.Header().Set("ETag", `"abc123"`)
+			w.Header().Set("Last-Modified", "Mon, 02 Jan 2006 15:04:05 GMT")
+			w.Header().Set("x-amz-meta-owner", "alice")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	st, err := svc.StatObject(context.Background(), "my-storage-1", "my-bucket", "report.pdf", "")
+	if err != nil {
+		t.Fatalf("StatObject error = %v", err)
+	}
+	if st.Size != 42 || st.ContentType != "application/pdf" {
+		t.Errorf("stat = %+v, want size 42 / application/pdf", st)
+	}
+	if st.UserMetadata["Owner"] != "alice" && st.UserMetadata["owner"] != "alice" {
+		t.Errorf("user metadata = %v, want owner=alice", st.UserMetadata)
+	}
+}
+
+func TestCopyObject(t *testing.T) {
+	var gotMethod, gotPath, gotCopySrc string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotCopySrc = r.Header.Get("x-amz-copy-source")
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprint(w, `<CopyObjectResult><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>"abc"</ETag></CopyObjectResult>`)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	if err := svc.CopyObject(context.Background(), "my-storage-1", "src", "a.txt", "dst", "b.txt"); err != nil {
+		t.Fatalf("CopyObject error = %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("method = %q, want PUT", gotMethod)
+	}
+	if !strings.Contains(gotPath, "/dst/b.txt") {
+		t.Errorf("path = %q, want /dst/b.txt", gotPath)
+	}
+	if !strings.Contains(gotCopySrc, "src/a.txt") {
+		t.Errorf("copy-source = %q, want src/a.txt", gotCopySrc)
+	}
+}
+
+func TestListObjectVersions(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.Contains(r.URL.RawQuery, "versions") {
+			w.Header().Set("Content-Type", "application/xml")
+			fmt.Fprint(w, `<ListVersionsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>my-bucket</Name><IsTruncated>false</IsTruncated><Version><Key>f.txt</Key><VersionId>v1</VersionId><IsLatest>true</IsLatest><Size>5</Size><LastModified>2026-01-01T00:00:00.000Z</LastModified></Version><DeleteMarker><Key>f.txt</Key><VersionId>v2</VersionId><IsLatest>false</IsLatest><LastModified>2026-01-02T00:00:00.000Z</LastModified></DeleteMarker></ListVersionsResult>`)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	vs, err := svc.ListObjectVersions(context.Background(), "my-storage-1", "my-bucket", "")
+	if err != nil {
+		t.Fatalf("ListObjectVersions error = %v", err)
+	}
+	if len(vs) != 2 {
+		t.Fatalf("got %d versions, want 2", len(vs))
+	}
+	var haveVersion, haveMarker bool
+	for _, v := range vs {
+		if v.VersionID == "v1" && !v.IsDeleteMarker && v.IsLatest {
+			haveVersion = true
+		}
+		if v.VersionID == "v2" && v.IsDeleteMarker {
+			haveMarker = true
+		}
+	}
+	if !haveVersion || !haveMarker {
+		t.Errorf("versions = %+v, want a latest version v1 and a delete-marker v2", vs)
+	}
+}
+
+func TestMoveObjectSelfMoveRejected(t *testing.T) {
+	// Must fail before any S3 call — a self-move would copy-to-self then delete it.
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("no S3 request expected for a self-move, got %s %s", r.Method, r.URL)
+		w.WriteHeader(http.StatusOK)
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	err := svc.MoveObject(context.Background(), "my-storage-1", "b", "k.txt", "b", "k.txt")
+	if err == nil || !strings.Contains(err.Error(), "same object") {
+		t.Fatalf("expected same-object error, got %v", err)
 	}
 }

@@ -136,7 +136,7 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <uuid>",
 		Short: "Delete an SSH key",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp ssh-key delete a1b2c3d4-e5f6-7890-abcd-ef1234567890
   zcp ssh-key delete a1b2c3d4-e5f6-7890-abcd-ef1234567890 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

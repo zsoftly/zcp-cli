@@ -95,9 +95,9 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
-		Example: `  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2
-  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
-  zcp volume create --name my-disk --project my-project --cloud-provider nimbo --region yow-1 --billing-cycle hourly --storage-category nvme --plan 50-gb-2 --vm vm-slug`,
+		Example: `  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan b1g1
+  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
+  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan b1g1 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -106,9 +106,9 @@ func newVolumeCreateCmd() *cobra.Command {
 			if project == "" {
 				return fmt.Errorf("--project is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -172,11 +172,11 @@ func newVolumeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Volume name (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. nvme (required)")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. 50-gb-2 (mutually exclusive with --size)")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. b1g1 (mutually exclusive with --size)")
 	cmd.Flags().IntVar(&size, "size", 0, "Storage size in GB for custom-tier plans (mutually exclusive with --plan)")
 	cmd.Flags().StringVar(&vmSlug, "vm", "", "Virtual machine slug to attach on creation")
 	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code")
@@ -190,7 +190,7 @@ func newVolumeAttachCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "attach <volume-slug>",
 		Short:   "Attach a volume to a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp volume attach bs-001001-0042 --vm my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			volumeSlug := args[0]
@@ -228,7 +228,7 @@ func newVolumeDetachCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "detach <volume-slug>",
 		Short:   "Detach a volume from its virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp volume detach bs-001001-0042`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			volumeSlug := args[0]
@@ -267,7 +267,7 @@ func newVolumeDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <volume-slug>",
 		Short: "Permanently delete a block storage volume",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp volume delete bs-001001-0042
   zcp volume delete bs-001001-0042 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

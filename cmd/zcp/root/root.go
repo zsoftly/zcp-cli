@@ -138,6 +138,15 @@ func init() {
 		}
 		return names, cobra.ShellCompDirectiveNoFileComp
 	})
+
+	// Make command groups reject unknown subcommands with an actionable error
+	// instead of silently printing help with a success exit code. Must run after
+	// every subcommand is registered above.
+	commands.EnforceSubcommandErrors(rootCmd)
+
+	// --cloud-provider is auto-detected and stored on the profile (see
+	// `zcp auth validate`); hide it from help while keeping it as an override.
+	commands.HideFlagEverywhere(rootCmd, "cloud-provider")
 }
 
 func newVersionCmd() *cobra.Command {

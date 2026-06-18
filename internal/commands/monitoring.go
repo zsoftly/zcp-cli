@@ -71,7 +71,7 @@ func newMonitoringCPUCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cpu <vm-slug>",
 		Short: "Show CPU usage metrics for a VM",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp monitoring cpu my-vm-slug
   zcp monitoring cpu my-vm-slug --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -112,7 +112,7 @@ func newMonitoringMemoryCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "memory <vm-slug>",
 		Short: "Show memory usage metrics for a VM",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp monitoring memory my-vm-slug
   zcp monitoring memory my-vm-slug --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -153,7 +153,7 @@ func newMonitoringDiskCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disk <vm-slug>",
 		Short: "Show disk read/write metrics for a VM",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp monitoring disk my-vm-slug
   zcp monitoring disk my-vm-slug --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -195,7 +195,7 @@ func newMonitoringDiskIOCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disk-io <vm-slug>",
 		Short: "Show disk IO read/write metrics for a VM",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp monitoring disk-io my-vm-slug
   zcp monitoring disk-io my-vm-slug --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -237,7 +237,7 @@ func newMonitoringNetworkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "network <vm-slug>",
 		Short: "Show network traffic metrics for a VM",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp monitoring network my-vm-slug
   zcp monitoring network my-vm-slug --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -46,29 +46,22 @@ func runRegionList(cmd *cobra.Command) error {
 		return fmt.Errorf("region list: %w", err)
 	}
 
-	headers := []string{"SLUG", "NAME", "COUNTRY", "CONTINENT", "PROVIDER", "STATUS", "COMING SOON"}
+	// PROVIDER and COMING SOON are intentionally omitted: the provider name
+	// (e.g. "Cloud Stack", "Ceph") leaks backend technology and must not be
+	// exposed to users.
+	headers := []string{"SLUG", "NAME", "COUNTRY", "CONTINENT", "STATUS"}
 	rows := make([][]string, 0, len(regions))
 	for _, r := range regions {
-		provider := ""
-		if r.CloudProvider != nil {
-			provider = r.CloudProvider.DisplayName
-		}
 		status := "active"
 		if !r.Status {
 			status = "inactive"
-		}
-		comingSoon := ""
-		if r.IsComingSoon {
-			comingSoon = "yes"
 		}
 		rows = append(rows, []string{
 			r.Slug,
 			r.Name,
 			r.Country,
 			r.ContinentName,
-			provider,
 			status,
-			comingSoon,
 		})
 	}
 	return printer.PrintTable(headers, rows)

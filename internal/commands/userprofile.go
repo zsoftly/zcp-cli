@@ -326,7 +326,7 @@ func newProfileInfoLoginActivityCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "login-activity <crn>",
 		Short:   "Show login activity logs",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp profile-info login-activity CRN-123456`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProfileInfoLoginActivity(cmd, args[0])
@@ -370,7 +370,7 @@ func newProfileInfoActivityLogsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "activity-logs <crn>",
 		Short:   "Show activity logs",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp profile-info activity-logs CRN-123456`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProfileInfoActivityLogs(cmd, args[0])

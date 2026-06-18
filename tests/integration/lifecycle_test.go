@@ -173,18 +173,24 @@ func detectRegion(t *testing.T, client *httpclient.Client) (regionSlug, cloudPro
 	if err != nil {
 		t.Fatalf("listing regions: %v", err)
 	}
+	// This suite creates compute resources (VMs, volumes), so skip the
+	// single-service providers: ceph (Object Storage) and dns (Dns Domain). Pick
+	// the first active region backed by a real compute provider.
 	for _, r := range regions {
-		if r.Status && r.CloudProvider != nil {
+		if r.Status && r.CloudProvider != nil && !isNonComputeProvider(r.CloudProvider.Slug) {
 			t.Logf("  auto-detected region: %s (%s), cloud_provider: %s", r.Name, r.Slug, r.CloudProvider.Slug)
 			return r.Slug, r.CloudProvider.Slug
 		}
 	}
-	if len(regions) > 0 && regions[0].CloudProvider != nil {
-		t.Logf("  using first region: %s (%s)", regions[0].Name, regions[0].Slug)
-		return regions[0].Slug, regions[0].CloudProvider.Slug
-	}
-	t.Fatal("no regions available")
+	t.Fatal("no compute region available (all regions are object-storage/dns)")
 	return "", ""
+}
+
+// isNonComputeProvider reports whether a cloud-provider slug is one of the
+// single-service providers that cannot host compute resources: "ceph" (Object
+// Storage) and "dns" (Dns Domain). Verified against the live /cloud-providers.
+func isNonComputeProvider(slug string) bool {
+	return slug == "ceph" || slug == "dns"
 }
 
 func detectProject(t *testing.T, client *httpclient.Client) string {

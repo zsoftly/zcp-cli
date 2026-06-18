@@ -11,8 +11,15 @@ import (
 )
 
 func TestLoadEmpty(t *testing.T) {
-	// Point config to a temp dir with no file
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Point config to a temp dir with no file. Windows resolves the config path
+	// from APPDATA (XDG_CONFIG_HOME is ignored), so isolate per-platform or the
+	// test reads the real user config.
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", dir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -216,6 +223,9 @@ func TestResolveProfileNoActive(t *testing.T) {
 }
 
 func TestResolveProfileMissingCredentials(t *testing.T) {
+	// Clear the env override so a developer's exported token doesn't mask the
+	// missing-credentials path (ResolveProfile falls back to ZCP_BEARER_TOKEN).
+	t.Setenv("ZCP_BEARER_TOKEN", "")
 	cfg := &config.Config{
 		ActiveProfile: "dev",
 		Profiles: map[string]config.Profile{

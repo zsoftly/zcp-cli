@@ -1,4 +1,4 @@
-# ZCP CLI Command Taxonomy (v0.0.16)
+# ZCP CLI Command Taxonomy (v0.0.17)
 
 **CLI name**: `zcp`
 **Base URL**: `https://api.zcp.zsoftly.ca/api`
@@ -209,13 +209,37 @@ zcp
 │   │   ├── list                       List buckets
 │   │   ├── get                        Get bucket details
 │   │   ├── create                     Create a bucket
-│   │   ├── set-acl                    Set bucket ACL (private/public-read/public-read-write/authenticated-read)
-│   │   └── delete                     Delete a bucket (prompts for confirmation)
-│   └── object                         Object operations within a bucket
+│   │   ├── set-acl                    Make a bucket public/private via an S3 bucket policy (--acl private|public-read|public-read-write)
+│   │   ├── versioning                 Object versioning (S3): enable | suspend | status
+│   │   ├── policy                     Raw S3 bucket policy (S3): get | set --file | delete
+│   │   ├── tag                        Bucket tags (S3): get | set --tag k=v | delete
+│   │   ├── encryption                 Default SSE-S3 encryption (S3): status | enable | disable
+│   │   ├── lifecycle                  Expiration rules (S3): expire --days|--noncurrent-days|--abort-multipart-days [--prefix] | get | delete
+│   │   ├── cors                       Cross-origin rules (S3): set --origin --method [--header --max-age] | get | delete
+│   │   ├── uploads                    Incomplete multipart uploads (S3): list | abort
+│   │   ├── empty                      Delete all objects + versions, keep the bucket (S3)
+│   │   └── delete                     Delete a bucket (--purge empties objects+versions first)
+│   └── object                         Object operations within a bucket (S3-direct, except `get` which is REST)
 │       ├── list                       List objects in a bucket (all pages, auto-paginated)
-│       ├── get                        Get object metadata (key, size, permission, last modified)
-│       ├── put                        Upload a local file to a bucket via S3 protocol
-│       └── delete                     Delete an object from a bucket via S3 protocol
+│       ├── get                        Get object metadata via the REST API
+│       ├── stat                       Full S3 metadata via HEAD (size, content-type, ETag, user metadata; --version-id)
+│       ├── put                        Upload a local file (--key, --content-type, --metadata k=v)
+│       ├── download                   Download an object to a local file (--dest, --version-id)
+│       ├── url                         Pre-signed download URL (--expires, max 168h)
+│       ├── put-url                    Pre-signed UPLOAD URL for HTTP PUT (--expires)
+│       ├── copy                       Server-side copy (src-bucket/src-key -> dst-bucket/dst-key)
+│       ├── move                       Server-side move (copy then delete source)
+│       ├── versions                   List object versions + delete markers (--prefix)
+│       ├── restore                    Undelete by removing the latest delete marker
+│       ├── tag                        Object tags (S3): get | set --tag k=v | delete
+│       └── delete                     Delete an object (or a version with --version-id)
+│   #
+│   # Backend / availability: instance create/list/get/delete/resize/credentials
+│   # and bucket create/list/get/delete (plus object `get`) use the ZCP REST API
+│   # and are also available in the Web UI. Every entry tagged "(S3)" above — all
+│   # advanced bucket config and all other object operations — talks directly to
+│   # the Ceph RADOS Gateway over the S3 protocol and is CLI-ONLY: the CMP has not
+│   # yet exposed these via the REST API or Web UI.
 │
 ├── dns                                DNS domain and record operations
 │   ├── list                           List DNS domains
@@ -314,7 +338,8 @@ zcp
 │   ├── template                       List My Template plans
 │   ├── iso                            List ISO plans
 │   ├── backup                         List Backup plans
-│   └── network                        List Network plans (slugs for network create --network-plan)
+│   ├── network                        List Network plans (slugs for network create --network-plan)
+│   └── object-storage                 List Object Storage plans (slugs for object-storage create --plan)
 │
 ├── store                              Store and checkout
 │   ├── list                           List store items (--sort, --page, --limit)
@@ -392,20 +417,21 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 
 ## Identifier Conventions
 
-v0.0.16 uses **slug-based identifiers** for most resources. Slugs are human-readable
+v0.0.17 uses **slug-based identifiers** for most resources. Slugs are human-readable
 strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
-| Context         | Flag / Argument                   | Example                                                                   |
-| --------------- | --------------------------------- | ------------------------------------------------------------------------- |
-| VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`                                              |
-| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234`                                  |
-| DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`                                              |
-| Project         | `--project`                       | `--project my-project`                                                    |
-| Region          | `--region`                        | `--region yow-1`                                                          |
-| VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`             |
-| Network ACL     | name or ID                        | `zcp acl rules my-vpc web-acl` (names resolved to IDs); rules are ID-only |
-| IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`                                       |
-| Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`                                          |
+| Context         | Flag / Argument                   | Example                                                                         |
+| --------------- | --------------------------------- | ------------------------------------------------------------------------------- |
+| VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`                                                    |
+| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234`                                        |
+| DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`                                                    |
+| Project         | `--project`                       | `--project default`                                                             |
+| Region          | `--region`                        | `--region yow-1`                                                                |
+| Cloud provider  | auto-detected (hidden override)   | saved to the profile by `zcp auth validate`; rarely passed (`--cloud-provider`) |
+| VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`                   |
+| Network ACL     | name or ID                        | `zcp acl rules my-vpc web-acl` (names resolved to IDs); rules are ID-only       |
+| IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`                                             |
+| Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`                                                |
 
 All commands use slug-based identifiers, except network ACLs and ACL rules, which the
 API addresses by ID (UUID) — ACL names are resolved automatically where accepted.
@@ -414,47 +440,47 @@ API addresses by ID (UUID) — ACL names are resolved automatically where accept
 
 ## CLI Group to API Path Mapping
 
-| CLI Group          | API Source        | Notes                                                              |
-| ------------------ | ----------------- | ------------------------------------------------------------------ |
-| `region`           | ZCP API (STKCNSL) | Region listing                                                     |
-| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                               |
-| `template`         | ZCP API (STKCNSL) | Public and account templates                                       |
-| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                                  |
-| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                                 |
-| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                            |
-| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                                 |
-| `network`          | ZCP API (STKCNSL) | Isolated networks                                                  |
-| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                           |
-| `acl`              | ZCP API (STKCNSL) | Network ACLs                                                       |
-| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                                        |
-| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                                     |
-| `egress`           | ZCP API (STKCNSL) | Egress rules                                                       |
-| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                              |
-| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                           |
-| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                                 |
-| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                                       |
-| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                                |
-| `object-storage`   | ZCP REST API + S3 | REST for instance/bucket CRUD; S3 (minio-go) for object put/delete |
-| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                            |
-| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                             |
-| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                          |
-| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget           |
-| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                                   |
-| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                             |
-| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                                      |
-| `store`            | ZCP API (STKCNSL) | Store items and checkout                                           |
-| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                           |
-| `product`          | ZCP API (STKCNSL) | Product categories and catalog                                     |
-| `iso`              | ZCP API (STKCNSL) | ISO image management                                               |
-| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                                      |
-| `backup`           | ZCP API (STKCNSL) | Block storage backups                                              |
-| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                                         |
-| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access              |
-| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                             |
-| `server`           | ZCP API (STKCNSL) | Server listing                                                     |
-| `currency`         | ZCP API (STKCNSL) | Currency listing                                                   |
-| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                              |
-| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                           |
+| CLI Group          | API Source        | Notes                                                                                                                                                                                                                                                                       |
+| ------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `region`           | ZCP API (STKCNSL) | Region listing                                                                                                                                                                                                                                                              |
+| `plan`             | ZCP API (STKCNSL) | Service plans for all resource types                                                                                                                                                                                                                                        |
+| `template`         | ZCP API (STKCNSL) | Public and account templates                                                                                                                                                                                                                                                |
+| `instance`         | ZCP API (STKCNSL) | Full VM lifecycle                                                                                                                                                                                                                                                           |
+| `volume`           | ZCP API (STKCNSL) | Block storage CRUD                                                                                                                                                                                                                                                          |
+| `snapshot`         | ZCP API (STKCNSL) | Block storage snapshots                                                                                                                                                                                                                                                     |
+| `vm-snapshot`      | ZCP API (STKCNSL) | VM-level snapshots                                                                                                                                                                                                                                                          |
+| `network`          | ZCP API (STKCNSL) | Isolated networks                                                                                                                                                                                                                                                           |
+| `vpc`              | ZCP API (STKCNSL) | VPCs, ACLs, VPN gateways                                                                                                                                                                                                                                                    |
+| `acl`              | ZCP API (STKCNSL) | Network ACLs                                                                                                                                                                                                                                                                |
+| `ip`               | ZCP API (STKCNSL) | Public IPs, static NAT, VPN                                                                                                                                                                                                                                                 |
+| `firewall`         | ZCP API (STKCNSL) | Firewall rules                                                                                                                                                                                                                                                              |
+| `egress`           | ZCP API (STKCNSL) | Egress rules                                                                                                                                                                                                                                                                |
+| `portforward`      | ZCP API (STKCNSL) | Port forwarding rules                                                                                                                                                                                                                                                       |
+| `loadbalancer`     | ZCP API (STKCNSL) | Load balancers and rules                                                                                                                                                                                                                                                    |
+| `ssh-key`          | ZCP API (STKCNSL) | SSH key management                                                                                                                                                                                                                                                          |
+| `vpn`              | ZCP API (STKCNSL) | Customer gateways, VPN users                                                                                                                                                                                                                                                |
+| `kubernetes`       | ZCP API (STKCNSL) | Kubernetes clusters                                                                                                                                                                                                                                                         |
+| `object-storage`   | ZCP REST API + S3 | REST (also Web UI) for instance create/list/get/delete/resize/credentials, bucket create/list/get/delete, and object `get`. S3 (minio-go) direct to Ceph RGW for everything else (advanced bucket config + all other object ops) — **CLI-only, not yet on REST API/Web UI** |
+| `dns`              | ZCP API (STKCNSL) | DNS domains and records                                                                                                                                                                                                                                                     |
+| `project`          | ZCP API (STKCNSL) | Projects, icons, users                                                                                                                                                                                                                                                      |
+| `monitoring`       | ZCP API (STKCNSL) | Global and per-VM metrics                                                                                                                                                                                                                                                   |
+| `billing`          | ZCP API (STKCNSL) | Balance, costs, invoices, subscriptions, coupons, budget                                                                                                                                                                                                                    |
+| `support`          | ZCP API (STKCNSL) | Tickets, replies, feedback, FAQs                                                                                                                                                                                                                                            |
+| `autoscale`        | ZCP API (STKCNSL) | Autoscale groups, policies, conditions                                                                                                                                                                                                                                      |
+| `dashboard`        | ZCP API (STKCNSL) | Service counts, cancellations                                                                                                                                                                                                                                               |
+| `store`            | ZCP API (STKCNSL) | Store items and checkout                                                                                                                                                                                                                                                    |
+| `marketplace`      | ZCP API (STKCNSL) | Marketplace app listings                                                                                                                                                                                                                                                    |
+| `product`          | ZCP API (STKCNSL) | Product categories and catalog                                                                                                                                                                                                                                              |
+| `iso`              | ZCP API (STKCNSL) | ISO image management                                                                                                                                                                                                                                                        |
+| `affinity-group`   | ZCP API (STKCNSL) | Affinity/anti-affinity groups                                                                                                                                                                                                                                               |
+| `backup`           | ZCP API (STKCNSL) | Block storage backups                                                                                                                                                                                                                                                       |
+| `vm-backup`        | ZCP API (STKCNSL) | VM backups                                                                                                                                                                                                                                                                  |
+| `profile-info`     | ZCP API (STKCNSL) | User profile, company, 2FA, time settings, API access                                                                                                                                                                                                                       |
+| `cloud-provider`   | ZCP API (STKCNSL) | Cloud provider listing                                                                                                                                                                                                                                                      |
+| `server`           | ZCP API (STKCNSL) | Server listing                                                                                                                                                                                                                                                              |
+| `currency`         | ZCP API (STKCNSL) | Currency listing                                                                                                                                                                                                                                                            |
+| `billing-cycle`    | ZCP API (STKCNSL) | Billing cycle listing                                                                                                                                                                                                                                                       |
+| `storage-category` | ZCP API (STKCNSL) | Storage category listing                                                                                                                                                                                                                                                    |
 
 ---
 

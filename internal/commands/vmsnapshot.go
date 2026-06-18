@@ -72,8 +72,8 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a VM snapshot",
-		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project default --cloud-provider nimbo --region yow-1 --service virtual-machine
-  zcp vm-snapshot create --vm my-vm --name my-snap --plan basic --billing-cycle monthly --project default --cloud-provider nimbo --region yow-1 --service virtual-machine --memory`,
+		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yow --billing-cycle monthly --project default --region yow-1 --service virtual-machine
+  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yow --billing-cycle monthly --project default --region yow-1 --service virtual-machine --memory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -83,7 +83,10 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 			}
 			project = resolveProject(project)
 			region = resolveRegion(region)
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
+			if cloudProvider == "" {
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
+			}
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
@@ -134,7 +137,7 @@ func newVMSnapshotDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a VM snapshot permanently",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vm-snapshot delete vms-001001-0001
   zcp vm-snapshot delete vms-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -179,7 +182,7 @@ func newVMSnapshotRevertCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "revert <slug>",
 		Short: "Revert a VM to a snapshot state (DESTRUCTIVE)",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vm-snapshot revert vms-001001-0001
   zcp vm-snapshot revert vms-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

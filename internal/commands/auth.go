@@ -81,6 +81,13 @@ If the call succeeds, the credentials are valid.`,
 			}
 
 			printer.Fprintf("Credentials are valid.\n")
+
+			// Auto-detect and persist the account's cloud provider so create
+			// commands no longer need --cloud-provider. Best-effort: never fail
+			// validation over this.
+			if slug, derr := detectCloudProvider(ctx, client, cfg, profile.Name); derr == nil && slug != "" {
+				fmt.Fprintf(os.Stdout, "Cloud provider detected and saved to profile %q: %s\n", profile.Name, slug)
+			}
 			return nil
 		},
 	}

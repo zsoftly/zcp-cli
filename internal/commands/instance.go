@@ -115,7 +115,7 @@ func newInstanceGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <slug>",
 		Short: "Get details of a specific virtual machine",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp instance get my-vm
   zcp instance get my-vm --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -199,7 +199,6 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		{"OS Family", osFamily},
 		{"Billing Cycle", billingCycle},
 		{"Storage", storageName},
-		{"Service", vm.ServiceName},
 		{"Total Consumption", fmt.Sprintf("%.2f", vm.AllTimeConsumption)},
 		{"Has Contract", strconv.FormatBool(vm.HasContract)},
 		{"Created", vm.CreatedAt},
@@ -240,15 +239,15 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly
-  zcp instance create --name my-vm --cloud-provider nimbo --project default --region yow-1 --template ubuntu-22f --plan compute-4vcpu-8gb --billing-cycle hourly --wait`,
+		Example: `  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly
+  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			project = resolveProject(project)
 			if project == "" {
@@ -346,7 +345,7 @@ func newInstanceCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "VM name (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&template, "template", "", "Template slug (required)")
@@ -413,7 +412,7 @@ func newInstanceStartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "start <slug>",
 		Short:   "Start a stopped virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance start my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstanceStart(cmd, args[0], wait)
@@ -462,7 +461,7 @@ func newInstanceStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "stop <slug>",
 		Short:   "Stop a running virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance stop my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstanceStop(cmd, args[0], wait)
@@ -509,7 +508,7 @@ func newInstanceRebootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "reboot <slug>",
 		Short:   "Reboot a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance reboot my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstanceReboot(cmd, args[0])
@@ -546,7 +545,7 @@ func newInstanceResetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reset <slug>",
 		Short: "Reset a virtual machine (hard reset, may lose unsaved data)",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp instance reset my-vm
   zcp instance reset my-vm --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -594,7 +593,7 @@ func newInstanceLogsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "logs <slug>",
 		Short:   "Show activity logs for a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance logs my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstanceLogs(cmd, args[0])
@@ -640,7 +639,7 @@ func newInstanceTagCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "tag-create <slug>",
 		Short:   "Create a tag on a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance tag-create my-vm --key Environment --value Production`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if key == "" {
@@ -685,7 +684,7 @@ func newInstanceTagDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "tag-delete <slug>",
 		Short:   "Delete a tag from a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance tag-delete my-vm --key Environment`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if key == "" {
@@ -728,7 +727,7 @@ func newInstanceChangeHostnameCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-hostname <slug>",
 		Short:   "Change the hostname of a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance change-hostname my-vm --hostname new-hostname`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if hostname == "" {
@@ -772,7 +771,7 @@ func newInstanceChangePasswordCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-password <slug>",
 		Short:   "Reset the password of a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance change-password my-vm --password "newSecureP@ss"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if password == "" {
@@ -816,8 +815,8 @@ func newInstanceChangePlanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-plan <slug>",
 		Short:   "Change the plan of a virtual machine",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp instance change-plan my-vm --plan box2cm4 --billing-cycle hourly`,
+		Args:    exactArgs(1),
+		Example: `  zcp instance change-plan my-vm --plan ci1m --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -867,9 +866,9 @@ func newInstanceChangeOSCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "change-os <slug>",
 		Short: "Change the OS template of a virtual machine (DESTRUCTIVE)",
-		Args:  cobra.ExactArgs(1),
-		Example: `  zcp instance change-os my-vm --template ubuntu-22f
-  zcp instance change-os my-vm --template ubuntu-22f --yes`,
+		Args:  exactArgs(1),
+		Example: `  zcp instance change-os my-vm --template ubuntu-2604-lts
+  zcp instance change-os my-vm --template ubuntu-2604-lts --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if template == "" {
 				return fmt.Errorf("--template is required")
@@ -921,7 +920,7 @@ func newInstanceChangeScriptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-script <slug>",
 		Short:   "Change the startup script of a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance change-script my-vm --user-data "#!/bin/bash\napt update"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if userData == "" {
@@ -962,7 +961,7 @@ func newInstanceAddNetworkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "add-network <slug>",
 		Short:   "Add a network to a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance add-network my-vm --network my-network-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if network == "" {
@@ -1001,7 +1000,7 @@ func newInstanceAddonsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "addons <slug>",
 		Short:   "List addons for a virtual machine",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp instance addons my-vm`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runInstanceAddons(cmd, args[0])
@@ -1062,14 +1061,14 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "purchase-addon",
 		Short:   "Purchase an addon for a virtual machine",
-		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --cloud-provider nimbo --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
+		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -1094,7 +1093,7 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd.Flags().StringVar(&vmSlug, "vm", "", "VM slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&addonSlug, "addon-slug", "", "Addon slug (required)")
 	cmd.Flags().StringVar(&addonCategory, "addon-category", "", "Addon category slug (optional)")
 	cmd.Flags().StringVar(&addonID, "addon-id", "", "Addon ID (required)")
@@ -1148,7 +1147,7 @@ func newInstanceDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Permanently delete a virtual machine",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp instance delete my-vm
   zcp instance delete my-vm --yes
   zcp instance delete my-vm --force --yes`,
@@ -1211,7 +1210,7 @@ is "root"; use --user to override.
 Requirements:
   - ssh must be installed and available in your PATH
   - The VM must be reachable from your local machine (VPN or public IP)`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		Example: `  zcp instance ssh my-vm
   zcp instance ssh my-vm --user ubuntu
   zcp instance ssh my-vm --user root --identity-file ~/.ssh/my-key.pem`,

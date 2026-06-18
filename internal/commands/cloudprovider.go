@@ -48,13 +48,15 @@ func runCloudProviderList(cmd *cobra.Command) error {
 		return fmt.Errorf("cloud-provider list: %w", err)
 	}
 
-	headers := []string{"ID", "NAME", "DISPLAY NAME", "SLUG", "STATUS", "MULTI-REGION", "CREATED"}
+	// DISPLAY NAME is intentionally omitted: it can surface backend technology
+	// names (e.g. "Cloud Stack", "Ceph"). SLUG is the value used by
+	// --cloud-provider, so it is kept; the human label is not exposed.
+	headers := []string{"ID", "NAME", "SLUG", "STATUS", "MULTI-REGION", "CREATED"}
 	rows := make([][]string, 0, len(providers))
 	for _, p := range providers {
 		rows = append(rows, []string{
 			p.ID,
 			p.Name,
-			p.DisplayName,
 			p.Slug,
 			fmt.Sprintf("%v", p.Status),
 			fmt.Sprintf("%v", p.IsMultiRegionSetup),

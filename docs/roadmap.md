@@ -73,6 +73,22 @@ Only 3 VPC tier networks allowed before quota exceeded (CloudStack `vpc.max.netw
 
 - [ ] Quota increase for testing
 
+#### Object Lock (S3 WORM / compliance) — needs object-lock flag on bucket create
+
+Object Lock can only be enabled at bucket _creation_ (S3 constraint: the `CreateBucket`
+request must carry `x-amz-bucket-object-lock-enabled: true`). Buckets are created via the
+control-plane REST endpoint, not over S3, so the CLI can't set it — the backend must
+expose it. Feature request sent to the backend team.
+
+- [ ] **Backend:** `POST /object-storages/{slug}/buckets` accepts `object_lock_enabled` (optional, default false) and forwards `x-amz-bucket-object-lock-enabled: true` to RGW.
+
+Once the backend ships the flag, the CLI adds (all pure S3 via minio-go; RGW already supports the routes — do NOT implement until the above ships):
+
+- [ ] `object-storage bucket create --object-lock`
+- [ ] `object-storage bucket lock get|set` (default retention mode + period)
+- [ ] `object-storage object retention get|set` (governance/compliance, retain-until)
+- [ ] `object-storage object legal-hold get|set on|off`
+
 ---
 
 ## Future (v0.0.9+)

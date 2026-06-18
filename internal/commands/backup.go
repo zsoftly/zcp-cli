@@ -45,7 +45,7 @@ func newBackupListCmd() *cobra.Command {
 				return fmt.Errorf("backup list: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "SERVICE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "CREATED"}
 			rows := make([][]string, 0, len(backups))
 			for _, b := range backups {
 				rows = append(rows, []string{
@@ -53,7 +53,6 @@ func newBackupListCmd() *cobra.Command {
 					b.Name,
 					b.BlockstorageID,
 					b.Interval,
-					b.ServiceDisplayName,
 					b.CreatedAt,
 				})
 			}
@@ -67,11 +66,14 @@ func newBackupCreateCmd() *cobra.Command {
 	var blockstorageSlug, interval, cloudProvider, region, billingCycle, plan, pseudoService, project string
 	var at, immediate int
 
+	// TODO(disabled-plan): `backup-1` is a real plan but backup plans are not yet
+	// enabled in the catalog (`zcp plan backup` returns []). Keep the example/help
+	// as-is — it works once backup plans are enabled.
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",
-		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project
-  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --cloud-provider nimbo --region yow-1 --billing-cycle hourly --plan backup-1 --project my-project`,
+		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-1 --project default
+  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --region yow-1 --billing-cycle hourly --plan backup-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -79,9 +81,9 @@ func newBackupCreateCmd() *cobra.Command {
 			if interval == "" {
 				return fmt.Errorf("--interval is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -125,13 +127,12 @@ func newBackupCreateCmd() *cobra.Command {
 				return fmt.Errorf("backup create: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "SERVICE", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "CREATED"}
 			rows := [][]string{{
 				bak.Slug,
 				bak.Name,
 				bak.BlockstorageID,
 				bak.Interval,
-				bak.ServiceDisplayName,
 				bak.CreatedAt,
 			}}
 			return printer.PrintTable(headers, rows)
@@ -141,7 +142,7 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&interval, "interval", "", "Backup interval, e.g. dailyAt (required)")
 	cmd.Flags().IntVar(&at, "at", 1, "Hour at which the backup triggers (e.g. 1 for 1 AM)")
 	cmd.Flags().IntVar(&immediate, "immediate", 0, "Run backup immediately: 1 for yes, 0 for no")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. backup-1 (required)")
@@ -156,7 +157,7 @@ func newBackupDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <backup-slug>",
 		Short: "Permanently delete a block storage backup schedule",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp backup delete bk-001001-0001
   zcp backup delete bk-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

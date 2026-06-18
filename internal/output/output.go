@@ -44,6 +44,13 @@ type Printer struct {
 	usePager bool
 }
 
+// Format returns the printer's resolved output format (table/json/yaml). Useful
+// for commands that emit a non-tabular value (e.g. a raw URL) by default but
+// still want to honor structured output requests.
+func (p *Printer) Format() Format {
+	return p.format
+}
+
 // SetPager enables optional paging for table output when writing to a terminal.
 // When enabled, table output is piped through $PAGER (defaults to "less -FRX").
 func (p *Printer) SetPager(enabled bool) {

@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/config"
 	"github.com/zsoftly/zcp-cli/internal/output"
+	"github.com/zsoftly/zcp-cli/pkg/api/cloudprovider"
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
@@ -78,12 +80,120 @@ func resolveRegion(flagRegion string) string {
 	return os.Getenv("ZCP_REGION")
 }
 
-// resolveCloudProvider returns flagCloudProvider if set, otherwise the ZCP_CLOUD_PROVIDER env var.
-func resolveCloudProvider(flagCloudProvider string) string {
+// cloudProviderFlagOrEnv returns flagCloudProvider if set, otherwise the
+// ZCP_CLOUD_PROVIDER env var. It does NOT consult the stored profile default —
+// used by commands that supply their own service-specific default (e.g. object
+// storage defaults to "ceph").
+func cloudProviderFlagOrEnv(flagCloudProvider string) string {
 	if flagCloudProvider != "" {
 		return flagCloudProvider
 	}
 	return os.Getenv("ZCP_CLOUD_PROVIDER")
+}
+
+// resolveCloudProvider resolves the cloud-provider slug for create commands using
+// the precedence flag > ZCP_CLOUD_PROVIDER > the slug auto-detected and stored on
+// the active profile (see detectCloudProvider). Returns "" if none can be found,
+// in which case the caller errors with guidance to run `zcp auth validate`.
+func resolveCloudProvider(cmd *cobra.Command, flagCloudProvider string) string {
+	if v := cloudProviderFlagOrEnv(flagCloudProvider); v != "" {
+		return v
+	}
+	profileName, _ := cmd.Root().PersistentFlags().GetString("profile")
+	cfg, err := config.Load()
+	if err != nil {
+		return ""
+	}
+	p, err := config.ResolveProfile(cfg, profileName)
+	if err != nil {
+		return ""
+	}
+	return p.CloudProvider
+}
+
+// computeServiceName is the catalog service that identifies the primary
+// infrastructure ("compute") cloud provider. Verified against the production
+// /cloud-providers endpoint, which returns three active providers:
+//   - "nimbo" (display "Cloud Stack"): serves "Virtual Machine" plus 19 more —
+//     Block Storage, Network, VPC, Kubernetes, Load Balancer, IP Address,
+//     snapshots, ISO, autoscale, monitoring, storage tiers. This is the slug
+//     used by every create command except the two below.
+//   - "ceph" (display "Ceph"): serves only "Object Storage" — the object-storage
+//     command defaults to it directly.
+//   - "dns" (display "Dns"): serves only "Dns Domain" — the dns command defaults
+//     to it directly.
+//
+// Picking the provider that advertises "Virtual Machine" deterministically
+// selects the compute provider regardless of how many others exist.
+const computeServiceName = "Virtual Machine"
+
+// detectCloudProvider fetches the account's cloud providers and stores the
+// primary compute provider's slug on the named profile, so future create
+// commands need not ask for it. The compute provider is the active provider
+// whose service catalog includes "Virtual Machine"; if none advertises it but
+// exactly one provider is active, that one is used. It is a no-op (returning the
+// existing value) when the profile already has a cloud provider, and returns ""
+// without error when it cannot be determined (env-only profile absent from the
+// config file, or no unambiguous match).
+func detectCloudProvider(ctx context.Context, client *httpclient.Client, cfg *config.Config, profileName string) (string, error) {
+	prof, ok := cfg.Profiles[profileName]
+	if !ok {
+		return "", nil
+	}
+	if prof.CloudProvider != "" {
+		return prof.CloudProvider, nil
+	}
+
+	providers, err := cloudprovider.NewService(client).List(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var active []cloudprovider.CloudProvider
+	for _, p := range providers {
+		if p.Status {
+			active = append(active, p)
+		}
+	}
+
+	chosen := ""
+	for _, p := range active {
+		for _, svc := range p.Services {
+			if svc == computeServiceName {
+				chosen = p.Slug
+				break
+			}
+		}
+		if chosen != "" {
+			break
+		}
+	}
+	if chosen == "" && len(active) == 1 {
+		chosen = active[0].Slug
+	}
+	if chosen == "" {
+		return "", nil
+	}
+
+	// Re-load immediately before the mutate-and-save so we persist onto the
+	// newest on-disk config rather than the snapshot taken when the command
+	// started — this narrows the window in which a concurrent `zcp` write to a
+	// different profile could be clobbered (Save rewrites the whole file).
+	save := cfg
+	if fresh, ferr := config.Load(); ferr == nil {
+		if _, ok := fresh.Profiles[profileName]; ok {
+			save = fresh
+		}
+	}
+	prof = save.Profiles[profileName]
+	prof.CloudProvider = chosen
+	save.Profiles[profileName] = prof
+	if err := config.Save(save); err != nil {
+		return "", err
+	}
+	// Reflect the change in the caller's in-memory config too.
+	cfg.Profiles[profileName] = prof
+	return chosen, nil
 }
 
 // getTimeout reads the --timeout persistent flag value from the command's root.

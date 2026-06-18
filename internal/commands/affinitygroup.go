@@ -81,7 +81,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create an affinity group",
 		Example: `  zcp affinity-group create --name my-group --type "host affinity" \
-    --cloud-provider nimbo --project my-project --region yow-1`,
+    --project default --region yow-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -89,9 +89,9 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 			if groupType == "" {
 				return fmt.Errorf("--type is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			project = resolveProject(project)
 			if project == "" {
@@ -117,7 +117,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Group description")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	return cmd
 }
 
@@ -153,7 +153,7 @@ func newAffinityGroupDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete an affinity group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp affinity-group delete my-group
   zcp affinity-group delete my-group --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

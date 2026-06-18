@@ -639,7 +639,7 @@ func newBillingCancelServiceCmd() *cobra.Command {
 		Short: "Submit a cancellation request for a service",
 		Example: `  zcp billing cancel-service demo-prj-vm --service "Virtual Machine" --reason not_needed_anymore
   zcp billing cancel-service my-volume --service "Block Storage" --reason not_needed_anymore --type Immediate`,
-		Args: cobra.ExactArgs(1),
+		Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if serviceName == "" {
 				return fmt.Errorf("--service is required (e.g. 'Virtual Machine', 'Block Storage', 'IP Address')")
@@ -765,7 +765,7 @@ func newBillingRedeemCouponCmd() *cobra.Command {
 		Use:     "redeem-coupon <code>",
 		Short:   "Apply a coupon code to the account",
 		Example: `  zcp billing redeem-coupon SAVE50`,
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBillingRedeemCoupon(cmd, args[0])
 		},

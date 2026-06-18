@@ -78,7 +78,7 @@ func newNetworkGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <slug>",
 		Short: "Get details of a network",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp network get web-tier
   zcp network get web-tier --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -132,17 +132,17 @@ func newNetworkCreateCmd() *cobra.Command {
 For VPC subnets, --acl attaches a custom network ACL right after creation
 (the API has no attach-at-create parameter, so the network briefly carries
 the VPC default ACL before the replacement is applied).`,
-		Example: `  zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly --cloud-provider nimbo --region yow-1 --project default
-  zcp network create --name my-l2 --network-plan l2net-yow --type L2 --cloud-provider nimbo --region yow-1 --project default
-  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --cloud-provider nimbo --region yow-1 --project default
-  zcp network create --name web-tier --vpc my-vpc --acl web-acl --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --cloud-provider nimbo --region yow-1 --project default`,
+		Example: `  zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly --region yow-1 --project default
+  zcp network create --name my-l2 --network-plan l2net-yow --type L2 --region yow-1 --project default
+  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default
+  zcp network create --name web-tier --vpc my-vpc --acl web-acl --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -215,7 +215,7 @@ the VPC default ACL before the replacement is applied).`,
 	cmd.Flags().StringVar(&gateway, "gateway", "", "Gateway IP (required with --vpc)")
 	cmd.Flags().StringVar(&netmask, "netmask", "", "Netmask, e.g. 255.255.255.0 (required with --vpc)")
 	cmd.Flags().StringVar(&description, "description", "", "Network description")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -293,7 +293,7 @@ func newNetworkUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <slug>",
 		Short: "Update a network",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp network update en-001001-0018 --name new-name
   zcp network update en-001001-0018 --description "Updated description"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -399,7 +399,7 @@ func newNetworkDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a network",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp network delete en-001001-0018
   zcp network delete en-001001-0018 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

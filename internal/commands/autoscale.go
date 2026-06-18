@@ -104,8 +104,8 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new autoscale group",
-		Example: `  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 1 --max 5 --zone yow-1 --cloud-provider nimbo --region yow-1 --project default
-  zcp autoscale create --name web-group --plan small --template ubuntu-22 --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --cloud-provider nimbo --region yow-1 --project default`,
+		Example: `  zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts --min 1 --max 5 --zone yow-1 --region yow-1 --project default
+  zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts --min 2 --max 10 --zone yow-1 --network default --cooldown 300 --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -119,9 +119,9 @@ func newAutoscaleCreateCmd() *cobra.Command {
 			if zoneSlug == "" {
 				return fmt.Errorf("--zone is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -160,7 +160,7 @@ func newAutoscaleCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&cooldownPeriod, "cooldown", 0, "Cooldown period in seconds between scaling actions")
 	cmd.Flags().StringVar(&zoneSlug, "zone", "", "Zone slug (required)")
 	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -206,7 +206,7 @@ func newAutoscaleEnableCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "enable <slug>",
 		Short:   "Enable an autoscale group",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp autoscale enable web-group`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAutoscaleEnable(cmd, args[0])
@@ -239,7 +239,7 @@ func newAutoscaleDisableCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "disable <slug>",
 		Short:   "Disable an autoscale group",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp autoscale disable web-group`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAutoscaleDisable(cmd, args[0])
@@ -278,8 +278,8 @@ func newAutoscaleChangePlanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-plan <slug>",
 		Short:   "Change the compute plan of an autoscale group",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp autoscale change-plan web-group --plan medium`,
+		Args:    exactArgs(1),
+		Example: `  zcp autoscale change-plan web-group --plan ci1m`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -321,8 +321,8 @@ func newAutoscaleChangeTemplateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "change-template <slug>",
 		Short:   "Change the template of an autoscale group",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp autoscale change-template web-group --template ubuntu-24`,
+		Args:    exactArgs(1),
+		Example: `  zcp autoscale change-template web-group --template ubuntu-2604-lts`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if template == "" {
 				return fmt.Errorf("--template is required")
@@ -364,7 +364,7 @@ func newAutoscaleDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Permanently delete an autoscale group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp autoscale delete web-group
   zcp autoscale delete web-group --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -434,7 +434,7 @@ func newPolicyCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <group-slug>",
 		Short: "Create a scale-up policy for an autoscale group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp autoscale policy create web-group --name cpu-high --metric cpu --operator gte --threshold 80 --duration 300 --scale-amount 2
   zcp autoscale policy create web-group --name mem-high --metric memory --operator gte --threshold 90 --duration 120 --scale-amount 1 --cooldown 600`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -525,7 +525,7 @@ func newPolicyUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update <group-slug>",
 		Short:   "Update a scale-up policy for an autoscale group",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp autoscale policy update web-group --policy-id 42 --name cpu-high --metric cpu --operator gte --threshold 85 --duration 300 --scale-amount 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if policyID <= 0 {
@@ -613,7 +613,7 @@ func newPolicyDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <group-slug>",
 		Short: "Delete a scale-up policy from an autoscale group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp autoscale policy delete web-group --policy-id 42
   zcp autoscale policy delete web-group --policy-id 42 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -694,7 +694,7 @@ func newConditionCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <group-slug>",
 		Short: "Create a scale-down condition for an autoscale group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp autoscale condition create web-group --name cpu-low --metric cpu --operator lte --threshold 20 --duration 600 --scale-amount 1
   zcp autoscale condition create web-group --name mem-low --metric memory --operator lte --threshold 30 --duration 300 --scale-amount 1 --cooldown 600`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -785,7 +785,7 @@ func newConditionUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update <group-slug>",
 		Short:   "Update a scale-down condition for an autoscale group",
-		Args:    cobra.ExactArgs(1),
+		Args:    exactArgs(1),
 		Example: `  zcp autoscale condition update web-group --condition-id 7 --name cpu-low --metric cpu --operator lte --threshold 15 --duration 600 --scale-amount 1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if conditionID <= 0 {
@@ -873,7 +873,7 @@ func newConditionDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <group-slug>",
 		Short: "Delete a scale-down condition from an autoscale group",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp autoscale condition delete web-group --condition-id 7
   zcp autoscale condition delete web-group --condition-id 7 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {

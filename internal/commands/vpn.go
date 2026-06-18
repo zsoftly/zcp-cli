@@ -119,7 +119,7 @@ func newVPNCGCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a new VPN customer gateway",
-		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 --cloud-provider nimbo --region yow-1 --project default`,
+		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -139,9 +139,9 @@ func newVPNCGCreateCmd() *cobra.Command {
 			if espPolicy == "" {
 				return fmt.Errorf("--esp-policy is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -181,7 +181,7 @@ func newVPNCGCreateCmd() *cobra.Command {
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
 		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -229,12 +229,12 @@ func newVPNCGUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "update <slug>",
 		Short:   "Update a VPN customer gateway",
-		Args:    cobra.ExactArgs(1),
-		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --cloud-provider nimbo --region yow-1 --project default`,
+		Args:    exactArgs(1),
+		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -274,7 +274,7 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		&ikeLifetime, &espLifetime, &ikeEncryption, &ikeHash, &ikeVersion, &ikeDH,
 		&espEncryption, &espHash, &espDH, &espPFS,
 		&forceEncap, &splitConnection, &dpd)
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -314,7 +314,7 @@ func newVPNCGDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a VPN customer gateway",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vpn customer-gateway delete my-remote-gw
   zcp vpn customer-gateway delete my-remote-gw --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -417,15 +417,15 @@ func newVPNUserCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPN user",
-		Example: `  zcp vpn user create --username alice --cloud-provider nimbo --region yow-1 --project default
-  zcp vpn user create --username alice --password secret --cloud-provider nimbo --region yow-1 --project default`,
+		Example: `  zcp vpn user create --username alice --region yow-1 --project default
+  zcp vpn user create --username alice --password secret --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if username == "" {
 				return fmt.Errorf("--username is required")
 			}
-			cloudProvider = resolveCloudProvider(cloudProvider)
+			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
-				return fmt.Errorf("--cloud-provider is required")
+				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
 			}
 			region = resolveRegion(region)
 			if region == "" {
@@ -464,7 +464,7 @@ func newVPNUserCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&username, "username", "", "VPN username (required)")
 	cmd.Flags().StringVar(&password, "password", "", "VPN password (prompted if not provided)")
-	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (required)")
+	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd
@@ -500,7 +500,7 @@ func newVPNUserDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Delete a VPN user by slug",
-		Args:  cobra.ExactArgs(1),
+		Args:  exactArgs(1),
 		Example: `  zcp vpn user delete alice
   zcp vpn user delete alice --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
