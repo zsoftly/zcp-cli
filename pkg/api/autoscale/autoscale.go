@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -140,9 +141,16 @@ func decodeList[T any](raw json.RawMessage) ([]T, error) {
 }
 
 // List returns all autoscale groups.
-func (s *Service) List(ctx context.Context) ([]AutoscaleGroup, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]AutoscaleGroup, error) {
 	var env envelope
-	if err := s.client.Get(ctx, basePath, nil, &env); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, basePath, q, &env); err != nil {
 		return nil, fmt.Errorf("listing autoscale groups: %w", err)
 	}
 	groups, err := decodeList[AutoscaleGroup](env.Data)

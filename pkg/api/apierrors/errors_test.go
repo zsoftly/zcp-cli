@@ -42,6 +42,33 @@ func TestParseResponseSTKCNSLFormat(t *testing.T) {
 	}
 }
 
+func TestParseResponseValidationErrorsInData(t *testing.T) {
+	// Laravel 422 validation shape: field errors live under "data", no "status".
+	body, _ := json.Marshal(map[string]interface{}{
+		"success": false,
+		"message": "Validation errors",
+		"data": map[string]interface{}{
+			"name":       []string{"The name field must not be greater than 20 characters."},
+			"public_key": []string{"The public key has already been taken."},
+		},
+	})
+
+	err := apierrors.ParseResponse(422, body)
+	var ae *apierrors.APIError
+	if !errors.As(err, &ae) {
+		t.Fatalf("expected *APIError, got %T", err)
+	}
+	if !strings.Contains(ae.Message, "Validation errors") {
+		t.Errorf("Message = %q, want it to contain %q", ae.Message, "Validation errors")
+	}
+	if !strings.Contains(ae.Message, "must not be greater than 20 characters") {
+		t.Errorf("Message = %q, want it to contain the name field detail", ae.Message)
+	}
+	if !strings.Contains(ae.Message, "public key has already been taken") {
+		t.Errorf("Message = %q, want it to contain the public_key detail", ae.Message)
+	}
+}
+
 func TestParseResponseSTKCNSLSimple(t *testing.T) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"status":  "Error",

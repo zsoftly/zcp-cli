@@ -75,7 +75,8 @@ func runInstanceList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	vms, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	vms, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("instance list: %w", err)
 	}
@@ -240,7 +241,8 @@ func newInstanceCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new virtual machine",
 		Example: `  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly
-  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --wait`,
+  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --wait
+  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --ssh-key mykey   # import the key first with 'zcp ssh-key import'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -283,8 +285,13 @@ func newInstanceCreateCmd() *cobra.Command {
 			}
 
 			var sshKeyPtr *string
+			var passwordPtr *string
+			authMethod := ""
 			if sshKey != "" {
 				sshKeyPtr = &sshKey
+				authMethod = "ssh-key"
+				empty := ""
+				passwordPtr = &empty
 			}
 
 			var userDataPtr *string
@@ -329,6 +336,8 @@ func newInstanceCreateCmd() *cobra.Command {
 				Networks:         []string{},
 				BillingCycle:     billingCycle,
 				SSHKey:           sshKeyPtr,
+				AuthMethod:       authMethod,
+				Password:         passwordPtr,
 				Plan:             plan,
 				CustomPlan:       customPlan,
 				OSFamily:         "Linux",
@@ -352,7 +361,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug: hourly, monthly, etc. (required)")
 	cmd.Flags().StringVar(&networkType, "network-type", "Isolated", "Network type (default: Isolated)")
-	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "SSH key name (optional)")
+	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Name of an existing SSH key to attach for login (optional; see 'zcp ssh-key list')")
 	cmd.Flags().StringVar(&hostname, "hostname", "", "Hostname (defaults to --name)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (optional)")
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")

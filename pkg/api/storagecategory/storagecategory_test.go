@@ -41,7 +41,7 @@ func TestStorageCategoryList(t *testing.T) {
 	})
 
 	svc := storagecategory.NewService(client)
-	categories, err := svc.List(context.Background())
+	categories, err := svc.List(context.Background(), "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestStorageCategoryListAPIError(t *testing.T) {
 	})
 
 	svc := storagecategory.NewService(client)
-	_, err := svc.List(context.Background())
+	_, err := svc.List(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}

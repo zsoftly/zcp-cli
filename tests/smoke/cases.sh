@@ -138,7 +138,8 @@ fx_sshkey() {
   pub="$(ssh-keygen -t ed25519 -N '' -C "$name" -f "/tmp/${name}" >/dev/null 2>&1 && cat "/tmp/${name}.pub")"
   rm -f "/tmp/${name}" "/tmp/${name}.pub" 2>/dev/null
   [[ -z "$pub" ]] && return 1
-  capture out -- zcp ssh-key import --name "$name" --public-key "$pub" -o json || return 1
+  capture out -- zcp ssh-key import --name "$name" --public-key "$pub" \
+    --project "$(det_project)" --region "$(det_region)" -o json || return 1
   FX_SSHKEY="$(_jq_slug <<<"$out")"
   [[ -z "$FX_SSHKEY" ]] && FX_SSHKEY="$(zcp ssh-key list -o json 2>/dev/null | jq -r --arg n "$name" '(.[]//.data[])|select(.name==$n)|.slug' | head -1)"
   [[ -n "$FX_SSHKEY" ]] && defer ssh-key "$FX_SSHKEY"

@@ -70,7 +70,7 @@ func TestLoadBalancerList(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	lbs, err := svc.List(context.Background())
+	lbs, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestLoadBalancerListEmpty(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	lbs, err := svc.List(context.Background())
+	lbs, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -258,7 +258,7 @@ func TestLoadBalancerListError(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.List(context.Background())
+	_, err := svc.List(context.Background(), "", "")
 	if err == nil {
 		t.Fatal("List() expected error on 500, got nil")
 	}

@@ -26,12 +26,15 @@ type Owner struct {
 	Email string `json:"email"`
 }
 
-// CreateRequest holds parameters for creating an SSH key.
+// CreateRequest holds parameters for creating an SSH key. Project and Region
+// are mandatory: the API derives the cloud provider from them, and omitting
+// either makes the backend dereference a null and return
+// 500 "Attempt to read property \"id\" on null".
 type CreateRequest struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
-	Project   string `json:"project,omitempty"`
-	Region    string `json:"region,omitempty"`
+	Project   string `json:"project"`
+	Region    string `json:"region"`
 }
 
 // Service provides SSH key API operations.
@@ -51,7 +54,8 @@ func (s *Service) List(ctx context.Context) ([]SSHKey, error) {
 	return keys, nil
 }
 
-// Create imports an SSH public key with the given name.
+// Create imports an SSH public key with the given name. The key is registered
+// for the account and can then be referenced by name at VM-create time.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*SSHKey, error) {
 	var key SSHKey
 	if err := s.client.PostEnvelope(ctx, "/users/ssh-keys", req, &key); err != nil {

@@ -53,7 +53,8 @@ func runNetworkList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	nets, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	nets, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("network list: %w", err)
 	}

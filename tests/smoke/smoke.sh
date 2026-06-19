@@ -82,6 +82,12 @@ fi
 smoke_init
 trap 'run_cleanup' EXIT INT TERM
 
+# Region + project are mandatory for scoped commands (CLI v0.0.18+). Export the
+# detected defaults once so every case satisfies the requirement without adding
+# --region/--project to each call. Respect any value the caller already set.
+: "${ZCP_REGION:=$(det_region)}"; export ZCP_REGION
+: "${ZCP_PROJECT:=$(det_project)}"; export ZCP_PROJECT
+
 # ─── banner ──────────────────────────────────────────────────────────────────
 say ""
 say "${C_BLD}ZCP CLI live smoke suite${C_RST}"

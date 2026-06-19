@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -82,9 +83,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all VM backups.
-func (s *Service) List(ctx context.Context) ([]VMBackup, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]VMBackup, error) {
 	var env Envelope
-	if err := s.client.Get(ctx, "/virtual-machines/backups", nil, &env); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/virtual-machines/backups", q, &env); err != nil {
 		return nil, fmt.Errorf("listing VM backups: %w", err)
 	}
 	var backups []VMBackup

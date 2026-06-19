@@ -49,6 +49,11 @@ func runMarketplaceList(cmd *cobra.Command, region, include string) error {
 		return err
 	}
 
+	region, err = requireRegion(cmd, region)
+	if err != nil {
+		return err
+	}
+
 	svc := marketplace.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()

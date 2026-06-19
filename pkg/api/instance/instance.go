@@ -234,6 +234,7 @@ type CreateRequest struct {
 	Networks             []string    `json:"networks"`
 	BillingCycle         string      `json:"billing_cycle"`
 	SSHKey               *string     `json:"ssh_key"`
+	AuthMethod           string      `json:"authMethod"`
 	Plan                 string      `json:"plan"`
 	CustomPlan           *CustomPlan `json:"custom_plan"`
 	OSFamily             string      `json:"os_family,omitempty"`
@@ -336,10 +337,18 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns all virtual machines.
-func (s *Service) List(ctx context.Context) ([]VirtualMachine, error) {
+// List returns virtual machines scoped to region and project. VMs are
+// region- and project-specific; empty values are omitted from the filter.
+func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMachine, error) {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	var env Envelope
-	if err := s.client.Get(ctx, "/virtual-machines", nil, &env); err != nil {
+	if err := s.client.Get(ctx, "/virtual-machines", q, &env); err != nil {
 		return nil, fmt.Errorf("listing virtual machines: %w", err)
 	}
 	if env.Status != "Success" {

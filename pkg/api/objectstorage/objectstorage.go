@@ -259,11 +259,17 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all object storage instances for the account.
-func (s *Service) List(ctx context.Context) ([]ObjectStorage, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]ObjectStorage, error) {
 	q := url.Values{
 		"include": {"cloud_provider,region,project,offering"},
 	}
 	var resp listResponse
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	if err := s.client.Get(ctx, "/object-storages", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing object storages: %w", err)
 	}

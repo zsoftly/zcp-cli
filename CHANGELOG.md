@@ -5,6 +5,25 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.18] - 2026-06-19
+
+### Fixed
+
+- **`zcp ssh-key import` always failed with `API error 500 … Attempt to read property "id" on null`** — the API requires **both** `project` and `region` (it derives the cloud provider from them); the CLI marked both optional, so a call without them sent neither and the backend dereferenced a null. `--project` and `--region` are now **required** (honoring `ZCP_PROJECT`/`ZCP_REGION`), and both are always sent. Verified end-to-end against the live API: import → list → reference at VM create (VM came back with the key attached) → delete.
+- **API validation errors (HTTP 422) showed only the generic `Validation errors` with no detail** — this API returns field-level messages under `data` (not `errors`) and omits `status`, so they were dropped. `apierrors.ParseResponse` now surfaces them from either location, e.g. `Validation errors — public_key: The public key has already been taken.` / `name: The name field must not be greater than 20 characters.`
+- **Region-specific catalog listings returned every region's entries, not just the target region.** The commands sent no region and the API returns all regions unless filtered, so e.g. `zcp plan vm` listed both YUL (`ca*`) and YOW (`ci*`) offerings. Picking a wrong-region plan (Intel `ci*` in YUL) then failed to **schedule** ("no destination found") — the VM sat in `Starting`, flipped to `Error`, and was cleaned up with no IP, which looked like a boot failure. All region-specific catalog commands now **require a region** (`--region` or `ZCP_REGION`) and send `filter[region]=<slug>`: `zcp plan …` (all service types; use `os-yow`/`os-yul` for `plan object-storage`), `zcp template list`, `zcp iso list` (which previously ignored `--region` entirely), `zcp marketplace list`, and `zcp storage-category list`. Genuinely global catalogs are unchanged (`region`, `cloud-provider`, `currency`, `billing-cycle`, `server`). This does **not** fix the underlying CMP catalog, which still presents cross-region offerings as selectable for a target region — that needs region-scoped offering filtering in the plan catalog (a cmp2.0-ansible-zsoftly change).
+
+### Added
+
+- **`zcp ssh-key import` validates `--name` length client-side** (≤ 20 chars) before calling the API, with a clear message instead of a server round-trip.
+- **`--region` and `--project` are now mandatory for every region/project-scoped command**, enforced centrally for all action commands. Satisfy them with `--region`/`--project`, the `ZCP_REGION`/`ZCP_PROJECT` env vars, or per-profile defaults saved by `zcp profile add`. The only exemptions are account-level/meta/discovery commands that have no region/project dimension: `dns`, `auth`, `profile`, `region`, `project`, `cloud-provider`, `currency`, `billing-cycle`, `server`, `support`, `dashboard`, `billing`, `product`, `store`, `version`, `completion`, plus two mixed groups whose region/project-scoped subcommands validate scope themselves while their other subcommands are account-wide: `ssh-key` (`list`/`delete` are account-wide; `import` requires `project`+`region`) and `object-storage` (acts on `os-yul`/`os-yow` regions distinct from the compute default, so `create`/`list` resolve their own region). `monitoring` is gated like the rest. Every resource and catalog **list also filters** its output by the region and project (`filter[region]`/`filter[project]`): instances, networks, IPs, volumes, VPCs, Kubernetes clusters, load balancers, virtual routers, autoscale groups, affinity groups, block-storage/VM snapshots, block-storage/VM backups, object storage, and all `plan`/`template`/`iso`/`marketplace`/`storage-category` catalogs.
+- **`zcp profile add` now captures a default region (required) and project**, like `aws configure`. They are stored in the profile and used to satisfy the mandatory region/project requirement when no flag/env is set, so `zcp profile add` once and subsequent commands need no `--region`/`--project`.
+
+### Changed
+
+- **`zcp instance create --ssh-key <name>`** now sends `authMethod: "ssh-key"` (and an empty `password`) alongside the key name, matching the Web UI's VM-create payload — previously the key name was sent without the auth-method flag, so SSH-key auth would not engage. The key is referenced here by name (import it first with `zcp ssh-key import`).
+- **Docs/help clarified** that (a) SSH key names and **public-key material** must be unique — re-importing the same key (even under a new name) is rejected with "The public key has already been taken"; and (b) a **VPC alone cannot host a VM** — you must create a network (tier) inside it (`zcp network create --vpc …`) and attach a VM to that tier (`zcp instance add-network`), since a bare VPC has no usable subnet.
+
 ## [v0.0.17] - 2026-06-17
 
 ### Added

@@ -50,6 +50,11 @@ func runTemplateList(cmd *cobra.Command, region string) error {
 		return err
 	}
 
+	region, err = requireRegion(cmd, region)
+	if err != nil {
+		return err
+	}
+
 	svc := template.NewService(client)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()

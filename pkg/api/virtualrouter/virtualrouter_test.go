@@ -55,7 +55,7 @@ func TestVirtualRouterList(t *testing.T) {
 	defer srv.Close()
 
 	svc := virtualrouter.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

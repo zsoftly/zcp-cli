@@ -64,7 +64,7 @@ func TestIPList(t *testing.T) {
 	defer srv.Close()
 
 	svc := ipaddress.NewService(newClient(srv.URL))
-	ips, err := svc.List(context.Background(), "my-vpc")
+	ips, err := svc.List(context.Background(), "my-vpc", "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestIPListNoFilter(t *testing.T) {
 	defer srv.Close()
 
 	svc := ipaddress.NewService(newClient(srv.URL))
-	ips, err := svc.List(context.Background(), "")
+	ips, err := svc.List(context.Background(), "", "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

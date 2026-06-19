@@ -31,7 +31,7 @@ func TestISOListBoolStatus(t *testing.T) {
 	defer srv.Close()
 
 	svc := iso.NewService(newClient(srv.URL))
-	isos, err := svc.List(context.Background())
+	isos, err := svc.List(context.Background(), "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

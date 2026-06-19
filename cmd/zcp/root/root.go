@@ -19,7 +19,86 @@ var (
 	noColorFlag     bool
 	pagerFlag       bool
 	autoApproveFlag bool
+	regionFlag      string
+	projectFlag     string
 )
+
+// scopeExemptTop lists top-level commands that are NOT region/project-scoped, so
+// they are not gated by the mandatory region+project requirement. These are
+// account-level data (dns), account/billing/meta commands, credential and
+// discovery commands (you use these to find a region/project in the first
+// place), and mixed groups whose region/project-scoped subcommands enforce it
+// themselves while their other subcommands are account-wide:
+//   - ssh-key: list/delete are account-wide (the key registry is not
+//     region-scoped); import validates region+project itself.
+//   - object-storage: get/credentials/delete act on a slug, and create/list use
+//     object-storage regions (os-yul/os-yow) that differ from the profile's
+//     compute region, so the generic gate must not force the compute default
+//     onto them — the scoped subcommands validate their own os-* region.
+var scopeExemptTop = map[string]bool{
+	"auth": true, "profile": true, "profile-info": true, "region": true,
+	"project": true, "cloud-provider": true, "currency": true, "billing-cycle": true,
+	"server": true, "dns": true, "support": true, "dashboard": true, "billing": true,
+	"product": true, "store": true, "version": true, "completion": true, "help": true,
+	"ssh-key": true, "object-storage": true,
+}
+
+// topLevelName returns the name of cmd's ancestor directly under the root.
+func topLevelName(cmd *cobra.Command) string {
+	c := cmd
+	for c.HasParent() && c.Parent().Name() != rootCmd.Name() {
+		c = c.Parent()
+	}
+	return c.Name()
+}
+
+// enforceScope requires --region and --project (or ZCP_REGION/ZCP_PROJECT) for
+// every action command except the account-level/meta commands in scopeExemptTop.
+// Resources and the catalog are region- and project-specific; running unscoped
+// returns or targets entries from other regions/projects.
+func enforceScope(cmd *cobra.Command, _ []string) error {
+	// Group commands with no action (e.g. bare `zcp instance`) just print help.
+	if cmd.RunE == nil && cmd.Run == nil {
+		return nil
+	}
+	if scopeExemptTop[topLevelName(cmd)] {
+		return nil
+	}
+	flagOrEnv := func(flag, env string) string {
+		if f := cmd.Flags().Lookup(flag); f != nil && f.Value.String() != "" {
+			return f.Value.String()
+		}
+		return os.Getenv(env)
+	}
+	region := flagOrEnv("region", "ZCP_REGION")
+	project := flagOrEnv("project", "ZCP_PROJECT")
+
+	// Fall back to the active profile's stored defaults (set by `profile add`,
+	// like `aws configure`), so a configured user need not repeat the flags. This
+	// MUST use the same resolver the command layer uses (config.ScopeDefaults), or
+	// the gate would accept a profile default that the command then ignores —
+	// silently running unscoped. See scopedRegionProject/requireRegion.
+	if region == "" || project == "" {
+		pr, pp := config.ScopeDefaults(profileFlag)
+		if region == "" {
+			region = pr
+		}
+		if project == "" {
+			project = pp
+		}
+	}
+
+	if region == "" {
+		return fmt.Errorf("--region is required (or set ZCP_REGION, or `zcp profile add` a default) for %q — "+
+			"resources and the catalog are region-specific; only DNS and account-level commands are region-free. "+
+			"See 'zcp region list'", cmd.CommandPath())
+	}
+	if project == "" {
+		return fmt.Errorf("--project is required (or set ZCP_PROJECT, or `zcp profile add` a default) for %q. "+
+			"See 'zcp project list'", cmd.CommandPath())
+	}
+	return nil
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "zcp",
@@ -68,6 +147,12 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noColorFlag, "no-color", false, "Disable color output")
 	rootCmd.PersistentFlags().BoolVar(&pagerFlag, "pager", false, "Pipe table output through less (requires less in PATH)")
 	rootCmd.PersistentFlags().BoolVarP(&autoApproveFlag, "auto-approve", "y", false, "Skip all confirmation prompts (useful for automation/CI)")
+	rootCmd.PersistentFlags().StringVar(&regionFlag, "region", "", "Region slug (required for all but account-level commands; or set ZCP_REGION)")
+	rootCmd.PersistentFlags().StringVar(&projectFlag, "project", "", "Project slug (required for all but account-level commands; or set ZCP_PROJECT)")
+
+	// Mandatory region+project scoping for every action command except the
+	// account-level/meta commands in scopeExemptTop.
+	rootCmd.PersistentPreRunE = enforceScope
 
 	// Version subcommand
 	rootCmd.AddCommand(newVersionCmd())
@@ -182,7 +267,7 @@ Fish:
 PowerShell:
   PS> zcp completion powershell | Out-String | Invoke-Expression`,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-		Args:                  cobra.ExactValidArgs(1),
+		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch args[0] {

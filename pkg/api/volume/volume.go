@@ -145,11 +145,17 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns block storage volumes. Use the include parameter to embed related resources.
-func (s *Service) List(ctx context.Context) ([]Volume, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]Volume, error) {
 	q := url.Values{
 		"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
 	}
 	var resp listResponse
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing block storages: %w", err)
 	}

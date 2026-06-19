@@ -57,7 +57,7 @@ func TestBackupList(t *testing.T) {
 	defer srv.Close()
 
 	svc := backup.NewService(newTestClient(t, srv))
-	backups, err := svc.List(context.Background())
+	backups, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

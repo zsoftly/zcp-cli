@@ -121,10 +121,15 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns all ISO images.
-func (s *Service) List(ctx context.Context) ([]ISO, error) {
+// List returns ISO images scoped to regionSlug. ISOs are region-specific, so an
+// empty regionSlug returns all regions (callers should pass a region). The
+// server honors filter[region]=<slug>.
+func (s *Service) List(ctx context.Context, regionSlug string) ([]ISO, error) {
 	q := url.Values{}
 	q.Set("include", "project,region,cloud_provider")
+	if regionSlug != "" {
+		q.Set("filter[region]", regionSlug)
+	}
 	var resp listResponse
 	if err := s.client.Get(ctx, "/isos", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing ISOs: %w", err)

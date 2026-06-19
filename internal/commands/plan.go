@@ -37,6 +37,14 @@ with their resource attributes and pricing.`,
 	return cmd
 }
 
+// planRegion resolves the region for a plan listing from the --region flag or
+// ZCP_REGION and requires it. Plans are region-specific, so an unscoped listing
+// would mix regions and surface plans that fail to deploy in the target region.
+func planRegion(cmd *cobra.Command) (string, error) {
+	flagRegion, _ := cmd.Flags().GetString("region")
+	return requireRegion(cmd, flagRegion)
+}
+
 // ---------------------------------------------------------------------------
 // Network
 // ---------------------------------------------------------------------------
@@ -59,7 +67,11 @@ The plan slug is the value for "zcp network create --network-plan".`,
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceNetwork)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceNetwork, region)
 			if err != nil {
 				return fmt.Errorf("plan network: %w", err)
 			}
@@ -101,7 +113,11 @@ func newPlanVMCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVM)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVM, region)
 			if err != nil {
 				return fmt.Errorf("plan vm: %w", err)
 			}
@@ -145,7 +161,11 @@ func newPlanRouterCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVirtualRouter)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVirtualRouter, region)
 			if err != nil {
 				return fmt.Errorf("plan router: %w", err)
 			}
@@ -188,14 +208,18 @@ func newPlanStorageCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage, region)
 			if err != nil {
 				return fmt.Errorf("plan storage: %w", err)
 			}
 
 			// Build id→slug map so the table shows the usable slug, not a UUID.
 			catSlug := map[string]string{}
-			cats, err := storagecategory.NewService(client).List(ctx)
+			cats, err := storagecategory.NewService(client).List(ctx, "")
 			if err == nil {
 				for _, c := range cats {
 					catSlug[c.ID] = c.Slug
@@ -243,7 +267,11 @@ func newPlanLBCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceLoadBalancer)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceLoadBalancer, region)
 			if err != nil {
 				return fmt.Errorf("plan lb: %w", err)
 			}
@@ -286,7 +314,11 @@ func newPlanK8sCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceKubernetes)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceKubernetes, region)
 			if err != nil {
 				return fmt.Errorf("plan kubernetes: %w", err)
 			}
@@ -329,7 +361,11 @@ func newPlanIPCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceIPAddress)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceIPAddress, region)
 			if err != nil {
 				return fmt.Errorf("plan ip: %w", err)
 			}
@@ -371,7 +407,11 @@ func newPlanVMSnapshotCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVMSnapshot)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVMSnapshot, region)
 			if err != nil {
 				return fmt.Errorf("plan vm-snapshot: %w", err)
 			}
@@ -412,7 +452,11 @@ func newPlanTemplateCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceMyTemplate)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceMyTemplate, region)
 			if err != nil {
 				return fmt.Errorf("plan template: %w", err)
 			}
@@ -454,7 +498,11 @@ func newPlanObjectStorageCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceObjectStorage)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceObjectStorage, region)
 			if err != nil {
 				return fmt.Errorf("plan object-storage: %w", err)
 			}
@@ -495,7 +543,11 @@ func newPlanISOCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceISO)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceISO, region)
 			if err != nil {
 				return fmt.Errorf("plan iso: %w", err)
 			}
@@ -537,7 +589,11 @@ func newPlanBackupCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceBackups)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceBackups, region)
 			if err != nil {
 				return fmt.Errorf("plan backup: %w", err)
 			}

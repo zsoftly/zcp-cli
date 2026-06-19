@@ -58,7 +58,7 @@ func TestNetworkList(t *testing.T) {
 
 	svc := network.NewService(newClient(srv.URL))
 
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -291,7 +291,7 @@ func TestNetworkListBoolStatus(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -322,7 +322,7 @@ func TestNetworkListStringStatus(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -350,7 +350,7 @@ func TestNetworkListNetworkTypeKey(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

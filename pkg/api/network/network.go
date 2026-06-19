@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
@@ -214,9 +215,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all isolated networks.
-func (s *Service) List(ctx context.Context) ([]Network, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]Network, error) {
 	var resp listNetworkResponse
-	if err := s.client.Get(ctx, "/networks", nil, &resp); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/networks", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing networks: %w", err)
 	}
 	return resp.Data, nil
@@ -233,7 +241,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Network, erro
 
 // Get returns a single network by slug.
 func (s *Service) Get(ctx context.Context, slug string) (*Network, error) {
-	networks, err := s.List(ctx)
+	networks, err := s.List(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}

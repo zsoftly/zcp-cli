@@ -51,7 +51,7 @@ func TestKubernetesListClusters(t *testing.T) {
 	defer srv.Close()
 
 	svc := kubernetes.NewService(newTestClient(srv))
-	clusters, err := svc.List(context.Background())
+	clusters, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -95,7 +95,7 @@ func TestKubernetesListClustersEmpty(t *testing.T) {
 	defer srv.Close()
 
 	svc := kubernetes.NewService(newTestClient(srv))
-	clusters, err := svc.List(context.Background())
+	clusters, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

@@ -31,7 +31,8 @@ const minObjectStorageGB = 60
 // storage_category that matches the plan, so this lets the CLI fill it in
 // automatically instead of making the user know the pairing.
 func objectStoragePlanCategory(ctx context.Context, client *httpclient.Client, planSlug string) (string, error) {
-	plans, err := plan.NewService(client).List(ctx, plan.ServiceObjectStorage)
+	// Empty region: this is an exact-slug lookup, not a user-facing listing.
+	plans, err := plan.NewService(client).List(ctx, plan.ServiceObjectStorage, "")
 	if err != nil {
 		return "", fmt.Errorf("looking up plan %q: %w", planSlug, err)
 	}
@@ -45,7 +46,7 @@ func objectStoragePlanCategory(ctx context.Context, client *httpclient.Client, p
 	if catID == "" {
 		return "", fmt.Errorf("plan %q not found among Object Storage plans (see 'zcp plan object-storage')", planSlug)
 	}
-	cats, err := storagecategory.NewService(client).List(ctx)
+	cats, err := storagecategory.NewService(client).List(ctx, "")
 	if err != nil {
 		return "", fmt.Errorf("resolving storage category for plan %q: %w", planSlug, err)
 	}
@@ -90,7 +91,15 @@ func newOSListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			stores, err := svc.List(ctx)
+			// Object-storage regions (os-yul/os-yow) differ from the profile's
+			// compute region default, so resolve region from --region/ZCP_REGION
+			// only — applying the compute default (e.g. yul-1) would filter to a
+			// region that holds no object storage and silently return nothing.
+			// Project is region-agnostic, so its profile default is fine.
+			flagRegion, _ := cmd.Flags().GetString("region")
+			region := resolveRegion(flagRegion)
+			_, project := scopedRegionProject(cmd)
+			stores, err := svc.List(ctx, region, project)
 			if err != nil {
 				return fmt.Errorf("object-storage list: %w", err)
 			}

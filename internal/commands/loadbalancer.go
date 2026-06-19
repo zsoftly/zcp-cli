@@ -58,7 +58,8 @@ func runLBList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	lbs, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	lbs, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("loadbalancer list: %w", err)
 	}

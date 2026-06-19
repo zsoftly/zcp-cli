@@ -22,19 +22,26 @@ func NewStorageCategoryCmd() *cobra.Command {
 // ─── List ───────────────────────────────────────────────────────────────────
 
 func newStorageCategoryListCmd() *cobra.Command {
+	var region string
 	cmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List storage categories",
-		Example: `  zcp storage-category list`,
+		Example: `  zcp storage-category list --region yow-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runStorageCategoryList(cmd)
+			return runStorageCategoryList(cmd, region)
 		},
 	}
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required; or set ZCP_REGION)")
 	return cmd
 }
 
-func runStorageCategoryList(cmd *cobra.Command) error {
+func runStorageCategoryList(cmd *cobra.Command, region string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	region, err = requireRegion(cmd, region)
 	if err != nil {
 		return err
 	}
@@ -43,7 +50,7 @@ func runStorageCategoryList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	categories, err := svc.List(ctx)
+	categories, err := svc.List(ctx, region)
 	if err != nil {
 		return fmt.Errorf("storage-category list: %w", err)
 	}

@@ -28,20 +28,27 @@ func NewISOCmd() *cobra.Command {
 }
 
 func newISOListCmd() *cobra.Command {
+	var region string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List ISO images",
-		Example: `  zcp iso list
-  zcp iso list --output json`,
+		Example: `  zcp iso list --region yow-1
+  zcp iso list --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runISOList(cmd)
+			return runISOList(cmd, region)
 		},
 	}
+	cmd.Flags().StringVar(&region, "region", "", "Region slug (required; or set ZCP_REGION)")
 	return cmd
 }
 
-func runISOList(cmd *cobra.Command) error {
+func runISOList(cmd *cobra.Command, region string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	region, err = requireRegion(cmd, region)
 	if err != nil {
 		return err
 	}
@@ -50,7 +57,7 @@ func runISOList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	isos, err := svc.List(ctx)
+	isos, err := svc.List(ctx, region)
 	if err != nil {
 		return fmt.Errorf("iso list: %w", err)
 	}

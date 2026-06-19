@@ -61,7 +61,7 @@ func TestVPCList(t *testing.T) {
 
 	svc := vpc.NewService(newClient(srv.URL))
 
-	result, err := svc.List(context.Background(), "")
+	result, err := svc.List(context.Background(), "", "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

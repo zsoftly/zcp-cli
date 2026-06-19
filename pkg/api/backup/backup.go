@@ -78,9 +78,15 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns block storage backups.
-func (s *Service) List(ctx context.Context) ([]Backup, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]Backup, error) {
 	q := url.Values{}
 	var resp listResponse
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	if err := s.client.Get(ctx, "/blockstorages/backups", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing block storage backups: %w", err)
 	}
