@@ -58,7 +58,7 @@ func TestNetworkList(t *testing.T) {
 
 	svc := network.NewService(newClient(srv.URL))
 
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -70,6 +70,40 @@ func TestNetworkList(t *testing.T) {
 	}
 	if result[1].Name != "db-network" {
 		t.Errorf("result[1].Name = %q, want %q", result[1].Name, "db-network")
+	}
+}
+
+func TestNetworkGetWithFilters(t *testing.T) {
+	networks := []network.Network{
+		makeNetwork("web-network", "web-network"),
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   networks,
+		})
+	}))
+	defer srv.Close()
+
+	svc := network.NewService(newClient(srv.URL))
+	net, err := svc.Get(context.Background(), "web-network", "yow-1", "default")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if net.Slug != "web-network" {
+		t.Errorf("net.Slug = %q, want %q", net.Slug, "web-network")
 	}
 }
 
@@ -291,7 +325,7 @@ func TestNetworkListBoolStatus(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -322,7 +356,7 @@ func TestNetworkListStringStatus(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -350,7 +384,7 @@ func TestNetworkListNetworkTypeKey(t *testing.T) {
 	defer srv.Close()
 
 	svc := network.NewService(newClient(srv.URL))
-	result, err := svc.List(context.Background())
+	result, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

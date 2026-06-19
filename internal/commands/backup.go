@@ -40,7 +40,8 @@ func newBackupListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			backups, err := svc.List(ctx)
+			region, project := scopedRegionProject(cmd)
+			backups, err := svc.List(ctx, region, project)
 			if err != nil {
 				return fmt.Errorf("backup list: %w", err)
 			}

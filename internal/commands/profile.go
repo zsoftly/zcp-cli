@@ -36,7 +36,7 @@ One profile can be set as the active (default) profile.`,
 }
 
 func newProfileAddCmd() *cobra.Command {
-	var bearerToken, apiURL string
+	var bearerToken, apiURL, region, project string
 	var nonInteractive bool
 
 	cmd := &cobra.Command{
@@ -44,7 +44,7 @@ func newProfileAddCmd() *cobra.Command {
 		Short: "Add or update a profile",
 		Args:  exactArgs(1),
 		Example: `  zcp profile add default
-  zcp profile add prod --bearer-token <token>`,
+  zcp profile add prod --bearer-token <token> --region yow-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 
@@ -53,10 +53,23 @@ func newProfileAddCmd() *cobra.Command {
 				return err
 			}
 
-			// If flags not provided, prompt interactively
+			// If flags not provided, prompt interactively (like `aws configure`,
+			// which captures both the credential and the default region).
 			if !nonInteractive {
 				if bearerToken == "" {
 					bearerToken, err = prompt("Bearer Token: ", true)
+					if err != nil {
+						return err
+					}
+				}
+				if region == "" {
+					region, err = prompt("Default region (e.g. yow-1): ", false)
+					if err != nil {
+						return err
+					}
+				}
+				if project == "" {
+					project, err = prompt("Default project (e.g. default-9): ", false)
 					if err != nil {
 						return err
 					}
@@ -65,6 +78,15 @@ func newProfileAddCmd() *cobra.Command {
 
 			if bearerToken == "" {
 				return fmt.Errorf("bearer token is required")
+			}
+			if region == "" {
+				return fmt.Errorf("a default region is required (--region, or answer the prompt) — see 'zcp region list'")
+			}
+			// Project is required too: nearly every action command is project-scoped
+			// (see the root scope gate), so a profile without a default project would
+			// force --project on every call. Capturing it here mirrors `aws configure`.
+			if project == "" {
+				return fmt.Errorf("a default project is required (--project, or answer the prompt) — see 'zcp project list'")
 			}
 
 			if cfg.Profiles == nil {
@@ -75,6 +97,8 @@ func newProfileAddCmd() *cobra.Command {
 				Name:        name,
 				BearerToken: bearerToken,
 				APIURL:      apiURL,
+				Region:      region,
+				Project:     project,
 			}
 
 			// Set as active if it's the first or only profile
@@ -112,6 +136,8 @@ func newProfileAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&bearerToken, "bearer-token", "", "Bearer token (prompted if not provided)")
 	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "Custom API URL (optional)")
+	cmd.Flags().StringVar(&region, "region", "", "Default region slug, e.g. yow-1 (required)")
+	cmd.Flags().StringVar(&project, "project", "", "Default project slug, e.g. default-9 (required)")
 	cmd.Flags().BoolVar(&nonInteractive, "no-input", false, "Fail if credentials not provided via flags")
 	return cmd
 }

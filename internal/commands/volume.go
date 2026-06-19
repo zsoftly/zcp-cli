@@ -54,7 +54,8 @@ func newVolumeListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			volumes, err := svc.List(ctx)
+			region, project := scopedRegionProject(cmd)
+			volumes, err := svc.List(ctx, region, project)
 			if err != nil {
 				return fmt.Errorf("volume list: %w", err)
 			}

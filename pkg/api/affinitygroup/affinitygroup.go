@@ -4,6 +4,7 @@ package affinitygroup
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -88,9 +89,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all affinity groups.
-func (s *Service) List(ctx context.Context) ([]AffinityGroup, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]AffinityGroup, error) {
 	var resp listResponse
-	if err := s.client.Get(ctx, "/affinity-groups", nil, &resp); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/affinity-groups", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing affinity groups: %w", err)
 	}
 	return resp.Data, nil

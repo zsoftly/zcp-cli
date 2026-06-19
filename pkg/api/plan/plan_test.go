@@ -75,7 +75,7 @@ func TestListVMPlans(t *testing.T) {
 	})
 
 	svc := plan.NewService(client)
-	plans, err := svc.List(context.Background(), plan.ServiceVM)
+	plans, err := svc.List(context.Background(), plan.ServiceVM, "yow-1")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestListBlockStoragePlans(t *testing.T) {
 	})
 
 	svc := plan.NewService(client)
-	plans, err := svc.List(context.Background(), plan.ServiceBlockStorage)
+	plans, err := svc.List(context.Background(), plan.ServiceBlockStorage, "yow-1")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -202,7 +202,7 @@ func TestListAPIError(t *testing.T) {
 	})
 
 	svc := plan.NewService(client)
-	_, err := svc.List(context.Background(), plan.ServiceVM)
+	_, err := svc.List(context.Background(), plan.ServiceVM, "yow-1")
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
 	}
@@ -262,7 +262,7 @@ func TestNetworkRateAsNumber(t *testing.T) {
 	})
 
 	svc := plan.NewService(client)
-	plans, err := svc.List(context.Background(), plan.ServiceVirtualRouter)
+	plans, err := svc.List(context.Background(), plan.ServiceVirtualRouter, "yow-1")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -271,5 +271,35 @@ func TestNetworkRateAsNumber(t *testing.T) {
 	}
 	if plans[0].Attribute.NetworkRate.String() != "200" {
 		t.Errorf("NetworkRate = %q, want %q", plans[0].Attribute.NetworkRate.String(), "200")
+	}
+}
+
+func TestListSendsRegionFilter(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "Success", "data": []interface{}{}})
+	}))
+	defer srv.Close()
+
+	svc := plan.NewService(httpclient.New(httpclient.Options{
+		BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second,
+	}))
+
+	// With a region, filter[region] must be sent so the API scopes the catalog.
+	if _, err := svc.List(context.Background(), plan.ServiceVM, "yul-1"); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := gotQuery, "filter%5Bregion%5D=yul-1"; got != want {
+		t.Errorf("query = %q, want %q", got, want)
+	}
+
+	// Empty region (internal slug lookups) must not send a region filter.
+	if _, err := svc.List(context.Background(), plan.ServiceObjectStorage, ""); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if gotQuery != "" {
+		t.Errorf("empty region should send no query, got %q", gotQuery)
 	}
 }

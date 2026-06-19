@@ -334,6 +334,11 @@ func TestPhase1_SSHKeyLifecycle(t *testing.T) {
 	svc := sshkey.NewService(client)
 	keyName := testID() + "-key"
 
+	// project and region are mandatory — the API derives the cloud provider
+	// from them and 500s ("read property \"id\" on null") if either is missing.
+	regionSlug, _ := detectRegion(t, client)
+	projectSlug := detectProject(t, client)
+
 	// Generate an ephemeral SSH key pair
 	pubKey := generateSSHKey(t)
 	t.Logf("generated ephemeral SSH public key: %s...%s", pubKey[:30], pubKey[len(pubKey)-10:])
@@ -343,6 +348,8 @@ func TestPhase1_SSHKeyLifecycle(t *testing.T) {
 	key, err := svc.Create(ctx, sshkey.CreateRequest{
 		Name:      keyName,
 		PublicKey: pubKey,
+		Project:   projectSlug,
+		Region:    regionSlug,
 	})
 	if err != nil {
 		t.Fatalf("creating SSH key: %v", err)

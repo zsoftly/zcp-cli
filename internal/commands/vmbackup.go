@@ -49,7 +49,8 @@ func runVMBackupList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	backups, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	backups, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("vm-backup list: %w", err)
 	}

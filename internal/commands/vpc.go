@@ -61,7 +61,8 @@ func runVPCList(cmd *cobra.Command, zoneSlug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	vpcs, err := svc.List(ctx, zoneSlug)
+	region, project := scopedRegionProject(cmd)
+	vpcs, err := svc.List(ctx, zoneSlug, region, project)
 	if err != nil {
 		return fmt.Errorf("vpc list: %w", err)
 	}
@@ -127,8 +128,24 @@ func newVPCCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPC",
+		Long: `Create a new VPC.
+
+A VPC on its own is just the router/container — it has NO usable subnet and
+CANNOT host a VM until you add at least one network (tier) inside it. After
+creating the VPC:
+
+  1. Create a tier in it:  zcp network create --vpc <vpc> --name <tier> \
+                             --gateway 10.1.1.1 --netmask 255.255.255.0 \
+                             --billing-cycle hourly --region <r> --project <p>
+  2. Attach a VM to that tier:  zcp instance add-network <vm> --network <tier>
+
+Note: 'zcp instance create' provisions its own network via --network-plan and
+does not yet accept a VPC tier directly, so attach the tier to the VM after
+creation with 'instance add-network'. A VPC with no network inside is unusable
+for VMs.`,
 		Example: `  zcp vpc create --name my-vpc --region yow-1 --project default --plan virtual-private-cloud-vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
-  zcp vpc create --name my-vpc --region yow-1 --project default --plan virtual-private-cloud-vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme --description "Production VPC"`,
+  # then add a tier (a bare VPC cannot host VMs):
+  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

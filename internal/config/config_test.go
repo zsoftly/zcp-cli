@@ -280,3 +280,67 @@ func TestConfigFilePath(t *testing.T) {
 		t.Errorf("ConfigFilePath() = %q, want %q", path, expected)
 	}
 }
+
+// TestScopeDefaults verifies the shared region/project fallback used by both the
+// root scope gate and the per-command resolvers, including name precedence
+// (explicit name > ZCP_PROFILE > active) and graceful empties for the
+// unconfigured cases.
+func TestScopeDefaults(t *testing.T) {
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		t.Setenv("APPDATA", dir)
+	} else {
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	t.Setenv("ZCP_PROFILE", "")
+
+	cfg := &config.Config{
+		ActiveProfile: "default",
+		Profiles: map[string]config.Profile{
+			"default": {Name: "default", BearerToken: "t", Region: "yul-1", Project: "default-9"},
+			"other":   {Name: "other", BearerToken: "t", Region: "yow-1", Project: "proj-2"},
+			"empty":   {Name: "empty", BearerToken: "t"},
+		},
+	}
+	if err := config.Save(cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	t.Run("active profile fallback", func(t *testing.T) {
+		t.Setenv("ZCP_PROFILE", "")
+		r, p := config.ScopeDefaults("")
+		if r != "yul-1" || p != "default-9" {
+			t.Errorf("ScopeDefaults(\"\") = %q,%q want yul-1,default-9", r, p)
+		}
+	})
+
+	t.Run("explicit name overrides active", func(t *testing.T) {
+		r, p := config.ScopeDefaults("other")
+		if r != "yow-1" || p != "proj-2" {
+			t.Errorf("ScopeDefaults(other) = %q,%q want yow-1,proj-2", r, p)
+		}
+	})
+
+	t.Run("ZCP_PROFILE used when name empty", func(t *testing.T) {
+		t.Setenv("ZCP_PROFILE", "other")
+		r, p := config.ScopeDefaults("")
+		if r != "yow-1" || p != "proj-2" {
+			t.Errorf("ScopeDefaults via ZCP_PROFILE = %q,%q want yow-1,proj-2", r, p)
+		}
+	})
+
+	t.Run("profile without defaults yields empties", func(t *testing.T) {
+		t.Setenv("ZCP_PROFILE", "")
+		r, p := config.ScopeDefaults("empty")
+		if r != "" || p != "" {
+			t.Errorf("ScopeDefaults(empty) = %q,%q want empty,empty", r, p)
+		}
+	})
+
+	t.Run("unknown profile yields empties", func(t *testing.T) {
+		r, p := config.ScopeDefaults("does-not-exist")
+		if r != "" || p != "" {
+			t.Errorf("ScopeDefaults(unknown) = %q,%q want empty,empty", r, p)
+		}
+	})
+}

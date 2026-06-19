@@ -59,7 +59,8 @@ func runAutoscaleList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	groups, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	groups, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("autoscale list: %w", err)
 	}

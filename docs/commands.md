@@ -231,6 +231,9 @@ zcp portforward create \
 
 ```bash
 # VPCs
+# IMPORTANT: a VPC is only the router/container. On its own it has no usable
+# subnet and CANNOT host a VM. You must add at least one network (tier) inside
+# it, then attach a VM to that tier. A bare VPC with no network is unusable.
 zcp vpc list
 zcp vpc create \
   --name my-vpc \
@@ -241,6 +244,14 @@ zcp vpc create \
   --size 16 \
   --billing-cycle hourly \
   --storage-category nvme
+
+# 1. add a tier (subnet) inside the VPC — REQUIRED before any VM can use it
+zcp network create --name web-tier --vpc my-vpc \
+  --gateway 10.1.1.1 --netmask 255.255.255.0 \
+  --billing-cycle hourly --region yow-1 --project default
+# 2. attach a VM to the tier ('instance create' provisions its own network via
+#    --network-plan and does not take a VPC tier directly, so attach afterward)
+zcp instance add-network <vm-slug> --network web-tier
 
 # Network ACL lists and rules
 zcp acl list <vpc-slug>
@@ -270,10 +281,15 @@ zcp vpn delete <slug>
 ## Security and Access
 
 ```bash
-# SSH keys
+# SSH keys (--project and --region are required on import)
+# Constraints: --name <= 20 chars and unique; the public key material must also
+# be unique — re-importing a key you already have (even under a new name) is
+# rejected with "The public key has already been taken." Delete the old key
+# first to rename/replace it.
 zcp ssh-key list
-zcp ssh-key create --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)"
+zcp ssh-key import --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)" --project default --region yul-1
 zcp ssh-key delete <slug>
+zcp instance create ... --ssh-key mykey   # reference the key by name on a new VM
 
 # Affinity groups
 zcp affinity-group list

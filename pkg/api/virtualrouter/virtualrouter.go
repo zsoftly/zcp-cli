@@ -4,6 +4,7 @@ package virtualrouter
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -57,9 +58,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all virtual routers.
-func (s *Service) List(ctx context.Context) ([]VirtualRouter, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]VirtualRouter, error) {
 	var resp listVirtualRouterResponse
-	if err := s.client.Get(ctx, "/virtual-routers", nil, &resp); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/virtual-routers", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing virtual routers: %w", err)
 	}
 	return resp.Data, nil

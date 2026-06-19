@@ -43,7 +43,7 @@ func TestVMSnapshotList(t *testing.T) {
 	defer srv.Close()
 
 	svc := vmsnapshot.NewService(newClient(srv.URL))
-	snaps, err := svc.List(context.Background())
+	snaps, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

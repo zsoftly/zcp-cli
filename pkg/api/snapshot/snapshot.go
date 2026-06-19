@@ -75,11 +75,17 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns block storage snapshots.
-func (s *Service) List(ctx context.Context) ([]Snapshot, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]Snapshot, error) {
 	q := url.Values{
 		"include": {"blockstorage,region,cloud_provider,project"},
 	}
 	var resp listResponse
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	if err := s.client.Get(ctx, "/blockstorages/snapshots", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing block storage snapshots: %w", err)
 	}

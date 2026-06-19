@@ -59,7 +59,7 @@ func TestVolumeList(t *testing.T) {
 	defer srv.Close()
 
 	svc := volume.NewService(newTestClient(t, srv))
-	volumes, err := svc.List(context.Background())
+	volumes, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

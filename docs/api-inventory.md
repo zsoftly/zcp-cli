@@ -305,6 +305,8 @@ Object storage instances, buckets, and object metadata are managed via the ZCP R
 | 175 | `/users/ssh-keys`        | POST   | Create SSH key | `ssh-key` |
 | 176 | `/users/ssh-keys/{SLUG}` | DELETE | Delete SSH key | `ssh-key` |
 
+> `POST /users/ssh-keys` **requires** both `project` and `region` (the cloud provider is derived from them); omitting either returns 500 `Attempt to read property "id" on null`. The created key is then referenced by name at VM creation via `zcp instance create --ssh-key <name>` (which sends `authMethod: "ssh-key"`).
+
 ### Support
 
 | #   | Path                              | Method | Summary               | CLI Group |

@@ -33,9 +33,12 @@ func newTemplateListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available public templates",
-		Example: `  zcp template list
-  zcp template list --region yow-1
-  zcp template list --output json`,
+		Long: `List available public templates for a region.
+
+A region is required; pass --region, set ZCP_REGION, or configure a profile default.`,
+		Example: `  zcp template list --region yow-1
+  ZCP_REGION=yow-1 zcp template list
+  zcp template list --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTemplateList(cmd, region)
 		},
@@ -46,6 +49,11 @@ func newTemplateListCmd() *cobra.Command {
 
 func runTemplateList(cmd *cobra.Command, region string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	region, err = requireRegion(cmd, region)
 	if err != nil {
 		return err
 	}

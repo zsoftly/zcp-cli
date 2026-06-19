@@ -59,7 +59,7 @@ func TestSnapshotList(t *testing.T) {
 	defer srv.Close()
 
 	svc := snapshot.NewService(newTestClient(t, srv))
-	snapshots, err := svc.List(context.Background())
+	snapshots, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -71,6 +71,30 @@ func TestSnapshotList(t *testing.T) {
 	}
 	if snapshots[0].ID != "snap-1" {
 		t.Errorf("snapshots[0].ID = %q, want %q", snapshots[0].ID, "snap-1")
+	}
+}
+
+func TestSnapshotListWithFilters(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(listResponse{
+			Status:  "Success",
+			Message: "Ok",
+			Data:    []snapshot.Snapshot{},
+			Total:   0,
+		})
+	}))
+	defer srv.Close()
+
+	svc := snapshot.NewService(newTestClient(t, srv))
+	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+		t.Fatalf("List() error = %v", err)
 	}
 }
 

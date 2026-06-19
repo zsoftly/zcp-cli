@@ -37,7 +37,7 @@ func TestList(t *testing.T) {
 	defer srv.Close()
 
 	svc := instance.NewService(newClient(srv.URL))
-	vms, err := svc.List(context.Background())
+	vms, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

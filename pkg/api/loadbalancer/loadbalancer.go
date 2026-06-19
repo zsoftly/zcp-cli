@@ -160,11 +160,17 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all load balancers. The include parameter requests nested relations.
-func (s *Service) List(ctx context.Context) ([]LoadBalancer, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]LoadBalancer, error) {
 	q := url.Values{
 		"include": {"project,cloud_provider,ipaddress,region,load_balancer_rules,offering"},
 	}
 	var resp listResponse
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
 	if err := s.client.Get(ctx, "/load-balancers", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing load balancers: %w", err)
 	}

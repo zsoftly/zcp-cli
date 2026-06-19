@@ -48,7 +48,8 @@ func runVirtualRouterList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	routers, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	routers, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("virtual-router list: %w", err)
 	}

@@ -62,7 +62,8 @@ func runIPList(cmd *cobra.Command, vpcSlug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	ips, err := svc.List(ctx, vpcSlug)
+	region, project := scopedRegionProject(cmd)
+	ips, err := svc.List(ctx, vpcSlug, region, project)
 	if err != nil {
 		return fmt.Errorf("ip list: %w", err)
 	}

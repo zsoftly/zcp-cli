@@ -58,7 +58,8 @@ func runK8sClusterList(cmd *cobra.Command) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	clusters, err := svc.List(ctx)
+	region, project := scopedRegionProject(cmd)
+	clusters, err := svc.List(ctx, region, project)
 	if err != nil {
 		return fmt.Errorf("kubernetes list: %w", err)
 	}

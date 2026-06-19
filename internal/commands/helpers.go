@@ -80,6 +80,60 @@ func resolveRegion(flagRegion string) string {
 	return os.Getenv("ZCP_REGION")
 }
 
+// profileScopeDefaults returns the active profile's stored region/project
+// defaults for the profile selected by --profile/ZCP_PROFILE. It mirrors the
+// fallback the root scope gate applies, so the gate and the command layer always
+// resolve region/project from the same source.
+func profileScopeDefaults(cmd *cobra.Command) (region, project string) {
+	profileName, _ := cmd.Root().PersistentFlags().GetString("profile")
+	return config.ScopeDefaults(profileName)
+}
+
+// scopedRegionProject returns the resolved region and project for a
+// region/project-scoped command, using the precedence flag > env > active
+// profile default — the SAME precedence the root scope gate enforces. The gate
+// guarantees at least one source is set before the command runs; consulting the
+// profile here ensures a configured user (who satisfied the gate via a stored
+// default) actually gets that region/project as a filter instead of an empty,
+// unscoped listing.
+func scopedRegionProject(cmd *cobra.Command) (region, project string) {
+	r, _ := cmd.Flags().GetString("region")
+	p, _ := cmd.Flags().GetString("project")
+	region, project = strings.TrimSpace(resolveRegion(r)), strings.TrimSpace(resolveProject(p))
+	if region == "" || project == "" {
+		pr, pp := profileScopeDefaults(cmd)
+		pr, pp = strings.TrimSpace(pr), strings.TrimSpace(pp)
+		if region == "" {
+			region = pr
+		}
+		if project == "" {
+			project = pp
+		}
+	}
+	return region, project
+}
+
+// requireRegion resolves a region using flag > ZCP_REGION > active profile
+// default and errors if none is set. Region-specific catalog listings (plans,
+// templates, images, storage categories) must never run unscoped, or they
+// return entries from other regions that are invalid for — and will fail to
+// deploy in — the target region. It consults the profile default so it agrees
+// with the root scope gate (which accepts the same fallback); without that a
+// configured user would pass the gate yet be rejected here.
+func requireRegion(cmd *cobra.Command, flagRegion string) (string, error) {
+	region := strings.TrimSpace(resolveRegion(flagRegion))
+	if region == "" {
+		region, _ = profileScopeDefaults(cmd)
+		region = strings.TrimSpace(region)
+	}
+	if region == "" {
+		return "", fmt.Errorf("--region is required (or set ZCP_REGION, or `zcp profile add` a default) — " +
+			"this catalog is region-specific and entries from another region will not deploy here. " +
+			"See 'zcp region list'")
+	}
+	return region, nil
+}
+
 // cloudProviderFlagOrEnv returns flagCloudProvider if set, otherwise the
 // ZCP_CLOUD_PROVIDER env var. It does NOT consult the stored profile default —
 // used by commands that supply their own service-specific default (e.g. object

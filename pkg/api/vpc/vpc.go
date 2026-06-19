@@ -108,10 +108,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all VPCs. zoneSlug is an optional filter.
-func (s *Service) List(ctx context.Context, zoneSlug string) ([]VPC, error) {
-	var q url.Values
+func (s *Service) List(ctx context.Context, zoneSlug, region, project string) ([]VPC, error) {
+	q := url.Values{}
 	if zoneSlug != "" {
-		q = url.Values{"zoneSlug": {zoneSlug}}
+		q.Set("zoneSlug", zoneSlug)
+	}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
 	}
 	var env apiResponse
 	if err := s.client.Get(ctx, "/vpcs", q, &env); err != nil {
@@ -158,7 +164,7 @@ func (s *Service) Get(ctx context.Context, slug string) (*VPC, error) {
 			}, nil
 		}
 	}
-	vpcs, err := s.List(ctx, "")
+	vpcs, err := s.List(ctx, "", "", "")
 	if err != nil {
 		return nil, err
 	}

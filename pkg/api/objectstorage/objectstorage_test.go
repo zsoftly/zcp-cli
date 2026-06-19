@@ -73,7 +73,7 @@ func TestList(t *testing.T) {
 	defer srv.Close()
 
 	svc := objectstorage.NewService(newTestClient(t, srv))
-	stores, err := svc.List(context.Background())
+	stores, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

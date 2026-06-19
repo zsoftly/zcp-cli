@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -37,10 +38,17 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns all storage categories.
-func (s *Service) List(ctx context.Context) ([]StorageCategory, error) {
+// List returns storage categories scoped to regionSlug. Categories are
+// region-specific (e.g. YUL exposes pro-nvme, YOW exposes nvme), so an empty
+// regionSlug returns all regions — used only for internal id→slug lookups, not
+// user-facing listings. The server honors filter[region]=<slug>.
+func (s *Service) List(ctx context.Context, regionSlug string) ([]StorageCategory, error) {
+	q := url.Values{}
+	if regionSlug != "" {
+		q.Set("filter[region]", regionSlug)
+	}
 	var env envelope
-	if err := s.client.Get(ctx, "/storage-categories", nil, &env); err != nil {
+	if err := s.client.Get(ctx, "/storage-categories", q, &env); err != nil {
 		return nil, fmt.Errorf("listing storage categories: %w", err)
 	}
 

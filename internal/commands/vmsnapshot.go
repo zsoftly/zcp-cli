@@ -41,7 +41,8 @@ func newVMSnapshotListCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			snapshots, err := svc.List(ctx)
+			region, project := scopedRegionProject(cmd)
+			snapshots, err := svc.List(ctx, region, project)
 			if err != nil {
 				return fmt.Errorf("vm-snapshot list: %w", err)
 			}

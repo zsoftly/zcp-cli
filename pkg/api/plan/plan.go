@@ -174,11 +174,23 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns plans for the given service type.
-func (s *Service) List(ctx context.Context, svc ServiceType) ([]Plan, error) {
+// List returns plans for the given service type, scoped to regionSlug.
+//
+// Plans are region-specific: the same slug can map to a different offering per
+// region, and a plan from the wrong region fails to schedule at deploy time
+// ("no destination found"). The API does not scope by default — it returns
+// every region's plans unless filtered — so callers should always pass a
+// region. The server honors filter[region]=<slug> (use os-yul/os-yow for
+// Object Storage). An empty regionSlug returns all regions (used only for
+// internal slug lookups, never for user-facing listings).
+func (s *Service) List(ctx context.Context, svc ServiceType, regionSlug string) ([]Plan, error) {
 	path := "/plans/service/" + url.PathEscape(string(svc))
+	q := url.Values{}
+	if regionSlug != "" {
+		q.Set("filter[region]", regionSlug)
+	}
 	var resp listResponse
-	if err := s.client.Get(ctx, path, nil, &resp); err != nil {
+	if err := s.client.Get(ctx, path, q, &resp); err != nil {
 		return nil, fmt.Errorf("listing %s plans: %w", svc, err)
 	}
 	return resp.Data, nil

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -81,9 +82,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all VM snapshots.
-func (s *Service) List(ctx context.Context) ([]VMSnapshot, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]VMSnapshot, error) {
 	var env Envelope
-	if err := s.client.Get(ctx, "/virtual-machines/snapshots", nil, &env); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/virtual-machines/snapshots", q, &env); err != nil {
 		return nil, fmt.Errorf("listing VM snapshots: %w", err)
 	}
 	var snapshots []VMSnapshot

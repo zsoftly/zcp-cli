@@ -20,7 +20,8 @@ func NewPlanCmd() *cobra.Command {
 		Long: `List available service plans and pricing from the ZCP catalog.
 
 Each subcommand queries a specific service type and displays the plans
-with their resource attributes and pricing.`,
+with their resource attributes and pricing. A region is required; pass
+--region, set ZCP_REGION, or configure a profile default.`,
 	}
 	cmd.AddCommand(newPlanVMCmd())
 	cmd.AddCommand(newPlanRouterCmd())
@@ -37,6 +38,14 @@ with their resource attributes and pricing.`,
 	return cmd
 }
 
+// planRegion resolves the region for a plan listing from the --region flag or
+// ZCP_REGION and requires it. Plans are region-specific, so an unscoped listing
+// would mix regions and surface plans that fail to deploy in the target region.
+func planRegion(cmd *cobra.Command) (string, error) {
+	flagRegion, _ := cmd.Flags().GetString("region")
+	return requireRegion(cmd, flagRegion)
+}
+
 // ---------------------------------------------------------------------------
 // Network
 // ---------------------------------------------------------------------------
@@ -48,8 +57,8 @@ func newPlanNetworkCmd() *cobra.Command {
 		Long: `List Network plans (isolated and L2 network offerings).
 
 The plan slug is the value for "zcp network create --network-plan".`,
-		Example: `  zcp plan network
-  zcp plan network --output json`,
+		Example: `  zcp plan network --region yow-1
+  zcp plan network --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -59,7 +68,11 @@ The plan slug is the value for "zcp network create --network-plan".`,
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceNetwork)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceNetwork, region)
 			if err != nil {
 				return fmt.Errorf("plan network: %w", err)
 			}
@@ -90,8 +103,8 @@ func newPlanVMCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "vm",
 		Short: "List Virtual Machine plans",
-		Example: `  zcp plan vm
-  zcp plan vm --output json`,
+		Example: `  zcp plan vm --region yow-1
+  zcp plan vm --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -101,7 +114,11 @@ func newPlanVMCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVM)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVM, region)
 			if err != nil {
 				return fmt.Errorf("plan vm: %w", err)
 			}
@@ -134,8 +151,8 @@ func newPlanRouterCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "router",
 		Short: "List Virtual Router plans",
-		Example: `  zcp plan router
-  zcp plan router --output json`,
+		Example: `  zcp plan router --region yow-1
+  zcp plan router --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -145,7 +162,11 @@ func newPlanRouterCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVirtualRouter)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVirtualRouter, region)
 			if err != nil {
 				return fmt.Errorf("plan router: %w", err)
 			}
@@ -178,8 +199,8 @@ func newPlanStorageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "storage",
 		Short: "List Block Storage plans",
-		Example: `  zcp plan storage
-  zcp plan storage --output json`,
+		Example: `  zcp plan storage --region yow-1
+  zcp plan storage --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -188,14 +209,18 @@ func newPlanStorageCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage, region)
 			if err != nil {
 				return fmt.Errorf("plan storage: %w", err)
 			}
 
 			// Build id→slug map so the table shows the usable slug, not a UUID.
 			catSlug := map[string]string{}
-			cats, err := storagecategory.NewService(client).List(ctx)
+			cats, err := storagecategory.NewService(client).List(ctx, "")
 			if err == nil {
 				for _, c := range cats {
 					catSlug[c.ID] = c.Slug
@@ -232,8 +257,8 @@ func newPlanLBCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "lb",
 		Short: "List Load Balancer plans",
-		Example: `  zcp plan lb
-  zcp plan lb --output json`,
+		Example: `  zcp plan lb --region yow-1
+  zcp plan lb --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -243,7 +268,11 @@ func newPlanLBCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceLoadBalancer)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceLoadBalancer, region)
 			if err != nil {
 				return fmt.Errorf("plan lb: %w", err)
 			}
@@ -275,8 +304,8 @@ func newPlanK8sCmd() *cobra.Command {
 		Use:     "kubernetes",
 		Short:   "List Kubernetes plans",
 		Aliases: []string{"k8s"},
-		Example: `  zcp plan kubernetes
-  zcp plan k8s --output json`,
+		Example: `  zcp plan kubernetes --region yow-1
+  zcp plan k8s --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -286,7 +315,11 @@ func newPlanK8sCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceKubernetes)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceKubernetes, region)
 			if err != nil {
 				return fmt.Errorf("plan kubernetes: %w", err)
 			}
@@ -318,8 +351,8 @@ func newPlanIPCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ip",
 		Short: "List IP Address plans",
-		Example: `  zcp plan ip
-  zcp plan ip --output json`,
+		Example: `  zcp plan ip --region yow-1
+  zcp plan ip --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -329,7 +362,11 @@ func newPlanIPCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceIPAddress)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceIPAddress, region)
 			if err != nil {
 				return fmt.Errorf("plan ip: %w", err)
 			}
@@ -360,8 +397,8 @@ func newPlanVMSnapshotCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "vm-snapshot",
 		Short: "List VM Snapshot plans",
-		Example: `  zcp plan vm-snapshot
-  zcp plan vm-snapshot --output json`,
+		Example: `  zcp plan vm-snapshot --region yow-1
+  zcp plan vm-snapshot --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -371,7 +408,11 @@ func newPlanVMSnapshotCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceVMSnapshot)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceVMSnapshot, region)
 			if err != nil {
 				return fmt.Errorf("plan vm-snapshot: %w", err)
 			}
@@ -401,8 +442,8 @@ func newPlanTemplateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "template",
 		Short: "List My Template plans",
-		Example: `  zcp plan template
-  zcp plan template --output json`,
+		Example: `  zcp plan template --region yow-1
+  zcp plan template --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -412,7 +453,11 @@ func newPlanTemplateCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceMyTemplate)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceMyTemplate, region)
 			if err != nil {
 				return fmt.Errorf("plan template: %w", err)
 			}
@@ -443,8 +488,8 @@ func newPlanObjectStorageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "object-storage",
 		Short: "List Object Storage plans (slugs for object-storage create --plan)",
-		Example: `  zcp plan object-storage
-  zcp plan object-storage --output json`,
+		Example: `  zcp plan object-storage --region os-yul
+  zcp plan object-storage --region os-yul --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -454,7 +499,11 @@ func newPlanObjectStorageCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceObjectStorage)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceObjectStorage, region)
 			if err != nil {
 				return fmt.Errorf("plan object-storage: %w", err)
 			}
@@ -484,8 +533,8 @@ func newPlanISOCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "iso",
 		Short: "List ISO plans",
-		Example: `  zcp plan iso
-  zcp plan iso --output json`,
+		Example: `  zcp plan iso --region yow-1
+  zcp plan iso --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -495,7 +544,11 @@ func newPlanISOCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceISO)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceISO, region)
 			if err != nil {
 				return fmt.Errorf("plan iso: %w", err)
 			}
@@ -526,8 +579,8 @@ func newPlanBackupCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "backup",
 		Short: "List Backup plans",
-		Example: `  zcp plan backup
-  zcp plan backup --output json`,
+		Example: `  zcp plan backup --region yow-1
+  zcp plan backup --region yow-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -537,7 +590,11 @@ func newPlanBackupCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			plans, err := svc.List(ctx, plan.ServiceBackups)
+			region, err := planRegion(cmd)
+			if err != nil {
+				return err
+			}
+			plans, err := svc.List(ctx, plan.ServiceBackups, region)
 			if err != nil {
 				return fmt.Errorf("plan backup: %w", err)
 			}

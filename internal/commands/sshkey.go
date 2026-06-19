@@ -13,6 +13,10 @@ import (
 	"github.com/zsoftly/zcp-cli/pkg/api/sshkey"
 )
 
+// sshKeyNameMaxLen is the API's limit on SSH key names; exceeding it returns
+// a 422 ("The name field must not be greater than 20 characters.").
+const sshKeyNameMaxLen = 20
+
 // NewSSHKeyCmd returns the 'ssh-key' cobra command.
 func NewSSHKeyCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -72,12 +76,27 @@ func newSSHKeyImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import an SSH public key",
-		Example: `  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..."
-  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub
-  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..." --project default --region yul-1`,
+		Long: `Import an SSH public key for the account.
+
+--project and --region are required: the API derives the cloud provider from
+them, and omitting either fails with 500 "Attempt to read property \"id\" on null".
+The key can afterwards be referenced by name at VM-create time
+('zcp instance create --ssh-key <name>').
+
+Keys must be unique — both fields are validated server-side:
+  - The name must be at most 20 characters and unique for the account.
+  - The public key material itself must not already be registered. Re-importing
+    a key you already have (even under a different name) is rejected with
+    "The public key has already been taken." To rename or replace a key, delete
+    the existing one first ('zcp ssh-key delete <slug>'), then re-import.`,
+		Example: `  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..." --project default --region yul-1
+  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub --project default --region yul-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
+			}
+			if len(name) > sshKeyNameMaxLen {
+				return fmt.Errorf("--name must be at most %d characters (got %d)", sshKeyNameMaxLen, len(name))
 			}
 			if keyFile != "" {
 				data, err := os.ReadFile(keyFile)
@@ -89,10 +108,30 @@ func newSSHKeyImportCmd() *cobra.Command {
 			if publicKey == "" {
 				return fmt.Errorf("--public-key or --key-file is required")
 			}
+			// Fall back to the active profile's defaults (SSH keys use the
+			// compute region, so the profile default applies), matching how the
+			// scope gate resolves region/project for non-exempt commands.
+			project = resolveProject(project)
+			region = resolveRegion(region)
+			if project == "" || region == "" {
+				pr, pp := profileScopeDefaults(cmd)
+				if region == "" {
+					region = pr
+				}
+				if project == "" {
+					project = pp
+				}
+			}
+			if project == "" {
+				return fmt.Errorf("--project is required (or set ZCP_PROJECT, or `zcp profile add` a default)")
+			}
+			if region == "" {
+				return fmt.Errorf("--region is required (or set ZCP_REGION, or `zcp profile add` a default)")
+			}
 			return runSSHKeyImport(cmd, sshkey.CreateRequest{
 				Name:      name,
 				PublicKey: publicKey,
-				Project:   resolveProject(project),
+				Project:   project,
 				Region:    region,
 			})
 		},
@@ -100,8 +139,8 @@ func newSSHKeyImportCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Name for the SSH key (required)")
 	cmd.Flags().StringVar(&publicKey, "public-key", "", "SSH public key string")
 	cmd.Flags().StringVar(&keyFile, "key-file", "", "Path to a file containing the SSH public key")
-	cmd.Flags().StringVar(&project, "project", "", "Project slug")
-	cmd.Flags().StringVar(&region, "region", "", "Region slug (e.g. yow-1, yul-1)")
+	cmd.Flags().StringVar(&project, "project", "", "Project slug (required; or set ZCP_PROJECT)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug, e.g. yow-1, yul-1 (required; or set ZCP_REGION)")
 	return cmd
 }
 

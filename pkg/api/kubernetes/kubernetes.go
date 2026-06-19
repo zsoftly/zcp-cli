@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -187,9 +188,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns all Kubernetes clusters.
-func (s *Service) List(ctx context.Context) ([]Cluster, error) {
+func (s *Service) List(ctx context.Context, region, project string) ([]Cluster, error) {
 	var resp listResponse
-	if err := s.client.Get(ctx, "/kubernetes-clusters", nil, &resp); err != nil {
+	q := url.Values{}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
+	}
+	if err := s.client.Get(ctx, "/kubernetes-clusters", q, &resp); err != nil {
 		return nil, fmt.Errorf("listing kubernetes clusters: %w", err)
 	}
 	return resp.Data, nil

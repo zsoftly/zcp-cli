@@ -1,4 +1,4 @@
-# ZCP CLI Command Taxonomy (v0.0.17)
+# ZCP CLI Command Taxonomy (v0.0.18)
 
 **CLI name**: `zcp`
 **Base URL**: `https://api.zcp.zsoftly.ca/api`
@@ -417,7 +417,7 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 
 ## Identifier Conventions
 
-v0.0.17 uses **slug-based identifiers** for most resources. Slugs are human-readable
+v0.0.18 uses **slug-based identifiers** for most resources. Slugs are human-readable
 strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
 | Context         | Flag / Argument                   | Example                                                                         |

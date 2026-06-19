@@ -101,10 +101,16 @@ func NewService(client *httpclient.Client) *Service {
 }
 
 // List returns public IP addresses. Optional filters: vpcSlug.
-func (s *Service) List(ctx context.Context, vpcSlug string) ([]IPAddress, error) {
+func (s *Service) List(ctx context.Context, vpcSlug, region, project string) ([]IPAddress, error) {
 	q := url.Values{}
 	if vpcSlug != "" {
 		q.Set("filter[vpc]", vpcSlug)
+	}
+	if region != "" {
+		q.Set("filter[region]", region)
+	}
+	if project != "" {
+		q.Set("filter[project]", project)
 	}
 	var resp listResponse
 	if err := s.client.Get(ctx, "/ipaddresses", q, &resp); err != nil {

@@ -70,7 +70,7 @@ func TestLoadBalancerList(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	lbs, err := svc.List(context.Background())
+	lbs, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -88,6 +88,25 @@ func TestLoadBalancerList(t *testing.T) {
 	}
 }
 
+func TestLoadBalancerListWithFilters(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: []loadbalancer.LoadBalancer{}, Total: 0})
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+}
+
 func TestLoadBalancerListEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -96,7 +115,7 @@ func TestLoadBalancerListEmpty(t *testing.T) {
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	lbs, err := svc.List(context.Background())
+	lbs, err := svc.List(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -253,12 +272,18 @@ func TestLoadBalancerAttachVM(t *testing.T) {
 
 func TestLoadBalancerListError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
 		http.Error(w, "server error", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
 	svc := loadbalancer.NewService(newClient(srv.URL))
-	_, err := svc.List(context.Background())
+	_, err := svc.List(context.Background(), "yow-1", "default")
 	if err == nil {
 		t.Fatal("List() expected error on 500, got nil")
 	}

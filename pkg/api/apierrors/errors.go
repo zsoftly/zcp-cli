@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -88,12 +89,16 @@ func IsResourceNotFound(err error) bool {
 
 // apiErrorResponse mirrors the STKCNSL error envelope:
 // { "status": "Error", "message": "...", "errors": { "field": ["..."] } }
+// Laravel validation failures (HTTP 422) instead use:
+// { "success": false, "message": "Validation errors", "data": { "field": ["..."] } }
+// — the field-level messages live under "data", and "status" is absent.
 // It also supports the legacy STKBILL format for backward compatibility.
 type apiErrorResponse struct {
 	// STKCNSL format
-	Status  string                     `json:"status"`
-	Message string                     `json:"message"`
-	Errors  map[string]json.RawMessage `json:"errors"`
+	Status  string          `json:"status"`
+	Message string          `json:"message"`
+	Errors  json.RawMessage `json:"errors"`
+	Data    json.RawMessage `json:"data"`
 
 	// Legacy STKBILL format
 	ListErrorResponse *apiErrorMsg `json:"listErrorResponse"`
@@ -104,6 +109,26 @@ type apiErrorResponse struct {
 type apiErrorMsg struct {
 	ErrorCode string `json:"errorCode"`
 	ErrorMsg  string `json:"errorMsg"`
+}
+
+// formatFieldErrors renders a validation map like
+// {"name":["too long"],"public_key":["already taken"]} as
+// "name: too long; public_key: already taken". It returns "" when raw is empty
+// or not shaped like a field→messages map (e.g. a normal success payload).
+func formatFieldErrors(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var fields map[string][]string
+	if err := json.Unmarshal(raw, &fields); err != nil || len(fields) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(fields))
+	for field, msgs := range fields {
+		parts = append(parts, field+": "+strings.Join(msgs, ", "))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "; ")
 }
 
 // ParseResponse creates an APIError from an HTTP status code and response body.
@@ -118,12 +143,6 @@ func ParseResponse(statusCode int, body []byte) error {
 			case resp.Status != "" && resp.Message != "":
 				ae.Code = resp.Status
 				ae.Message = resp.Message
-				// Append field-level errors if present.
-				if len(resp.Errors) > 0 {
-					if detail, err := json.Marshal(resp.Errors); err == nil {
-						ae.Message += " — " + string(detail)
-					}
-				}
 			// Legacy STKBILL envelope
 			case resp.ListErrorResponse != nil:
 				ae.Code = resp.ListErrorResponse.ErrorCode
@@ -133,6 +152,20 @@ func ParseResponse(statusCode int, body []byte) error {
 				ae.Message = resp.ErrorMsg
 			case resp.Message != "":
 				ae.Message = resp.Message
+			}
+
+			// Append field-level validation errors, which appear under "errors"
+			// (STKCNSL) or "data" (Laravel 422 validation) depending on the route.
+			detail := formatFieldErrors(resp.Errors)
+			if detail == "" {
+				detail = formatFieldErrors(resp.Data)
+			}
+			if detail != "" {
+				if ae.Message != "" {
+					ae.Message += " — " + detail
+				} else {
+					ae.Message = detail
+				}
 			}
 		}
 		if ae.Message == "" {
