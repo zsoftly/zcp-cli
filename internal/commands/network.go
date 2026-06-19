@@ -326,7 +326,8 @@ func runNetworkUpdate(cmd *cobra.Command, slug string, req network.UpdateRequest
 	// The API requires name on every PUT — a description-only update must
 	// re-send the current name or the request fails with a 500.
 	if req.Name == "" {
-		cur, gerr := svc.Get(ctx, slug)
+		region, project := scopedRegionProject(cmd)
+		cur, gerr := svc.Get(ctx, slug, region, project)
 		if gerr != nil {
 			return fmt.Errorf("network update: looking up current name: %w", gerr)
 		}

@@ -30,9 +30,8 @@ const minObjectStorageGB = 60
 // the storage-category slug it is configured for. The create API requires a
 // storage_category that matches the plan, so this lets the CLI fill it in
 // automatically instead of making the user know the pairing.
-func objectStoragePlanCategory(ctx context.Context, client *httpclient.Client, planSlug string) (string, error) {
-	// Empty region: this is an exact-slug lookup, not a user-facing listing.
-	plans, err := plan.NewService(client).List(ctx, plan.ServiceObjectStorage, "")
+func objectStoragePlanCategory(ctx context.Context, client *httpclient.Client, planSlug, region string) (string, error) {
+	plans, err := plan.NewService(client).List(ctx, plan.ServiceObjectStorage, region)
 	if err != nil {
 		return "", fmt.Errorf("looking up plan %q: %w", planSlug, err)
 	}
@@ -46,7 +45,7 @@ func objectStoragePlanCategory(ctx context.Context, client *httpclient.Client, p
 	if catID == "" {
 		return "", fmt.Errorf("plan %q not found among Object Storage plans (see 'zcp plan object-storage')", planSlug)
 	}
-	cats, err := storagecategory.NewService(client).List(ctx, "")
+	cats, err := storagecategory.NewService(client).List(ctx, region)
 	if err != nil {
 		return "", fmt.Errorf("resolving storage category for plan %q: %w", planSlug, err)
 	}
@@ -97,7 +96,10 @@ func newOSListCmd() *cobra.Command {
 			// region that holds no object storage and silently return nothing.
 			// Project is region-agnostic, so its profile default is fine.
 			flagRegion, _ := cmd.Flags().GetString("region")
-			region := resolveRegion(flagRegion)
+			region := strings.TrimSpace(resolveRegion(flagRegion))
+			if region == "" {
+				return fmt.Errorf("--region is required (or set ZCP_REGION)")
+			}
 			_, project := scopedRegionProject(cmd)
 			stores, err := svc.List(ctx, region, project)
 			if err != nil {
@@ -228,7 +230,7 @@ func newOSCreateCmd() *cobra.Command {
 			// the category the plan requires (the API rejects a mismatch and
 			// requires a non-empty category even with a plan).
 			if plan != "" && !cmd.Flags().Changed("storage-category") {
-				derived, derr := objectStoragePlanCategory(ctx, client, plan)
+				derived, derr := objectStoragePlanCategory(ctx, client, plan, region)
 				if derr != nil {
 					return fmt.Errorf("object-storage create: %w", derr)
 				}

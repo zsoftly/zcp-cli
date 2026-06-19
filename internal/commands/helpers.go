@@ -99,9 +99,10 @@ func profileScopeDefaults(cmd *cobra.Command) (region, project string) {
 func scopedRegionProject(cmd *cobra.Command) (region, project string) {
 	r, _ := cmd.Flags().GetString("region")
 	p, _ := cmd.Flags().GetString("project")
-	region, project = resolveRegion(r), resolveProject(p)
+	region, project = strings.TrimSpace(resolveRegion(r)), strings.TrimSpace(resolveProject(p))
 	if region == "" || project == "" {
 		pr, pp := profileScopeDefaults(cmd)
+		pr, pp = strings.TrimSpace(pr), strings.TrimSpace(pp)
 		if region == "" {
 			region = pr
 		}
@@ -120,9 +121,10 @@ func scopedRegionProject(cmd *cobra.Command) (region, project string) {
 // with the root scope gate (which accepts the same fallback); without that a
 // configured user would pass the gate yet be rejected here.
 func requireRegion(cmd *cobra.Command, flagRegion string) (string, error) {
-	region := resolveRegion(flagRegion)
+	region := strings.TrimSpace(resolveRegion(flagRegion))
 	if region == "" {
 		region, _ = profileScopeDefaults(cmd)
+		region = strings.TrimSpace(region)
 	}
 	if region == "" {
 		return "", fmt.Errorf("--region is required (or set ZCP_REGION, or `zcp profile add` a default) — " +

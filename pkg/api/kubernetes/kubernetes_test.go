@@ -81,6 +81,31 @@ func TestKubernetesListClusters(t *testing.T) {
 	}
 }
 
+func TestKubernetesListClustersWithFilters(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":       "Success",
+			"message":      "OK",
+			"data":         []interface{}{},
+			"current_page": 1,
+			"last_page":    1,
+			"total":        0,
+		})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+}
+
 func TestKubernetesListClustersEmpty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{

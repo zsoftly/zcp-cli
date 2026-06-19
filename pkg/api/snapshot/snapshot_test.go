@@ -74,6 +74,30 @@ func TestSnapshotList(t *testing.T) {
 	}
 }
 
+func TestSnapshotListWithFilters(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
+			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "default" {
+			t.Errorf("filter[project] = %q, want %q", got, "default")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(listResponse{
+			Status:  "Success",
+			Message: "Ok",
+			Data:    []snapshot.Snapshot{},
+			Total:   0,
+		})
+	}))
+	defer srv.Close()
+
+	svc := snapshot.NewService(newTestClient(t, srv))
+	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+}
+
 func TestSnapshotCreate(t *testing.T) {
 	expectedSnap := snapshot.Snapshot{
 		ID:             "snap-new",

@@ -239,9 +239,9 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Network, erro
 	return &resp.Data, nil
 }
 
-// Get returns a single network by slug.
-func (s *Service) Get(ctx context.Context, slug string) (*Network, error) {
-	networks, err := s.List(ctx, "", "")
+// Get returns a single network by slug within the optional region/project scope.
+func (s *Service) Get(ctx context.Context, slug, region, project string) (*Network, error) {
+	networks, err := s.List(ctx, region, project)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (s *Service) Update(ctx context.Context, slug string, req UpdateRequest) (*
 			return &n, nil
 		}
 	}
-	return s.Get(ctx, slug)
+	return s.Get(ctx, slug, "", "")
 }
 
 // ListCategories returns available network categories (offerings).

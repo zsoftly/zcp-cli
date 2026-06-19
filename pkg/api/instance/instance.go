@@ -234,7 +234,7 @@ type CreateRequest struct {
 	Networks             []string    `json:"networks"`
 	BillingCycle         string      `json:"billing_cycle"`
 	SSHKey               *string     `json:"ssh_key"`
-	AuthMethod           string      `json:"authMethod"`
+	AuthMethod           string      `json:"authMethod,omitempty"`
 	Plan                 string      `json:"plan"`
 	CustomPlan           *CustomPlan `json:"custom_plan"`
 	OSFamily             string      `json:"os_family,omitempty"`
