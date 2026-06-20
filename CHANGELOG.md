@@ -5,6 +5,25 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.19] - 2026-06-20
+
+### Fixed
+
+- **`zcp loadbalancer create` always failed because the API requires an initial rule.** The request sent an empty `rules` array, which the backend rejects. Create now builds a first rule from new flags — `--public-port`, `--private-port`, and `--algorithm` are **required** (the rule cannot be formed without them), with `--protocol` defaulting to `tcp` and `--rule-name` defaulting to `<lb-name>-rule`. Optional `--sticky-method`, `--enable-tls`, `--enable-proxy-protocol`, and repeatable `--vm <slug>` (attach back-ends) round out the rule. Add further rules afterward with `zcp loadbalancer create-rule`.
+- **`zcp instance list` (and every instance lookup) only saw the first page of VMs.** The `/virtual-machines` endpoint is paginated, but the client fetched a single page, so accounts with more VMs than one page silently lost the rest — and, with reference resolution (below), a valid instance could resolve to "not found". `List` now walks every page.
+
+### Added
+
+- **Reference an instance by its ID (`vm_id`), name, or slug — not just its slug.** Every instance subcommand (`get`, `start`, `stop`, `reboot`, `reset`, `delete`, `logs`, `ssh`, `tag-*`, `change-*`, `add-network`, `addons`, `purchase-addon`) now resolves the argument against your VMs: exact ID/`vm_id` first, then name (reported as ambiguous, with the matching IDs, if two VMs share a name), then slug. Resolution searches your active region/project first and **falls back to an unscoped lookup** when the reference isn't found there, so operating on a globally-unique ID/slug keeps working across regions without passing `--region`.
+- **`ID` column in instance output.** `zcp instance list` and `zcp instance get` now show the instance ID (the value to copy for the reference above); `get` also shows the record ID when it differs. `-o json`/`-o yaml` and `--debug` expand to the full column set (slug, template, created).
+
+### Changed
+
+- **`zcp instance reboot` refuses a VM that isn't `Running`** with a clear message (`instance "…" is Stopped; it must be Running before it can be rebooted`) instead of issuing a reboot the platform silently ignores.
+- **`zcp loadbalancer list` and `zcp instance list` emit full objects for `-o json`/`-o yaml`** instead of a flattened, all-string projection of the table columns — automation now gets every field.
+- **`zcp auth validate` honors `ZCP_DEBUG`** (it previously only checked the `--debug` flag), matching every other command.
+- **Documentation URL updated** to `https://docs.zcp.zsoftly.ca`.
+
 ## [v0.0.18] - 2026-06-19
 
 ### Fixed

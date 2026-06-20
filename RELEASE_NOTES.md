@@ -1,108 +1,87 @@
-# zcp v0.0.18 Release Notes
+# zcp v0.0.19 Release Notes
 
-## Region- and project-correctness: nothing runs unscoped
+## Load balancers create cleanly, and instances are addressable by ID or name
 
-This release makes the CLI **region- and project-aware everywhere**, so it can no longer show
-catalog entries that don't exist in your region or deploy a resource into the wrong zone. It also
-fixes the SSH-key import flow and surfaces real API validation messages.
+This release fixes `loadbalancer create` (it never worked — the API requires an initial
+rule), and makes every instance command accept the VM's **ID, name, or slug**, not just its
+slug. It also paginates the instance list so large accounts see all of their VMs.
 
 Highlights:
 
-- **`--region` and `--project` are now mandatory** for every region/project-scoped command, with
-  per-profile defaults captured at `zcp profile add` (like `aws configure`).
-- **Every list filters by region and project** — no more cross-region clutter or un-deployable
-  plans in the output.
-- **`zcp ssh-key import` works** (it required `project` + `region` all along).
-- **422 validation errors now show the field-level reason** instead of a generic message.
+- **`zcp loadbalancer create` works** — it now sends a required first rule
+  (`--public-port`/`--private-port`/`--algorithm`) and can attach back-ends with `--vm`.
+- **Refer to an instance by ID, name, or slug** in every `instance` subcommand, with a clear
+  error when a name is ambiguous.
+- **`instance list` shows the `ID` column** and returns **all** VMs (the list is now paginated).
+- **`reboot` refuses a non-`Running` VM** instead of silently no-op'ing.
 
 ---
 
 ## Fixed
 
-### `zcp ssh-key import` always returned `500 … Attempt to read property "id" on null`
+### `zcp loadbalancer create` always failed
 
-The API derives the cloud provider from **both** `project` and `region`, and the CLI marked them
-optional — so a call without them sent neither and the backend dereferenced a null. `--project` and
-`--region` are now required (honoring `ZCP_PROJECT`/`ZCP_REGION`) and always sent. Verified
-end-to-end: import → list → reference at VM create (the VM came back with the key attached) → delete.
-`--name` is also validated client-side (≤ 20 chars) before the call.
+The request sent an empty `rules` array, which the API rejects — a load balancer must be created
+with at least one rule. Create now builds that first rule from new flags:
 
-### API validation errors were swallowed
+```bash
+zcp loadbalancer create --name my-lb --network <network-slug> --ip <ip-slug> \
+  --billing-cycle hourly \
+  --public-port 80 --private-port 8080 --algorithm roundrobin \
+  --vm web-1 --vm web-2          # optional: attach back-ends
 
-HTTP 422 responses returned only a generic `Validation errors`. This API puts the field-level
-messages under `data` (not `errors`) and omits `status`, so they were dropped. They're now surfaced:
-
-```
-Error: ... API error 422: Validation errors — public_key: The public key has already been taken.
-Error: ... API error 422: Validation errors — name: The name field must not be greater than 20 characters.
+# add more rules later
+zcp loadbalancer create-rule <lb-slug> --name api-rule \
+  --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
 ```
 
-### Catalog and resource listings returned every region's entries
+`--public-port`, `--private-port`, and `--algorithm` are **required** (the rule can't be formed
+without them). `--protocol` defaults to `tcp`, `--rule-name` defaults to `<lb-name>-rule`, and
+`--sticky-method`, `--enable-tls`, and `--enable-proxy-protocol` are optional.
 
-`zcp plan vm` listed both YUL (`ca*`) and YOW (`ci*`) offerings; picking a wrong-region plan (an
-Intel `ci*` plan in YUL) then failed to **schedule** ("no destination found") — the VM sat in
-`Starting`, flipped to `Error`, and was cleaned up with no IP, which looked like a boot failure. The
-CLI now sends `filter[region]`/`filter[project]` on every list, so you only ever see entries valid
-for your region and project.
+### `instance list` only returned the first page of VMs
 
-> This does not fix the underlying CMP catalog, which still presents cross-region offerings as
-> selectable for a target region — that needs region-scoped offering filtering in the plan catalog.
+The `/virtual-machines` endpoint is paginated, but the CLI fetched a single page — accounts with
+more VMs than fit on one page silently lost the rest. The list now walks every page, which also
+makes instance reference resolution (below) reliable.
 
 ## Added
 
-### Region + project are required everywhere (with profile defaults)
+### Address an instance by ID, name, or slug
 
-Every region/project-scoped command now requires a region and a project. Satisfy them three ways:
-
-```bash
-# 1. Per-profile defaults (recommended) — captured at configure time, like `aws configure`
-zcp profile add default        # prompts for token, default region, and default project
-
-# 2. Environment variables
-export ZCP_REGION=yow-1 ZCP_PROJECT=default-9
-
-# 3. Per command
-zcp instance list --region yow-1 --project default-9
-```
-
-Account-level commands have no region/project dimension and are exempt: `dns`, `auth`, `profile`,
-`region`, `project`, `cloud-provider`, `currency`, `billing-cycle`, `server`, `support`, `dashboard`,
-`billing`, `product`, `store`. (`object-storage` is scoped too; it uses the `os-yul`/`os-yow`
-regions.)
-
-### Every list is now scoped to your region and project
-
-Lists send `filter[region]`/`filter[project]` and return only what belongs to that region/project —
-instances, networks, IPs, volumes, VPCs, Kubernetes clusters, load balancers, virtual routers,
-autoscale groups, affinity groups, block-storage and VM snapshots, block-storage and VM backups,
-object storage, and the full catalog (`plan`, `template`, `iso`, `marketplace`, `storage-category`).
-For example, `zcp plan vm --region yul-1` now lists only the `ca*` family YUL actually runs (the
-Intel `ci*` plans appear only under `yow-1`).
-
-### `zcp profile add` captures a default region and project
-
-Like `aws configure`, `profile add` now prompts for (and requires) a default **region** and a
-default **project**, stored in the profile and used whenever `--region`/`--project` and
-`ZCP_REGION`/`ZCP_PROJECT` are not set:
+Every `instance` subcommand — `get`, `start`, `stop`, `reboot`, `reset`, `delete`, `logs`, `ssh`,
+`tag-*`, `change-*`, `add-network`, `addons`, `purchase-addon` — now accepts any unique reference
+to the VM:
 
 ```bash
-zcp profile add default \
-  --bearer-token <token> --region yow-1 --project default-9
+zcp instance reboot vm-1a2b3c        # by ID (vm_id)
+zcp instance reboot my-web-server    # by name
+zcp instance reboot my-web-server-1  # by slug
 ```
+
+Match order is ID/`vm_id`, then name, then slug. If a name matches two VMs, the command lists the
+matching IDs and asks you to pick one. Resolution checks your active region/project first and
+**falls back to an unscoped lookup** when the reference isn't found there, so a globally-unique ID
+or slug still works without `--region`.
+
+### `ID` column in instance output
+
+`zcp instance list` and `zcp instance get` now show the instance `ID` (the value to copy for the
+references above). `-o json`/`-o yaml` and `--debug` expand to the full set of columns.
 
 ## Changed
 
-- **`zcp instance create --ssh-key <name>`** now sends `authMethod: "ssh-key"` (and an empty
-  `password`) alongside the key name, matching the Web UI's VM-create payload — previously the
-  key name was sent without the auth-method flag, so SSH-key auth would not engage.
-- **Docs/help clarified**: SSH key names and the public-key material must be unique (re-importing
-  the same key, even under a new name, is rejected); and a **VPC alone cannot host a VM** — create
-  a network (tier) inside it (`zcp network create --vpc …`) and attach a VM to that tier
-  (`zcp instance add-network`), since a bare VPC has no usable subnet.
+- **`zcp instance reboot` refuses a VM that isn't `Running`**, e.g.
+  `instance "my-vm" is Stopped; it must be Running before it can be rebooted`, instead of issuing a
+  reboot the platform silently ignores.
+- **`zcp loadbalancer list` and `zcp instance list` emit full objects for `-o json`/`-o yaml`**
+  rather than a flattened, all-string copy of the table — automation gets every field.
+- **`zcp auth validate` honors `ZCP_DEBUG`** like every other command.
+- **Documentation URL** is now `https://docs.zcp.zsoftly.ca`.
 
 ## Upgrade notes
 
-This release **requires a region and project** for scoped commands. If you have scripts that ran
-`zcp instance list`, `zcp plan vm`, etc. without one, either re-run `zcp profile add` to store
-defaults, export `ZCP_REGION`/`ZCP_PROJECT`, or add `--region`/`--project`. Account-level commands
-(listed above) are unaffected.
+`zcp loadbalancer create` now **requires** `--public-port`, `--private-port`, and `--algorithm`.
+Scripts that called `create` without them will need to add these flags (the command previously
+failed at the API anyway). Everything else is additive — existing slug-based instance commands keep
+working unchanged.

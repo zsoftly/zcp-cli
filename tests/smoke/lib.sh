@@ -119,6 +119,11 @@ destroy_one() {
     firewall)       zcp firewall delete "$slug" -y         >/dev/null 2>&1 ;;
     egress)         zcp egress delete "$slug" --network "$extra" -y >/dev/null 2>&1 ;;
     portforward)    zcp portforward delete "$slug" -y      >/dev/null 2>&1 ;;
+    loadbalancer)
+      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      sleep 5
+      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      ;;
     vm-snapshot)    zcp vm-snapshot delete "$slug" -y      >/dev/null 2>&1 ;;
     object-storage) zcp object-storage delete "$slug" -y   >/dev/null 2>&1 ;;
     template-acct)  zcp template account-delete "$slug" -y >/dev/null 2>&1 ;;

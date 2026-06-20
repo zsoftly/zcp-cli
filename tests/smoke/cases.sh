@@ -396,10 +396,11 @@ lc_loadbalancer() {
   local net out s; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && { _mark_skip "loadbalancer (no network fixture)"; return; }
   capture out -- zcp loadbalancer create --name "$(rname lb)" --network "$net" \
     --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
-    --billing-cycle "$(det_billing_cycle)" -y -o json
+    --billing-cycle "$(det_billing_cycle)" --public-port 18080 --private-port 80 \
+    --algorithm roundrobin -y -o json
   s="$(_jq_slug <<<"$out")"
   [[ -z "$s" ]] && s="$(zcp loadbalancer list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-  _lc_result "loadbalancer" "$s" && defer cancel "$s" "Load Balancer"
+  _lc_result "loadbalancer" "$s" && defer loadbalancer "$s"
 }
 
 lc_objectstorage() {

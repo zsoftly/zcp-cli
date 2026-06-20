@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/api/instance"
 )
@@ -81,7 +83,17 @@ func runInstanceList(cmd *cobra.Command) error {
 		return fmt.Errorf("instance list: %w", err)
 	}
 
-	headers := []string{"SLUG", "NAME", "STATE", "PRIVATE IP", "PUBLIC IP", "REGION", "TEMPLATE", "CREATED"}
+	// Structured output gets the full VM objects rather than a flattened,
+	// all-string subset of the table columns.
+	if printer.Format() == output.FormatJSON || printer.Format() == output.FormatYAML {
+		return printer.Print(vms)
+	}
+
+	expandedOutput := debugEnabled(cmd)
+	headers := []string{"ID", "NAME", "STATE", "PRIVATE IP", "PUBLIC IP", "REGION"}
+	if expandedOutput {
+		headers = []string{"ID", "SLUG", "NAME", "STATE", "PRIVATE IP", "PUBLIC IP", "REGION", "TEMPLATE", "CREATED"}
+	}
 	rows := make([][]string, 0, len(vms))
 	for _, vm := range vms {
 		templateName := ""
@@ -96,16 +108,28 @@ func runInstanceList(cmd *cobra.Command) error {
 		if privateIP == "" {
 			privateIP = vm.NetworkPrivateIP()
 		}
-		rows = append(rows, []string{
-			vm.Slug,
+		row := []string{
+			instanceDisplayID(vm),
 			vm.Name,
 			vm.State,
 			privateIP,
 			instance.StringVal(vm.PublicIP),
 			regionName,
-			templateName,
-			vm.CreatedAt,
-		})
+		}
+		if expandedOutput {
+			row = []string{
+				instanceDisplayID(vm),
+				vm.Slug,
+				vm.Name,
+				vm.State,
+				privateIP,
+				instance.StringVal(vm.PublicIP),
+				regionName,
+				templateName,
+				vm.CreatedAt,
+			}
+		}
+		rows = append(rows, row)
 	}
 	return printer.PrintTable(headers, rows)
 }
@@ -136,9 +160,14 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
+	resolved, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
 	var vm *instance.VirtualMachine
 	for attempt := 0; attempt < 5; attempt++ {
-		vm, err = svc.Get(ctx, slug)
+		vm, err = svc.Get(ctx, resolved.Slug)
 		if err == nil {
 			break
 		}
@@ -188,6 +217,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
+		{"ID", instanceDisplayID(*vm)},
 		{"Slug", vm.Slug},
 		{"Name", vm.Name},
 		{"Hostname", vm.Hostname},
@@ -208,7 +238,86 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 	if vm.Description != nil && *vm.Description != "" {
 		rows = append(rows, []string{"Description", *vm.Description})
 	}
+	if vm.ID != "" && vm.ID != instanceDisplayID(*vm) {
+		rows = append(rows, []string{"Record ID", vm.ID})
+	}
 	return printer.PrintTable(headers, rows)
+}
+
+func instanceDisplayID(vm instance.VirtualMachine) string {
+	if vm.VMID != "" {
+		return vm.VMID
+	}
+	return vm.ID
+}
+
+// errInstanceNotFound marks the "no match in this listing" case so the caller
+// can decide whether to widen the search; ambiguous-match errors do not wrap it.
+var errInstanceNotFound = errors.New("instance not found")
+
+// resolveInstanceRef maps a user-supplied reference (instance ID, vm_id, name,
+// or slug) to a concrete VM. It first searches the active region/project scope,
+// then — only when the reference simply wasn't found there — retries unscoped so
+// that operating on a globally-unique slug or ID keeps working even when the VM
+// lives outside the active scope (the pre-resolution behavior, where the slug
+// hit the API directly). Ambiguous-name errors are returned as-is, since
+// widening the search cannot disambiguate them.
+func resolveInstanceRef(ctx context.Context, cmd *cobra.Command, svc *instance.Service, ref string) (*instance.VirtualMachine, error) {
+	region, project := scopedRegionProject(cmd)
+	vm, err := resolveInstanceInScope(ctx, svc, region, project, ref)
+	if err == nil {
+		return vm, nil
+	}
+	if (region != "" || project != "") && errors.Is(err, errInstanceNotFound) {
+		if vm, uerr := resolveInstanceInScope(ctx, svc, "", "", ref); uerr == nil {
+			return vm, nil
+		}
+	}
+	return nil, err
+}
+
+// resolveInstanceInScope lists VMs for the given region/project and resolves ref
+// against that set. Match precedence: exact instance ID or vm_id, then name
+// (reported as ambiguous if more than one matches), then slug.
+func resolveInstanceInScope(ctx context.Context, svc *instance.Service, region, project, ref string) (*instance.VirtualMachine, error) {
+	vms, err := svc.List(ctx, region, project)
+	if err != nil {
+		return nil, fmt.Errorf("resolving instance %q: %w", ref, err)
+	}
+
+	for i := range vms {
+		if vms[i].ID == ref || vms[i].VMID == ref {
+			return &vms[i], nil
+		}
+	}
+
+	matches := make([]instance.VirtualMachine, 0)
+	for i := range vms {
+		if vms[i].Name == ref {
+			matches = append(matches, vms[i])
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return &matches[0], nil
+	case 0:
+		for i := range vms {
+			if vms[i].Slug == ref {
+				return &vms[i], nil
+			}
+		}
+		scope := fmt.Sprintf("region %q project %q", region, project)
+		if region == "" && project == "" {
+			scope = "any region or project"
+		}
+		return nil, fmt.Errorf("%w: %q was not found in %s; run `zcp instance list` and use the instance ID", errInstanceNotFound, ref, scope)
+	default:
+		choices := make([]string, 0, len(matches))
+		for _, vm := range matches {
+			choices = append(choices, fmt.Sprintf("%s (%s)", instanceDisplayID(vm), vm.Slug))
+		}
+		return nil, fmt.Errorf("instance name %q matches %d instances; use the correct instance ID instead: %s", ref, len(matches), strings.Join(choices, ", "))
+	}
 }
 
 // ---------- create ----------
@@ -406,9 +515,9 @@ func runInstanceCreate(cmd *cobra.Command, req instance.CreateRequest, wait bool
 	if vm.Template != nil {
 		templateName = vm.Template.Name
 	}
-	headers := []string{"SLUG", "NAME", "STATE", "TEMPLATE", "CREATED"}
+	headers := []string{"ID", "SLUG", "NAME", "STATE", "TEMPLATE", "CREATED"}
 	rows := [][]string{
-		{vm.Slug, vm.Name, vm.State, templateName, vm.CreatedAt},
+		{instanceDisplayID(*vm), vm.Slug, vm.Name, vm.State, templateName, vm.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)
 }
@@ -441,20 +550,25 @@ func runInstanceStart(cmd *cobra.Command, slug string, wait bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.Start(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Start(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance start: %w", err)
 	}
 
 	if wait {
-		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Running...\n", slug)
+		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Running...\n", vm.Slug)
 		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd)+300)*time.Second)
 		defer waitCancel()
-		vm, err := svc.WaitForState(waitCtx, slug, []string{"Running"}, 0)
+		vm, err := svc.WaitForState(waitCtx, vm.Slug, []string{"Running"}, 0)
 		if err != nil {
 			return fmt.Errorf("waiting for instance start: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", slug, vm.State)
+		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", vm.Slug, vm.State)
 	}
 
 	headers := []string{"STATUS", "MESSAGE"}
@@ -490,20 +604,25 @@ func runInstanceStop(cmd *cobra.Command, slug string, wait bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.Stop(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Stop(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance stop: %w", err)
 	}
 
 	if wait {
-		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Stopped...\n", slug)
+		fmt.Fprintf(os.Stderr, "Waiting for instance %s to be Stopped...\n", vm.Slug)
 		waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd)+300)*time.Second)
 		defer waitCancel()
-		vm, err := svc.WaitForState(waitCtx, slug, []string{"Stopped"}, 0)
+		vm, err := svc.WaitForState(waitCtx, vm.Slug, []string{"Stopped"}, 0)
 		if err != nil {
 			return fmt.Errorf("waiting for instance stop: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", slug, vm.State)
+		fmt.Fprintf(os.Stderr, "Instance %s is now %s\n", vm.Slug, vm.State)
 	}
 
 	headers := []string{"STATUS", "MESSAGE"}
@@ -536,7 +655,17 @@ func runInstanceReboot(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.Reboot(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+	// resolveInstanceRef just listed the VM, so its state is fresh — no need for
+	// a second GET to gate the reboot.
+	if !strings.EqualFold(vm.State, "Running") {
+		return fmt.Errorf("instance %q is %s; it must be Running before it can be rebooted", vm.Slug, vm.State)
+	}
+
+	resp, err := svc.Reboot(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance reboot: %w", err)
 	}
@@ -586,7 +715,12 @@ func runInstanceReset(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.Reset(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.Reset(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance reset: %w", err)
 	}
@@ -621,7 +755,12 @@ func runInstanceLogs(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	logs, err := svc.ActivityLogs(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	logs, err := svc.ActivityLogs(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance logs: %w", err)
 	}
@@ -675,7 +814,12 @@ func runInstanceTagCreate(cmd *cobra.Command, slug, key, value string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.CreateTag(ctx, slug, instance.TagRequest{Key: key, Value: value})
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.CreateTag(ctx, vm.Slug, instance.TagRequest{Key: key, Value: value})
 	if err != nil {
 		return fmt.Errorf("instance tag-create: %w", err)
 	}
@@ -716,7 +860,12 @@ func runInstanceTagDelete(cmd *cobra.Command, slug, key string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.DeleteTag(ctx, slug, key); err != nil {
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	if err := svc.DeleteTag(ctx, vm.Slug, key); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "Instance tag %q not found — already deleted.\n", key)
 			return nil
@@ -724,7 +873,7 @@ func runInstanceTagDelete(cmd *cobra.Command, slug, key string) error {
 		return fmt.Errorf("instance tag-delete: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Tag %q deleted from instance %q.\n", key, slug)
+	fmt.Fprintf(os.Stdout, "Tag %q deleted from instance %q.\n", key, vm.Slug)
 	return nil
 }
 
@@ -759,7 +908,12 @@ func runInstanceChangeHostname(cmd *cobra.Command, slug, hostname string) error 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.ChangeHostname(ctx, slug, instance.ChangeLabelRequest{
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.ChangeHostname(ctx, vm.Slug, instance.ChangeLabelRequest{
 		Name:     hostname,
 		Hostname: hostname,
 	})
@@ -803,9 +957,14 @@ func runInstanceChangePassword(cmd *cobra.Command, slug, password string) error 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.ChangePassword(ctx, slug, instance.ChangePasswordRequest{
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.ChangePassword(ctx, vm.Slug, instance.ChangePasswordRequest{
 		Password: password,
-		VM:       slug,
+		VM:       vm.Slug,
 	})
 	if err != nil {
 		return fmt.Errorf("instance change-password: %w", err)
@@ -851,10 +1010,15 @@ func runInstanceChangePlan(cmd *cobra.Command, slug, plan, billingCycle string) 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.ChangePlan(ctx, slug, instance.ChangePlanRequest{
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.ChangePlan(ctx, vm.Slug, instance.ChangePlanRequest{
 		Plan:         plan,
-		Slug:         slug,
-		VM:           slug,
+		Slug:         vm.Slug,
+		VM:           vm.Slug,
 		BillingCycle: billingCycle,
 	})
 	if err != nil {
@@ -911,7 +1075,12 @@ func runInstanceChangeOS(cmd *cobra.Command, slug, template string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.ChangeOS(ctx, slug, instance.ChangeTemplateRequest{Template: template})
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.ChangeOS(ctx, vm.Slug, instance.ChangeTemplateRequest{Template: template})
 	if err != nil {
 		return fmt.Errorf("instance change-os: %w", err)
 	}
@@ -952,7 +1121,12 @@ func runInstanceChangeScript(cmd *cobra.Command, slug, userData string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.ChangeStartupScript(ctx, slug, instance.ChangeStartupScriptRequest{UserData: userData})
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.ChangeStartupScript(ctx, vm.Slug, instance.ChangeStartupScriptRequest{UserData: userData})
 	if err != nil {
 		return fmt.Errorf("instance change-script: %w", err)
 	}
@@ -993,7 +1167,12 @@ func runInstanceAddNetwork(cmd *cobra.Command, slug, network string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	resp, err := svc.AddNetwork(ctx, slug, instance.AddNetworkRequest{Network: network})
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	resp, err := svc.AddNetwork(ctx, vm.Slug, instance.AddNetworkRequest{Network: network})
 	if err != nil {
 		return fmt.Errorf("instance add-network: %w", err)
 	}
@@ -1028,7 +1207,12 @@ func runInstanceAddons(cmd *cobra.Command, slug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	addons, err := svc.ListAddons(ctx, slug)
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	addons, err := svc.ListAddons(ctx, vm.Slug)
 	if err != nil {
 		return fmt.Errorf("instance addons: %w", err)
 	}
@@ -1121,8 +1305,13 @@ func runInstancePurchaseAddon(cmd *cobra.Command, vmSlug, project, region, cloud
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
+	vm, err := resolveInstanceRef(ctx, cmd, svc, vmSlug)
+	if err != nil {
+		return err
+	}
+
 	req := instance.PurchaseAddonRequest{
-		VirtualMachine: vmSlug,
+		VirtualMachine: vm.Slug,
 		Project:        project,
 		Region:         region,
 		CloudProvider:  cloudProvider,
@@ -1190,15 +1379,20 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, slug, force); err != nil {
+	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	if err := svc.Delete(ctx, vm.Slug, force); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", slug)
+			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", vm.Slug)
 			return nil
 		}
 		return fmt.Errorf("instance delete: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Instance %q deleted.\n", slug)
+	fmt.Fprintf(os.Stdout, "Instance %q deleted.\n", vm.Slug)
 	return nil
 }
 
@@ -1243,7 +1437,12 @@ func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port in
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	vm, err := svc.Get(ctx, slug)
+	resolved, err := resolveInstanceRef(ctx, cmd, svc, slug)
+	if err != nil {
+		return err
+	}
+
+	vm, err := svc.Get(ctx, resolved.Slug)
 	if err != nil {
 		return fmt.Errorf("resolving instance IP: %w", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/api/loadbalancer"
 )
@@ -63,6 +64,9 @@ func runLBList(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("loadbalancer list: %w", err)
 	}
+	if printer.Format() == output.FormatJSON || printer.Format() == output.FormatYAML {
+		return printer.Print(lbs)
+	}
 
 	headers := []string{"SLUG", "NAME", "STATE", "IP", "REGION", "PROJECT", "CREATED"}
 	rows := make([][]string, 0, len(lbs))
@@ -103,13 +107,22 @@ func newLBCreateCmd() *cobra.Command {
 		billingCycle  string
 		acquireNewIP  bool
 		ipAddress     string
+		ruleName      string
+		publicPort    string
+		privatePort   string
+		protocol      string
+		algorithm     string
+		stickyMethod  string
+		enableTLS     bool
+		enableProxy   bool
+		vmSlugs       []string
 	)
 
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle hourly --acquire-new-ip
-  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle monthly --ip existing-ip-slug`,
+		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle hourly --acquire-new-ip --public-port 80 --private-port 8080 --algorithm roundrobin
+  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle monthly --ip existing-ip-slug --rule-name web --public-port 443 --private-port 8443 --algorithm leastconn --vm vm-slug-1 --vm vm-slug-2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -135,6 +148,27 @@ func newLBCreateCmd() *cobra.Command {
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
 			}
+			if publicPort == "" {
+				return fmt.Errorf("--public-port is required because the API requires an initial load balancer rule")
+			}
+			if privatePort == "" {
+				return fmt.Errorf("--private-port is required because the API requires an initial load balancer rule")
+			}
+			if algorithm == "" {
+				return fmt.Errorf("--algorithm is required because the API requires an initial load balancer rule")
+			}
+			if !validLBAlgorithms[algorithm] {
+				return fmt.Errorf("--algorithm must be one of: roundrobin, leastconn, source")
+			}
+			// protocol defaults to "tcp" via the flag definition below.
+			if ruleName == "" {
+				ruleName = name + "-rule"
+			}
+
+			vms := make([]loadbalancer.VMAttachment, 0, len(vmSlugs))
+			for _, slug := range vmSlugs {
+				vms = append(vms, loadbalancer.VMAttachment{Slug: slug})
+			}
 
 			req := loadbalancer.CreateRequest{
 				Name:          name,
@@ -145,7 +179,19 @@ func newLBCreateCmd() *cobra.Command {
 				Plan:          plan,
 				BillingCycle:  billingCycle,
 				AcquireNewIP:  acquireNewIP,
-				Rules:         []loadbalancer.CreateRuleSpec{},
+				Rules: []loadbalancer.CreateRuleSpec{
+					{
+						Name:                ruleName,
+						PublicPort:          publicPort,
+						PrivatePort:         privatePort,
+						Protocol:            protocol,
+						Algorithm:           algorithm,
+						StickyMethod:        stickyMethod,
+						EnableTLSProtocol:   enableTLS,
+						EnableProxyProtocol: enableProxy,
+						VirtualMachines:     vms,
+					},
+				},
 			}
 			if ipAddress != "" {
 				req.IPAddress = &ipAddress
@@ -164,6 +210,15 @@ func newLBCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle: hourly, monthly, quarterly, yearly (required)")
 	cmd.Flags().BoolVar(&acquireNewIP, "acquire-new-ip", true, "Acquire a new public IP for the load balancer")
 	cmd.Flags().StringVar(&ipAddress, "ip", "", "Existing IP address slug (overrides --acquire-new-ip)")
+	cmd.Flags().StringVar(&ruleName, "rule-name", "", "Initial rule name (defaults to <name>-rule)")
+	cmd.Flags().StringVar(&publicPort, "public-port", "", "Initial rule public port (required)")
+	cmd.Flags().StringVar(&privatePort, "private-port", "", "Initial rule private port (required)")
+	cmd.Flags().StringVar(&protocol, "protocol", "tcp", "Initial rule protocol")
+	cmd.Flags().StringVar(&algorithm, "algorithm", "", "Initial rule algorithm: roundrobin, leastconn, or source (required)")
+	cmd.Flags().StringVar(&stickyMethod, "sticky-method", "", "Initial rule sticky session method")
+	cmd.Flags().BoolVar(&enableTLS, "enable-tls", false, "Enable TLS protocol on the initial rule")
+	cmd.Flags().BoolVar(&enableProxy, "enable-proxy-protocol", false, "Enable proxy protocol on the initial rule")
+	cmd.Flags().StringArrayVar(&vmSlugs, "vm", nil, "VM slug to attach to the initial rule (can be repeated)")
 	return cmd
 }
 

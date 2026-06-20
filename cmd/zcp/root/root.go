@@ -124,7 +124,7 @@ Environment variables:
   ZCP_OUTPUT          Default output format: table, json, or yaml
   ZCP_DEBUG           Enable debug output when true, 1, or yes
 
-Documentation: https://docs.zsoftly.com/zcp-cli`,
+Documentation: https://docs.zcp.zsoftly.ca`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

@@ -73,10 +73,15 @@ zcp store list             # Store
 
 ## Compute
 
+Instance subcommands accept any unique reference to the VM — its **instance ID**
+(`vm_id`), **name**, or **slug** — wherever `<slug>` appears below. `zcp instance list`
+shows the `ID` column to copy from. If a name is ambiguous (two VMs share it), the
+command lists the matching IDs and asks you to use one.
+
 ```bash
 # List and inspect
 zcp instance list
-zcp instance get <slug>
+zcp instance get <id|name|slug>
 
 # Create — use --wait to block until the instance is Running
 zcp instance create \
@@ -267,7 +272,10 @@ zcp acl delete <vpc-slug> web-acl
 
 # Public load balancers
 zcp loadbalancer list
-zcp loadbalancer create --ip <slug> --name my-lb --algorithm roundrobin
+zcp loadbalancer create --ip <ip-slug> --name my-lb --network <network-slug> \
+  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin
+zcp loadbalancer create-rule <lb-slug> --name api-rule \
+  --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
 zcp loadbalancer delete <slug>
 
 # VPN gateways and connections

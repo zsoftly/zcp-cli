@@ -20,6 +20,7 @@ type Envelope struct {
 	Message     string          `json:"message"`
 	Timezone    string          `json:"timezone"`
 	CurrentPage int             `json:"current_page"`
+	LastPage    int             `json:"last_page"`
 	Data        json.RawMessage `json:"data"`
 	Total       int             `json:"total"`
 }
@@ -340,25 +341,46 @@ func NewService(client *httpclient.Client) *Service {
 // List returns virtual machines scoped to region and project. VMs are
 // region- and project-specific; empty values are omitted from the filter.
 func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMachine, error) {
-	q := url.Values{}
-	if region != "" {
-		q.Set("filter[region]", region)
+	// The endpoint is paginated; walk every page so callers (and reference
+	// resolution) see the full set rather than just the first page.
+	var all []VirtualMachine
+	for page := 1; ; page++ {
+		q := url.Values{}
+		if region != "" {
+			q.Set("filter[region]", region)
+		}
+		if project != "" {
+			q.Set("filter[project]", project)
+		}
+		q.Set("page", fmt.Sprintf("%d", page))
+
+		var env Envelope
+		if err := s.client.Get(ctx, "/virtual-machines", q, &env); err != nil {
+			return nil, fmt.Errorf("listing virtual machines: %w", err)
+		}
+		if env.Status != "Success" {
+			return nil, fmt.Errorf("listing virtual machines: %s", env.Message)
+		}
+		var vms []VirtualMachine
+		if err := json.Unmarshal(env.Data, &vms); err != nil {
+			return nil, fmt.Errorf("decoding virtual machines: %w", err)
+		}
+		all = append(all, vms...)
+
+		// Stop once the server reports the last page, once we've collected the
+		// reported total, or when a page comes back empty (defensive guard
+		// against a missing/zero total that would otherwise loop forever).
+		if len(vms) == 0 {
+			break
+		}
+		if env.LastPage > 0 && env.CurrentPage >= env.LastPage {
+			break
+		}
+		if env.LastPage == 0 && (env.Total == 0 || len(all) >= env.Total) {
+			break
+		}
 	}
-	if project != "" {
-		q.Set("filter[project]", project)
-	}
-	var env Envelope
-	if err := s.client.Get(ctx, "/virtual-machines", q, &env); err != nil {
-		return nil, fmt.Errorf("listing virtual machines: %w", err)
-	}
-	if env.Status != "Success" {
-		return nil, fmt.Errorf("listing virtual machines: %s", env.Message)
-	}
-	var vms []VirtualMachine
-	if err := json.Unmarshal(env.Data, &vms); err != nil {
-		return nil, fmt.Errorf("decoding virtual machines: %w", err)
-	}
-	return vms, nil
+	return all, nil
 }
 
 // Get returns a single virtual machine by slug.

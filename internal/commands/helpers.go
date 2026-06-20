@@ -26,16 +26,13 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	outputFmt, _ := cmd.Root().PersistentFlags().GetString("output")
 	apiURL, _ := cmd.Root().PersistentFlags().GetString("api-url")
 	timeoutSec, _ := cmd.Root().PersistentFlags().GetInt("timeout")
-	debugFlag, _ := cmd.Root().PersistentFlags().GetBool("debug")
 	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 	pager, _ := cmd.Root().PersistentFlags().GetBool("pager")
+	debugFlag := debugEnabled(cmd)
 
 	// Apply environment variable overrides for global flags
 	if envOutput := os.Getenv("ZCP_OUTPUT"); envOutput != "" {
 		outputFmt = envOutput
-	}
-	if v := strings.ToLower(os.Getenv("ZCP_DEBUG")); v == "true" || v == "1" || v == "yes" {
-		debugFlag = true
 	}
 
 	cfg, err := config.Load()
@@ -62,6 +59,14 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	printer.SetPager(pager)
 
 	return profile, client, printer, nil
+}
+
+func debugEnabled(cmd *cobra.Command) bool {
+	debugFlag, _ := cmd.Root().PersistentFlags().GetBool("debug")
+	if v := strings.ToLower(os.Getenv("ZCP_DEBUG")); v == "true" || v == "1" || v == "yes" {
+		debugFlag = true
+	}
+	return debugFlag
 }
 
 // resolveProject returns flagProject if set, otherwise the ZCP_PROJECT env var.

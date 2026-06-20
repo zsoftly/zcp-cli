@@ -35,7 +35,7 @@ If the call succeeds, the credentials are valid.`,
 			profileName, _ := cmd.Root().PersistentFlags().GetString("profile")
 			apiURL, _ := cmd.Root().PersistentFlags().GetString("api-url")
 			timeoutSec, _ := cmd.Root().PersistentFlags().GetInt("timeout")
-			debugFlag, _ := cmd.Root().PersistentFlags().GetBool("debug")
+			debugFlag := debugEnabled(cmd)
 			noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 
 			cfg, err := config.Load()

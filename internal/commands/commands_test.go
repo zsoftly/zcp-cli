@@ -295,6 +295,9 @@ const routingErrBody = `{"status":"Error","message":"The route virtual-machines/
 // minVMBody is the minimum valid 200 envelope for a VirtualMachine GET.
 const minVMBody = `{"status":"Success","message":"OK","data":{"id":"a1b2c3","vm_id":"vm-1","name":"test-vm","slug":"test-vm","hostname":"test-vm","username":"ubuntu","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z","networks":[]}}`
 
+// minVMListBody is the minimum valid 200 envelope for resolving a VM reference.
+const minVMListBody = `{"status":"Success","message":"OK","data":[{"id":"a1b2c3","vm_id":"vm-1","name":"test-vm","slug":"test-vm","hostname":"test-vm","username":"ubuntu","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z","networks":[]}]}`
+
 // withFastRetry overrides instanceGetRetryWait for the duration of a test.
 func withFastRetry(t *testing.T) {
 	t.Helper()
@@ -310,6 +313,11 @@ func TestInstanceGetRetrySucceeds(t *testing.T) {
 
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/virtual-machines" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, minVMListBody)
+			return
+		}
 		n := calls.Add(1)
 		if n < 3 {
 			w.WriteHeader(http.StatusForbidden)
@@ -344,6 +352,11 @@ func TestInstanceGetRetryExhausted(t *testing.T) {
 
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/virtual-machines" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, minVMListBody)
+			return
+		}
 		calls.Add(1)
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, routingErrBody)
@@ -372,6 +385,11 @@ func TestInstanceGetNonRoutingErrorNoRetry(t *testing.T) {
 
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/virtual-machines" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, minVMListBody)
+			return
+		}
 		calls.Add(1)
 		w.WriteHeader(http.StatusForbidden)
 		fmt.Fprint(w, `{"status":"Error","message":"Access denied."}`)
@@ -387,6 +405,177 @@ func TestInstanceGetNonRoutingErrorNoRetry(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Errorf("server called %d times, want 1 (no retry on non-routing error)", calls.Load())
+	}
+}
+
+func TestInstanceRebootRejectsNonRunningVM(t *testing.T) {
+	var rebootCalled atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"OK","data":[{"id":"vm-1","name":"test-vm","slug":"test-vm","state":"Stopped","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines/test-vm":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"OK","data":{"id":"vm-1","name":"test-vm","slug":"test-vm","state":"Stopped","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/virtual-machines/test-vm/reboot":
+			rebootCalled.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Rebooting virtual machine..."}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "reboot", "test-vm", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected reboot to fail for stopped VM")
+	}
+	if !strings.Contains(err.Error(), `instance "test-vm" is Stopped`) {
+		t.Errorf("error = %q, want stopped-state message", err)
+	}
+	if rebootCalled.Load() {
+		t.Fatal("reboot endpoint was called for a stopped VM")
+	}
+}
+
+func TestInstanceRebootAllowsRunningVM(t *testing.T) {
+	var rebootCalled atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, minVMListBody)
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines/test-vm":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, minVMBody)
+		case r.Method == http.MethodPut && r.URL.Path == "/virtual-machines/test-vm/reboot":
+			rebootCalled.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Rebooting virtual machine..."}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "reboot", "test-vm", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("expected reboot success for running VM, got: %v", err)
+	}
+	if !rebootCalled.Load() {
+		t.Fatal("reboot endpoint was not called for a running VM")
+	}
+}
+
+func TestInstanceRebootRejectsDuplicateName(t *testing.T) {
+	var rebootCalled atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"OK","data":[{"id":"vm-id-1","name":"dup-vm","slug":"dup-vm","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"},{"id":"vm-id-2","name":"dup-vm","slug":"dup-vm-2","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"}]}`)
+		case r.Method == http.MethodPut:
+			rebootCalled.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Rebooting virtual machine..."}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "reboot", "dup-vm", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected duplicate name error")
+	}
+	if !strings.Contains(err.Error(), `instance name "dup-vm" matches 2 instances`) {
+		t.Errorf("error = %q, want duplicate-name message", err)
+	}
+	if !strings.Contains(err.Error(), "vm-id-1") || !strings.Contains(err.Error(), "vm-id-2") {
+		t.Errorf("error = %q, want matching instance IDs", err)
+	}
+	if rebootCalled.Load() {
+		t.Fatal("reboot endpoint was called for an ambiguous VM name")
+	}
+}
+
+func TestInstanceRebootResolvesVMIDToSlug(t *testing.T) {
+	var gotRebootPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"OK","data":[{"id":"record-id-1","vm_id":"vm-id-1","name":"test-vm","slug":"test-vm-slug","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines/test-vm-slug":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"OK","data":{"id":"record-id-1","vm_id":"vm-id-1","name":"test-vm","slug":"test-vm-slug","state":"Running","request_status":true,"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z"}}`)
+		case r.Method == http.MethodPut && r.URL.Path == "/virtual-machines/test-vm-slug/reboot":
+			gotRebootPath = r.URL.Path
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Rebooting virtual machine..."}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "reboot", "vm-id-1", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("expected reboot by VM ID to succeed, got: %v", err)
+	}
+	if gotRebootPath != "/virtual-machines/test-vm-slug/reboot" {
+		t.Fatalf("reboot path = %q, want slug route", gotRebootPath)
+	}
+}
+
+func TestInstanceRebootFallsBackToUnscopedLookup(t *testing.T) {
+	var rebootCalled atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			// The scoped list (region filter applied) does not contain the VM;
+			// the unscoped retry (no region filter) resolves it.
+			if r.URL.Query().Get("filter[region]") != "" {
+				fmt.Fprint(w, `{"status":"Success","message":"OK","total":0,"data":[]}`)
+				return
+			}
+			fmt.Fprint(w, minVMListBody)
+		case r.Method == http.MethodPut && r.URL.Path == "/virtual-machines/test-vm/reboot":
+			rebootCalled.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Rebooting virtual machine..."}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+	os.Setenv("ZCP_REGION", "yul-1")
+	defer os.Unsetenv("ZCP_REGION")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "reboot", "test-vm", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("expected unscoped fallback to resolve the VM, got: %v", err)
+	}
+	if !rebootCalled.Load() {
+		t.Fatal("reboot endpoint was not called after unscoped fallback")
 	}
 }
 
