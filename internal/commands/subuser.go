@@ -285,7 +285,9 @@ func runSubUserUpdate(cmd *cobra.Command, ref, name, email, roleSlug string, pro
 	if _, err := svc.Update(ctx, current.ID, req); err != nil {
 		return fmt.Errorf("sub-user update: %w", err)
 	}
-	printer.Fprintf("Sub-user %q updated.\n", current.Email)
+	// Report the email the record now has (req.Email), which differs from
+	// current.Email when --email was changed.
+	printer.Fprintf("Sub-user %q updated.\n", req.Email)
 	return nil
 }
 
