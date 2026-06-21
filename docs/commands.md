@@ -300,8 +300,14 @@ zcp ssh-key delete <slug>
 zcp instance create ... --ssh-key mykey   # reference the key by name on a new VM
 
 # Affinity groups
-zcp affinity-group list
-zcp affinity-group create --name my-ag --type host-affinity
+# --type must be one of (quote it — values contain a space):
+#   "host affinity"               strict: instances always on the SAME host
+#   "host anti-affinity"          strict: instances always on DIFFERENT hosts
+#   "non-strict host affinity"    best-effort same host (falls back if no capacity)
+#   "non-strict host anti-affinity"  best-effort different hosts (falls back if no capacity)
+# --region and --project are required; --cloud-provider is auto-detected.
+zcp affinity-group list --region yul-1 --project default
+zcp affinity-group create --name my-ag --type "host affinity" --region yul-1 --project default
 zcp affinity-group delete <slug>
 ```
 
@@ -343,10 +349,24 @@ zcp backup delete <slug>
 ## Autoscale
 
 ```bash
-zcp autoscale list
-zcp autoscale get <slug>
-zcp autoscale create --name my-policy --min 1 --max 5 --region yow-1 --project default
+zcp autoscale list --region yow-1 --project default
+
+# Create a group. --name, --plan, --template, --zone, --min, --max, --region,
+# --project are required; --network, --cooldown optional; --cloud-provider auto-detected.
+zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts \
+  --min 1 --max 5 --zone yow-1 --region yow-1 --project default
+
+# Lifecycle
+zcp autoscale enable <slug>
+zcp autoscale disable <slug>
+zcp autoscale change-plan <slug> --plan ci2s
+zcp autoscale change-template <slug> --template ubuntu-2604-lts
 zcp autoscale delete <slug>
+
+# Scale-up policies (create / update / delete) and scale-down conditions.
+# --operator is one of gte, lte, gt, lt; threshold is a percentage; duration in seconds.
+zcp autoscale policy create web-group --name cpu-high --metric cpu --operator gte --threshold 80 --duration 300 --scale-amount 2
+zcp autoscale condition create web-group --name cpu-low --metric cpu --operator lte --threshold 20 --duration 300 --scale-amount 1
 ```
 
 ---

@@ -114,7 +114,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Group name (required)")
-	cmd.Flags().StringVar(&groupType, "type", "", "Affinity type: 'host affinity' or 'host anti-affinity' (required)")
+	cmd.Flags().StringVar(&groupType, "type", "", "Affinity type (required): 'host affinity', 'host anti-affinity', 'non-strict host affinity', or 'non-strict host anti-affinity'")
 	cmd.Flags().StringVar(&description, "description", "", "Group description")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")

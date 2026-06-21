@@ -269,8 +269,15 @@ func resolveInstanceRef(ctx context.Context, cmd *cobra.Command, svc *instance.S
 		return vm, nil
 	}
 	if (region != "" || project != "") && errors.Is(err, errInstanceNotFound) {
-		if vm, uerr := resolveInstanceInScope(ctx, svc, "", "", ref); uerr == nil {
+		vm, uerr := resolveInstanceInScope(ctx, svc, "", "", ref)
+		if uerr == nil {
 			return vm, nil
+		}
+		// A genuine failure (API error, or an ambiguous-name match) from the
+		// widened search is meaningful — surface it instead of masking it with
+		// the original scoped not-found error.
+		if !errors.Is(uerr, errInstanceNotFound) {
+			return nil, uerr
 		}
 	}
 	return nil, err
@@ -1381,6 +1388,12 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
 
 	vm, err := resolveInstanceRef(ctx, cmd, svc, slug)
 	if err != nil {
+		// Deleting an already-deleted instance is a no-op success; only a
+		// genuine resolution failure (ambiguous match, API error) is fatal.
+		if errors.Is(err, errInstanceNotFound) {
+			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", slug)
+			return nil
+		}
 		return err
 	}
 
