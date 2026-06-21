@@ -9,7 +9,7 @@ The official command-line interface for the ZSoftly Cloud Platform
 
 ## Overview
 
-ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, object storage, S3-compatible buckets, backups, autoscale policies, monitoring, projects, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
+ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on the ZSoftly Cloud Platform. It covers the complete lifecycle of cloud infrastructure: compute instances, block storage, snapshots, networks, VPCs, firewalls, load balancers, VPN gateways, SSH keys, Kubernetes clusters, DNS, object storage, S3-compatible buckets, backups, autoscale policies, monitoring, projects, sub-users, roles and permissions, billing, and support. All commands support table, JSON, and YAML output, making the CLI equally suited for interactive use and automation pipelines.
 
 ---
 

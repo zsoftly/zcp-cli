@@ -1,4 +1,4 @@
-# ZCP CLI Command Taxonomy (v0.0.18)
+# ZCP CLI Command Taxonomy (v0.0.19)
 
 **CLI name**: `zcp`
 **Base URL**: `https://api.zcp.zsoftly.ca/api`
@@ -163,7 +163,7 @@ zcp
 │
 ├── loadbalancer                       Load balancer operations
 │   ├── list                           List load balancers
-│   ├── create                         Create a load balancer
+│   ├── create                         Create a load balancer with an initial rule (--public-port, --private-port, --algorithm required; --rule-name, --protocol, --sticky-method, --enable-tls, --enable-proxy-protocol, --vm optional)
 │   ├── delete                         Permanently delete a load balancer (--yes to skip prompt)
 │   ├── create-rule                    Create a load balancer rule
 │   ├── delete-rule                    Delete a rule from a load balancer (--yes to skip prompt)
@@ -363,6 +363,24 @@ zcp
 │   ├── create                         Create an affinity group
 │   └── delete                         Delete an affinity group
 │
+├── sub-user (alias: subuser)          Account sub-user management (account-level)
+│   ├── list                           List sub-users (--role, --blocked filters)
+│   ├── create                         Create a sub-user
+│   ├── update                         Update name/email/role/projects (by id or email)
+│   ├── block                          Block a sub-user (revoke access without deleting)
+│   ├── unblock                        Unblock a sub-user
+│   └── delete                         Delete a sub-user (--yes to skip prompt)
+│
+├── role                               Role and permission-set management (account-level)
+│   ├── list                           List roles
+│   ├── get                            Show a role with its permissions and users
+│   ├── create                         Create a role from permission slugs
+│   ├── update                         Update a role (--permission REPLACES the set)
+│   └── delete                         Delete a role (--yes to skip prompt)
+│
+├── permission                         Assignable permission catalog (account-level)
+│   └── list                           List permissions (--category filter)
+│
 ├── backup                             Block storage backup operations
 │   ├── list                           List block storage backups
 │   ├── create                         Create a block storage backup
@@ -417,21 +435,21 @@ Each API request sends the token as an `Authorization: Bearer <token>` header.
 
 ## Identifier Conventions
 
-v0.0.18 uses **slug-based identifiers** for most resources. Slugs are human-readable
+v0.0.19 uses **slug-based identifiers** for most resources. Slugs are human-readable
 strings assigned by the API (e.g., `my-vm-123`, `root-1234`, `example-com-1`).
 
-| Context         | Flag / Argument                   | Example                                                                         |
-| --------------- | --------------------------------- | ------------------------------------------------------------------------------- |
-| VM instance     | positional `<slug>` or `--vm`     | `zcp instance get my-vm-123`                                                    |
-| Volume          | `--volume`                        | `zcp snapshot create --volume root-1234`                                        |
-| DNS domain      | positional `<slug>` or `--domain` | `zcp dns show example-com-1`                                                    |
-| Project         | `--project`                       | `--project default`                                                             |
-| Region          | `--region`                        | `--region yow-1`                                                                |
-| Cloud provider  | auto-detected (hidden override)   | saved to the profile by `zcp auth validate`; rarely passed (`--cloud-provider`) |
-| VPC             | `--vpc`                           | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`                   |
-| Network ACL     | name or ID                        | `zcp acl rules my-vpc web-acl` (names resolved to IDs); rules are ID-only       |
-| IP              | `--ip`                            | `zcp firewall list --ip my-ip-slug`                                             |
-| Autoscale group | positional `<slug>`               | `zcp autoscale enable web-group`                                                |
+| Context         | Flag / Argument                        | Example                                                                                                        |
+| --------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| VM instance     | positional ID / name / slug, or `--vm` | `zcp instance get vm-1a2b3c`, `zcp instance get my-vm-123` (name resolved to the VM; ambiguous names rejected) |
+| Volume          | `--volume`                             | `zcp snapshot create --volume root-1234`                                                                       |
+| DNS domain      | positional `<slug>` or `--domain`      | `zcp dns show example-com-1`                                                                                   |
+| Project         | `--project`                            | `--project default`                                                                                            |
+| Region          | `--region`                             | `--region yow-1`                                                                                               |
+| Cloud provider  | auto-detected (hidden override)        | saved to the profile by `zcp auth validate`; rarely passed (`--cloud-provider`)                                |
+| VPC             | `--vpc`                                | `zcp ip list --vpc my-vpc`, `zcp network create --vpc my-vpc`                                                  |
+| Network ACL     | name or ID                             | `zcp acl rules my-vpc web-acl` (names resolved to IDs); rules are ID-only                                      |
+| IP              | `--ip`                                 | `zcp firewall list --ip my-ip-slug`                                                                            |
+| Autoscale group | positional `<slug>`                    | `zcp autoscale enable web-group`                                                                               |
 
 All commands use slug-based identifiers, except network ACLs and ACL rules, which the
 API addresses by ID (UUID) — ACL names are resolved automatically where accepted.

@@ -41,6 +41,7 @@ var scopeExemptTop = map[string]bool{
 	"server": true, "dns": true, "support": true, "dashboard": true, "billing": true,
 	"product": true, "store": true, "version": true, "completion": true, "help": true,
 	"ssh-key": true, "object-storage": true,
+	"sub-user": true, "role": true, "permission": true,
 }
 
 // topLevelName returns the name of cmd's ancestor directly under the root.
@@ -124,7 +125,7 @@ Environment variables:
   ZCP_OUTPUT          Default output format: table, json, or yaml
   ZCP_DEBUG           Enable debug output when true, 1, or yes
 
-Documentation: https://docs.zsoftly.com/zcp-cli`,
+Documentation: https://docs.zcp.zsoftly.ca`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -206,6 +207,9 @@ func init() {
 	rootCmd.AddCommand(commands.NewBillingCycleCmd())
 	rootCmd.AddCommand(commands.NewStorageCategoryCmd())
 	rootCmd.AddCommand(commands.NewObjectStorageCmd())
+	rootCmd.AddCommand(commands.NewSubUserCmd())
+	rootCmd.AddCommand(commands.NewRoleCmd())
+	rootCmd.AddCommand(commands.NewPermissionCmd())
 
 	// Flag completions — static values, no network calls
 	rootCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

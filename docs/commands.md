@@ -73,10 +73,15 @@ zcp store list             # Store
 
 ## Compute
 
+Instance subcommands accept any unique reference to the VM — its **instance ID**
+(`vm_id`), **name**, or **slug** — wherever `<slug>` appears below. `zcp instance list`
+shows the `ID` column to copy from. If a name is ambiguous (two VMs share it), the
+command lists the matching IDs and asks you to use one.
+
 ```bash
 # List and inspect
 zcp instance list
-zcp instance get <slug>
+zcp instance get <id|name|slug>
 
 # Create — use --wait to block until the instance is Running
 zcp instance create \
@@ -267,7 +272,10 @@ zcp acl delete <vpc-slug> web-acl
 
 # Public load balancers
 zcp loadbalancer list
-zcp loadbalancer create --ip <slug> --name my-lb --algorithm roundrobin
+zcp loadbalancer create --ip <ip-slug> --name my-lb --network <network-slug> \
+  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin
+zcp loadbalancer create-rule <lb-slug> --name api-rule \
+  --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
 zcp loadbalancer delete <slug>
 
 # VPN gateways and connections
@@ -292,9 +300,50 @@ zcp ssh-key delete <slug>
 zcp instance create ... --ssh-key mykey   # reference the key by name on a new VM
 
 # Affinity groups
-zcp affinity-group list
-zcp affinity-group create --name my-ag --type host-affinity
+# --type must be one of (quote it — values contain a space):
+#   "host affinity"               strict: instances always on the SAME host
+#   "host anti-affinity"          strict: instances always on DIFFERENT hosts
+#   "non-strict host affinity"    best-effort same host (falls back if no capacity)
+#   "non-strict host anti-affinity"  best-effort different hosts (falls back if no capacity)
+# --region and --project are required; --cloud-provider is auto-detected.
+zcp affinity-group list --region yul-1 --project default
+zcp affinity-group create --name my-ag --type "host affinity" --region yul-1 --project default
 zcp affinity-group delete <slug>
+```
+
+---
+
+## Access control (sub-users, roles, permissions)
+
+Account-level — these commands are **not** region/project-scoped.
+
+```bash
+# Permissions: the read-only catalog you build roles from
+zcp permission list
+zcp permission list --category "Virtual Machine"
+
+# Roles: group permissions and assign them to sub-users.
+# owner / service-administrator / service-viewer are predefined and cannot be edited.
+zcp role list
+zcp role get service-administrator                 # shows its permissions + assigned users
+zcp role create --name "VM Operator" \
+  --permission virtual-machine-read --permission virtual-machine-manage \
+  --description "Can run and manage VMs"
+# --permission REPLACES the role's full set (not additive); unchanged flags are preserved.
+zcp role update vm-operator --permission virtual-machine-read --permission dns-read
+zcp role delete vm-operator
+
+# Sub-users: additional users under your account (addressable by id OR email).
+# --email must be a company address; --password needs 8+ chars w/ mixed case, number, symbol.
+# New sub-users start blocked/inactive until unblocked.
+zcp sub-user list
+zcp sub-user list --role service-administrator
+zcp sub-user create --name "Jane Doe" --email jane@yourco.com \
+  --password 'S3cret!pass' --role service-viewer --project default-9
+zcp sub-user update jane@yourco.com --role service-administrator
+zcp sub-user block jane@yourco.com                 # revoke access without deleting
+zcp sub-user unblock jane@yourco.com
+zcp sub-user delete jane@yourco.com
 ```
 
 ---
@@ -335,10 +384,24 @@ zcp backup delete <slug>
 ## Autoscale
 
 ```bash
-zcp autoscale list
-zcp autoscale get <slug>
-zcp autoscale create --name my-policy --min 1 --max 5 --region yow-1 --project default
+zcp autoscale list --region yow-1 --project default
+
+# Create a group. --name, --plan, --template, --zone, --min, --max, --region,
+# --project are required; --network, --cooldown optional; --cloud-provider auto-detected.
+zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts \
+  --min 1 --max 5 --zone yow-1 --region yow-1 --project default
+
+# Lifecycle
+zcp autoscale enable <slug>
+zcp autoscale disable <slug>
+zcp autoscale change-plan <slug> --plan ci2s
+zcp autoscale change-template <slug> --template ubuntu-2604-lts
 zcp autoscale delete <slug>
+
+# Scale-up policies (create / update / delete) and scale-down conditions.
+# --operator is one of gte, lte, gt, lt; threshold is a percentage; duration in seconds.
+zcp autoscale policy create web-group --name cpu-high --metric cpu --operator gte --threshold 80 --duration 300 --scale-amount 2
+zcp autoscale condition create web-group --name cpu-low --metric cpu --operator lte --threshold 20 --duration 300 --scale-amount 1
 ```
 
 ---

@@ -111,6 +111,8 @@ destroy_one() {
     # endpoints and identifiers.
     ssh-key)        zcp ssh-key delete "$slug" -y          >/dev/null 2>&1 ;;
     affinity-group) zcp affinity-group delete "$slug" -y   >/dev/null 2>&1 ;;
+    role)           zcp role delete "$slug" -y             >/dev/null 2>&1 ;;
+    sub-user)       zcp sub-user delete "$slug" -y         >/dev/null 2>&1 ;;
     dns)            zcp dns delete "$slug" -y               >/dev/null 2>&1 ;;
     iso)            zcp iso delete "$slug" -y               >/dev/null 2>&1 ;;
     network)        zcp network delete "$slug" -y          >/dev/null 2>&1 ;;
@@ -119,6 +121,11 @@ destroy_one() {
     firewall)       zcp firewall delete "$slug" -y         >/dev/null 2>&1 ;;
     egress)         zcp egress delete "$slug" --network "$extra" -y >/dev/null 2>&1 ;;
     portforward)    zcp portforward delete "$slug" -y      >/dev/null 2>&1 ;;
+    loadbalancer)
+      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      sleep 5
+      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      ;;
     vm-snapshot)    zcp vm-snapshot delete "$slug" -y      >/dev/null 2>&1 ;;
     object-storage) zcp object-storage delete "$slug" -y   >/dev/null 2>&1 ;;
     template-acct)  zcp template account-delete "$slug" -y >/dev/null 2>&1 ;;

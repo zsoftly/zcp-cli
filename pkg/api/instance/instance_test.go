@@ -49,6 +49,54 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListPaginatesAllPages(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/virtual-machines" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		page := r.URL.Query().Get("page")
+		var vms []instance.VirtualMachine
+		switch page {
+		case "1", "":
+			vms = []instance.VirtualMachine{{ID: "vm-1", Slug: "vm-1"}, {ID: "vm-2", Slug: "vm-2"}}
+		case "2":
+			vms = []instance.VirtualMachine{{ID: "vm-3", Slug: "vm-3"}}
+		default:
+			t.Errorf("unexpected page = %q", page)
+		}
+		data, _ := json.Marshal(vms)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "data": json.RawMessage(data),
+			"current_page": atoiOr(page, 1), "last_page": 2, "total": 3,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	vms, err := svc.List(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(vms) != 3 {
+		t.Fatalf("got %d VMs across pages, want 3", len(vms))
+	}
+	if vms[2].Slug != "vm-3" {
+		t.Errorf("last slug = %q, want vm-3 (second page not fetched)", vms[2].Slug)
+	}
+}
+
+func atoiOr(s string, fallback int) int {
+	switch s {
+	case "1":
+		return 1
+	case "2":
+		return 2
+	default:
+		return fallback
+	}
+}
+
 func TestGet(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/virtual-machines/test-vm" {

@@ -18,6 +18,7 @@
 ALL_SERVICES=(
   auth region cloud-provider currency billing-cycle storage-category product
   plan marketplace server project profile-info billing dashboard monitoring
+  permission role sub-user
   ssh-key affinity-group network vpc dns ip instance volume
   firewall egress portforward acl
   vm-snapshot snapshot backup vm-backup loadbalancer
@@ -55,6 +56,9 @@ do_read() {
         else run_case "billing $b" -- zcp billing "$b"; fi
       done ;;
     ssh-key)          run_case "ssh-key list"             -- zcp ssh-key list ;;
+    permission)       run_case "permission list"          -- zcp permission list ;;
+    role)             run_case "role list"                -- zcp role list ;;
+    sub-user)         run_case "sub-user list"            -- zcp sub-user list ;;
     affinity-group)   run_case "affinity-group list"      -- zcp affinity-group list ;;
     network)          run_case "network list"             -- zcp network list
                       run_case "network categories"       -- zcp network categories ;;
@@ -219,6 +223,8 @@ do_lifecycle() {
   case "$1" in
     ssh-key)        lc_sshkey ;;
     affinity-group) lc_affinity ;;
+    role)           lc_role ;;
+    sub-user)       _mark_skip "sub-user lifecycle (create needs an account-specific company-domain email and provisions a real user)" ;;
     network)        lc_network ;;
     vpc)            lc_vpc ;;
     dns)            lc_dns ;;
@@ -253,6 +259,16 @@ lc_affinity() {
   s="$(_jq_slug <<<"$out")"
   [[ -z "$s" ]] && s="$(zcp affinity-group list -o json 2>/dev/null | jq -r --arg n "$name" '(.[]//.data[])|select(.name==$n)|.slug' | head -1)"
   _lc_result "affinity-group" "$s" && defer affinity-group "$s"
+}
+
+# lc_role creates a custom role (account-level, non-billable), then registers it
+# for teardown. The create output is a status line, so the slug is read back from
+# the role list by name (the slug is the kebab-cased name).
+lc_role() {
+  local name out s; name="$(rname role)"
+  capture out -- zcp role create --name "$name" --permission virtual-machine-read --description "smoke probe"
+  s="$(zcp role list -o json 2>/dev/null | jq -r --arg n "$name" '(.[]//.data[])|select(.name==$n)|.slug' | head -1)"
+  _lc_result "role" "$s" && defer role "$s"
 }
 
 lc_network()  {
@@ -396,10 +412,11 @@ lc_loadbalancer() {
   local net out s; fx_network; net="$FX_NETWORK"; [[ -z "$net" ]] && { _mark_skip "loadbalancer (no network fixture)"; return; }
   capture out -- zcp loadbalancer create --name "$(rname lb)" --network "$net" \
     --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
-    --billing-cycle "$(det_billing_cycle)" -y -o json
+    --billing-cycle "$(det_billing_cycle)" --public-port 18080 --private-port 80 \
+    --algorithm roundrobin -y -o json
   s="$(_jq_slug <<<"$out")"
   [[ -z "$s" ]] && s="$(zcp loadbalancer list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-  _lc_result "loadbalancer" "$s" && defer cancel "$s" "Load Balancer"
+  _lc_result "loadbalancer" "$s" && defer loadbalancer "$s"
 }
 
 lc_objectstorage() {
