@@ -14,6 +14,8 @@ Highlights:
   error when a name is ambiguous.
 - **`instance list` shows the `ID` column** and returns **all** VMs (the list is now paginated).
 - **`reboot` refuses a non-`Running` VM** instead of silently no-op'ing.
+- **Manage account access control** — new `zcp sub-user`, `zcp role`, and `zcp permission`
+  commands for creating sub-users, defining roles from permissions, and blocking/unblocking access.
 
 ---
 
@@ -68,6 +70,39 @@ or slug still works without `--region`.
 
 `zcp instance list` and `zcp instance get` now show the instance `ID` (the value to copy for the
 references above). `-o json`/`-o yaml` and `--debug` expand to the full set of columns.
+
+### Manage sub-users, roles, and permissions
+
+Account access control is now scriptable. These are account-level commands — no `--region`/`--project`
+needed.
+
+```bash
+# Permissions: the read-only catalog you build roles from
+zcp permission list
+zcp permission list --category "Virtual Machine"
+
+# Roles: group permissions, then assign to sub-users
+zcp role list
+zcp role get service-administrator                 # shows its permissions + assigned users
+zcp role create --name "VM Operator" \
+  --permission virtual-machine-read --permission virtual-machine-manage
+zcp role update vm-operator --permission virtual-machine-read --permission dns-read
+zcp role delete vm-operator
+
+# Sub-users: additional users under your account (addressable by id OR email)
+zcp sub-user create --name "Jane Doe" --email jane@yourco.com \
+  --password 'S3cret!pass' --role service-viewer --project default-9
+zcp sub-user update jane@yourco.com --role service-administrator
+zcp sub-user block jane@yourco.com                 # revoke access without deleting
+zcp sub-user unblock jane@yourco.com
+zcp sub-user delete jane@yourco.com
+```
+
+Notes: `--permission` on a role **replaces** the role's full set (it isn't additive), and `role update`
+preserves any flags you don't pass. The predefined `owner`, `service-administrator`, and
+`service-viewer` roles can't be edited or deleted. Sub-user `--email` must be a company address,
+`--password` needs 8+ chars with mixed case, a number, and a symbol, and newly created sub-users start
+**blocked** until you `unblock` them.
 
 ## Changed
 

@@ -368,7 +368,30 @@ Object storage instances, buckets, and object metadata are managed via the ZCP R
 | 211 | `/mfa/disable`    | POST   | Disable MFA                  | `auth`    |
 | 212 | `/mfa/verify`     | POST   | Verify MFA code              | `auth`    |
 
-**Total endpoints**: 212
+### Access Control (sub-users, roles, permissions)
+
+Account-level — **not** region/project-scoped.
+
+| #   | Path            | Method | Summary                               | CLI Group    |
+| --- | --------------- | ------ | ------------------------------------- | ------------ |
+| 213 | `/users`        | GET    | List sub-users                        | `sub-user`   |
+| 214 | `/users`        | POST   | Create sub-user                       | `sub-user`   |
+| 215 | `/users/{ID}`   | PUT    | Update sub-user (also block/unblock)  | `sub-user`   |
+| 216 | `/users/{ID}`   | DELETE | Delete sub-user                       | `sub-user`   |
+| 217 | `/roles`        | GET    | List roles                            | `role`       |
+| 218 | `/roles/{SLUG}` | GET    | Show role (incl. permissions + users) | `role`       |
+| 219 | `/roles`        | POST   | Create role                           | `role`       |
+| 220 | `/roles/{SLUG}` | PUT    | Update role                           | `role`       |
+| 221 | `/roles/{SLUG}` | DELETE | Delete role                           | `role`       |
+| 222 | `/permissions`  | GET    | List the permission catalog           | `permission` |
+
+> **Sub-users** (`/users`) are keyed by **UUID** on `{ID}` routes; there is **no** single-user GET (the list is the only read) and server-side list filters are ignored (the CLI filters client-side). `POST /users` requires `name`, `email` (company email), `password` (8+ chars, mixed case + number + symbol), `role` (a role slug) and `projects` (project slugs). There is no block/unblock route — set `is_blocked` via `PUT /users/{ID}` (which also requires `email` + `projects`). Newly created sub-users start blocked/inactive. The account owner is not in `/users`.
+>
+> **Roles** (`/roles`) are keyed by **SLUG** on `{SLUG}` routes (a UUID returns 500). The list omits permissions; only the single-role GET includes them. `POST/PUT` take `{name, description, permissions:[slugs]}` and permissions are **replace** (not additive) semantics. The three predefined roles (`owner`, `service-administrator`, `service-viewer`) reject update/delete with 403. A missing role on delete returns 500 `No query results for model`, which the CLI treats as already-deleted.
+>
+> **Permissions** (`/permissions`) is a read-only catalog of 58 entries grouped by `category`. Note `quota-read`/`quota-manage` are assignable to roles but are absent from this catalog.
+
+**Total endpoints**: 222
 
 ---
 

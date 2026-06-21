@@ -363,6 +363,24 @@ zcp
 │   ├── create                         Create an affinity group
 │   └── delete                         Delete an affinity group
 │
+├── sub-user (alias: subuser)          Account sub-user management (account-level)
+│   ├── list                           List sub-users (--role, --blocked filters)
+│   ├── create                         Create a sub-user
+│   ├── update                         Update name/email/role/projects (by id or email)
+│   ├── block                          Block a sub-user (revoke access without deleting)
+│   ├── unblock                        Unblock a sub-user
+│   └── delete                         Delete a sub-user (--yes to skip prompt)
+│
+├── role                               Role and permission-set management (account-level)
+│   ├── list                           List roles
+│   ├── get                            Show a role with its permissions and users
+│   ├── create                         Create a role from permission slugs
+│   ├── update                         Update a role (--permission REPLACES the set)
+│   └── delete                         Delete a role (--yes to skip prompt)
+│
+├── permission                         Assignable permission catalog (account-level)
+│   └── list                           List permissions (--category filter)
+│
 ├── backup                             Block storage backup operations
 │   ├── list                           List block storage backups
 │   ├── create                         Create a block storage backup

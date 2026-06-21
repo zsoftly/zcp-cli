@@ -111,6 +111,8 @@ destroy_one() {
     # endpoints and identifiers.
     ssh-key)        zcp ssh-key delete "$slug" -y          >/dev/null 2>&1 ;;
     affinity-group) zcp affinity-group delete "$slug" -y   >/dev/null 2>&1 ;;
+    role)           zcp role delete "$slug" -y             >/dev/null 2>&1 ;;
+    sub-user)       zcp sub-user delete "$slug" -y         >/dev/null 2>&1 ;;
     dns)            zcp dns delete "$slug" -y               >/dev/null 2>&1 ;;
     iso)            zcp iso delete "$slug" -y               >/dev/null 2>&1 ;;
     network)        zcp network delete "$slug" -y          >/dev/null 2>&1 ;;

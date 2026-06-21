@@ -313,6 +313,41 @@ zcp affinity-group delete <slug>
 
 ---
 
+## Access control (sub-users, roles, permissions)
+
+Account-level — these commands are **not** region/project-scoped.
+
+```bash
+# Permissions: the read-only catalog you build roles from
+zcp permission list
+zcp permission list --category "Virtual Machine"
+
+# Roles: group permissions and assign them to sub-users.
+# owner / service-administrator / service-viewer are predefined and cannot be edited.
+zcp role list
+zcp role get service-administrator                 # shows its permissions + assigned users
+zcp role create --name "VM Operator" \
+  --permission virtual-machine-read --permission virtual-machine-manage \
+  --description "Can run and manage VMs"
+# --permission REPLACES the role's full set (not additive); unchanged flags are preserved.
+zcp role update vm-operator --permission virtual-machine-read --permission dns-read
+zcp role delete vm-operator
+
+# Sub-users: additional users under your account (addressable by id OR email).
+# --email must be a company address; --password needs 8+ chars w/ mixed case, number, symbol.
+# New sub-users start blocked/inactive until unblocked.
+zcp sub-user list
+zcp sub-user list --role service-administrator
+zcp sub-user create --name "Jane Doe" --email jane@yourco.com \
+  --password 'S3cret!pass' --role service-viewer --project default-9
+zcp sub-user update jane@yourco.com --role service-administrator
+zcp sub-user block jane@yourco.com                 # revoke access without deleting
+zcp sub-user unblock jane@yourco.com
+zcp sub-user delete jane@yourco.com
+```
+
+---
+
 ## DNS
 
 ```bash

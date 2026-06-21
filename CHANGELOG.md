@@ -5,7 +5,7 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v0.0.19] - 2026-06-20
+## [v0.0.19] - 2026-06-21
 
 ### Fixed
 
@@ -16,6 +16,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **Reference an instance by its ID (`vm_id`), name, or slug — not just its slug.** Every instance subcommand (`get`, `start`, `stop`, `reboot`, `reset`, `delete`, `logs`, `ssh`, `tag-*`, `change-*`, `add-network`, `addons`, `purchase-addon`) now resolves the argument against your VMs: exact ID/`vm_id` first, then name (reported as ambiguous, with the matching IDs, if two VMs share a name), then slug. Resolution searches your active region/project first and **falls back to an unscoped lookup** when the reference isn't found there, so operating on a globally-unique ID/slug keeps working across regions without passing `--region`.
 - **`ID` column in instance output.** `zcp instance list` and `zcp instance get` now show the instance ID (the value to copy for the reference above); `get` also shows the record ID when it differs. `-o json`/`-o yaml` and `--debug` expand to the full column set (slug, template, created).
+- **Account access control from the CLI: sub-users, roles, and permissions.** Three new account-level command groups (region-free, like `dns`): `zcp sub-user` (`list`/`create`/`update`/`block`/`unblock`/`delete`, alias `subuser`), `zcp role` (`list`/`get`/`create`/`update`/`delete`), and `zcp permission list`. Sub-users are addressable by **ID or email**; `create` requires `--name`, a company `--email`, a strong `--password` (8+ chars, mixed case + number + symbol), a `--role` slug, and one or more `--project` slugs — newly created sub-users start blocked until `unblock`. Roles group permission slugs from `zcp permission list`: `create`/`update` take repeatable `--permission`, which **replaces** the role's set (not additive); `update` preserves the flags you don't pass; and the predefined `owner`/`service-administrator`/`service-viewer` roles are protected from edit/delete with a clear message. Deletes are idempotent (including the API's 500 `No query results` for an already-deleted role). Verified end-to-end against the live API (list → create → update → block/unblock → delete) and covered by unit and smoke tests.
+- **Affinity-group `--type` help and docs corrected** to the four values the API actually accepts — `host affinity`, `host anti-affinity`, `non-strict host affinity`, `non-strict host anti-affinity` — replacing the previous `host-affinity` example, which the API rejects as invalid.
 
 ### Changed
 
