@@ -227,7 +227,7 @@ func newPlanStorageCmd() *cobra.Command {
 				}
 			}
 
-			headers := []string{"SLUG", "NAME", "STORAGE CATEGORY", "CEPH POOL", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"SLUG", "NAME", "STORAGE CATEGORY", "STORAGE POOL", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				slug := catSlug[p.StorageCategoryID]

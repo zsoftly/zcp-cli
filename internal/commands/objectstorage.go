@@ -62,7 +62,7 @@ func NewObjectStorageCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "object-storage",
 		Aliases: []string{"os"},
-		Short:   "Manage Ceph object storage instances",
+		Short:   "Manage object storage instances",
 	}
 	cmd.AddCommand(newOSListCmd())
 	cmd.AddCommand(newOSGetCmd())
@@ -1207,7 +1207,7 @@ func newOSBucketSetACLCmd() *cobra.Command {
   zcp object-storage bucket set-acl my-storage-1 my-bucket --acl private`,
 		Long: `Set whether a bucket's objects are anonymously accessible.
 
-This applies an S3 bucket policy (the mechanism Ceph honors for anonymous access;
+This applies an S3 bucket policy (the mechanism that grants anonymous access;
 a bucket canned ACL does not grant object GET):
   private            objects are not publicly accessible (removes the policy)
   public-read        anyone can list the bucket and download objects

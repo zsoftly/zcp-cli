@@ -173,13 +173,13 @@ func resolveCloudProvider(cmd *cobra.Command, flagCloudProvider string) string {
 // computeServiceName is the catalog service that identifies the primary
 // infrastructure ("compute") cloud provider. Verified against the production
 // /cloud-providers endpoint, which returns three active providers:
-//   - "nimbo" (display "Cloud Stack"): serves "Virtual Machine" plus 19 more —
+//   - "nimbo" (display "Compute"): serves "Virtual Machine" plus 19 more —
 //     Block Storage, Network, VPC, Kubernetes, Load Balancer, IP Address,
 //     snapshots, ISO, autoscale, monitoring, storage tiers. This is the slug
 //     used by every create command except the two below.
-//   - "ceph" (display "Ceph"): serves only "Object Storage" — the object-storage
+//   - "ceph" (display "Object Storage"): serves only "Object Storage" — the object-storage
 //     command defaults to it directly.
-//   - "dns" (display "Dns"): serves only "Dns Domain" — the dns command defaults
+//   - "dns" (display "DNS"): serves only "Dns Domain" — the dns command defaults
 //     to it directly.
 //
 // Picking the provider that advertises "Virtual Machine" deterministically
