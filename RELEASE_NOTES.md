@@ -33,7 +33,7 @@ when the VM was created — manually-acquired IPs and the network's source-NAT I
 touched by this flag (those release when you delete the network/IP). The interactive
 confirmation prompt now says when the IP will be released:
 
-```
+```text
 WARNING: Delete "my-vm" is permanent and cannot be undone. Its auto-assigned public IP will also be released. [y/N]:
 ```
 
