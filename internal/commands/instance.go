@@ -1347,7 +1347,7 @@ func runInstancePurchaseAddon(cmd *cobra.Command, vmSlug, project, region, cloud
 // ---------- delete ----------
 
 func newInstanceDeleteCmd() *cobra.Command {
-	var yes, force bool
+	var yes, force, deletePublicIP bool
 
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
@@ -1355,11 +1355,16 @@ func newInstanceDeleteCmd() *cobra.Command {
 		Args:  exactArgs(1),
 		Example: `  zcp instance delete my-vm
   zcp instance delete my-vm --yes
-  zcp instance delete my-vm --force --yes`,
+  zcp instance delete my-vm --force --yes
+  zcp instance delete my-vm --delete-public-ip=false   # keep the auto-assigned public IP`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stderr, "WARNING: Delete %q is permanent and cannot be undone. [y/N]: ", slug)
+				ipNote := ""
+				if deletePublicIP {
+					ipNote = " Its auto-assigned public IP will also be released."
+				}
+				fmt.Fprintf(os.Stderr, "WARNING: Delete %q is permanent and cannot be undone.%s [y/N]: ", slug, ipNote)
 				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
 				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -1368,15 +1373,16 @@ func newInstanceDeleteCmd() *cobra.Command {
 					return nil
 				}
 			}
-			return runInstanceDelete(cmd, slug, force)
+			return runInstanceDelete(cmd, slug, force, deletePublicIP)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Force immediate expunge from hypervisor (passes expunge=true)")
+	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Release the public IP(s) auto-assigned to the VM at creation. Manually-acquired and source-NAT IPs are unaffected. Use --delete-public-ip=false to keep them (e.g. if the IP is reused by NAT/LB/shared networks)")
 	return cmd
 }
 
-func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
+func runInstanceDelete(cmd *cobra.Command, slug string, force, deletePublicIP bool) error {
 	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -1397,7 +1403,7 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force bool) error {
 		return err
 	}
 
-	if err := svc.Delete(ctx, vm.Slug, force); err != nil {
+	if err := svc.Delete(ctx, vm.Slug, force, deletePublicIP); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", vm.Slug)
 			return nil

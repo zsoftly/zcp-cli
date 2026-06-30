@@ -5,6 +5,16 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.20] - 2026-06-30
+
+### Added
+
+- **`zcp instance delete` releases the VM's auto-assigned public IP by default.** Deleting a VM now sends `delete_public_ip=true`, so the public IP(s) the CMP auto-assigned at creation are released with the VM instead of being left `Allocated` (orphaned and still billable). This matches the "Delete auto-assigned public IPs when deleting VM" option in the portal. Manually-acquired and source-NAT IPs are **not** affected — those release only when their network/IP is removed. Pass `--delete-public-ip=false` to keep the IP (e.g. when it's reused by NAT, a load balancer, or a shared network). The interactive confirmation prompt notes the IP release when the flag is on.
+
+### Changed
+
+- **Behavior change:** `zcp instance delete` previously left the VM's auto-assigned public IP allocated (and billing) after the VM was gone. It is now released by default. Use `--delete-public-ip=false` to preserve the old behavior.
+
 ## [v0.0.19] - 2026-06-21
 
 ### Fixed
