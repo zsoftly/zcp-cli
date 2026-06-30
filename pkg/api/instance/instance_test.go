@@ -164,6 +164,9 @@ func TestDelete(t *testing.T) {
 		if got := r.URL.Query().Get("expunge"); got != "" {
 			t.Errorf("expunge query param should be absent, got %q", got)
 		}
+		if got := r.URL.Query().Get("delete_public_ip"); got != "" {
+			t.Errorf("delete_public_ip query param should be absent, got %q", got)
+		}
 		called = true
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -175,7 +178,7 @@ func TestDelete(t *testing.T) {
 	defer srv.Close()
 
 	svc := instance.NewService(newClient(srv.URL))
-	if err := svc.Delete(context.Background(), "test-vm", false); err != nil {
+	if err := svc.Delete(context.Background(), "test-vm", false, false); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 	if !called {
@@ -192,6 +195,9 @@ func TestDelete_Force(t *testing.T) {
 		if got := r.URL.Query().Get("expunge"); got != "true" {
 			t.Errorf("expunge = %q, want %q", got, "true")
 		}
+		if got := r.URL.Query().Get("delete_public_ip"); got != "true" {
+			t.Errorf("delete_public_ip = %q, want %q", got, "true")
+		}
 		called = true
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -203,8 +209,39 @@ func TestDelete_Force(t *testing.T) {
 	defer srv.Close()
 
 	svc := instance.NewService(newClient(srv.URL))
-	if err := svc.Delete(context.Background(), "test-vm", true); err != nil {
+	if err := svc.Delete(context.Background(), "test-vm", true, true); err != nil {
 		t.Fatalf("Delete(force) error = %v", err)
+	}
+	if !called {
+		t.Error("DELETE request was never made")
+	}
+}
+
+func TestDelete_DeletePublicIP(t *testing.T) {
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/virtual-machines/test-vm" {
+			t.Errorf("method=%s path=%s", r.Method, r.URL.Path)
+		}
+		if got := r.URL.Query().Get("delete_public_ip"); got != "true" {
+			t.Errorf("delete_public_ip = %q, want %q", got, "true")
+		}
+		if got := r.URL.Query().Get("expunge"); got != "" {
+			t.Errorf("expunge query param should be absent, got %q", got)
+		}
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Virtual machine deleted successfully.",
+			"data":    nil,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	if err := svc.Delete(context.Background(), "test-vm", false, true); err != nil {
+		t.Fatalf("Delete(deletePublicIP) error = %v", err)
 	}
 	if !called {
 		t.Error("DELETE request was never made")
@@ -222,7 +259,7 @@ func TestDelete_NotFound(t *testing.T) {
 	defer srv.Close()
 
 	svc := instance.NewService(newClient(srv.URL))
-	if err := svc.Delete(context.Background(), "nonexistent", false); err == nil {
+	if err := svc.Delete(context.Background(), "nonexistent", false, false); err == nil {
 		t.Fatal("Delete() expected error for 404, got nil")
 	}
 }

@@ -561,10 +561,19 @@ func (s *Service) PurchaseAddon(ctx context.Context, req PurchaseAddonRequest) (
 // Delete permanently destroys a virtual machine.
 // If expunge is true, ?expunge=true is sent to force immediate purge from the hypervisor
 // rather than leaving the VM in a soft-deleted/Destroyed state pending CloudStack expunge.
-func (s *Service) Delete(ctx context.Context, slug string, expunge bool) error {
-	var q url.Values
+// If deletePublicIP is true, ?delete_public_ip=true is sent so the CMP releases the public
+// IP(s) auto-assigned to the VM at creation. Manually-acquired and source-NAT IPs are not
+// affected — those are released only when their network/IP is removed.
+func (s *Service) Delete(ctx context.Context, slug string, expunge, deletePublicIP bool) error {
+	q := url.Values{}
 	if expunge {
-		q = url.Values{"expunge": {"true"}}
+		q.Set("expunge", "true")
+	}
+	if deletePublicIP {
+		q.Set("delete_public_ip", "true")
+	}
+	if len(q) == 0 {
+		q = nil
 	}
 	if err := s.client.Delete(ctx, "/virtual-machines/"+slug, q); err != nil {
 		return fmt.Errorf("deleting virtual machine %s: %w", slug, err)

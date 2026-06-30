@@ -140,6 +140,7 @@ zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 222
 zcp instance delete <slug>
 zcp instance delete <slug> --yes                # skip confirmation
 zcp instance delete <slug> --force --yes        # force-expunge from hypervisor immediately
+zcp instance delete <slug> --delete-public-ip=false   # keep the VM's auto-assigned public IP (default: released)
 ```
 
 The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance
