@@ -26,7 +26,7 @@ func newStorageCategoryListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
 		Short:   "List storage categories",
-		Example: `  zcp storage-category list --region yow-1`,
+		Example: `  zcp storage-category list --region yul-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStorageCategoryList(cmd, region)
 		},

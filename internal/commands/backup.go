@@ -67,14 +67,13 @@ func newBackupCreateCmd() *cobra.Command {
 	var blockstorageSlug, interval, cloudProvider, region, billingCycle, plan, pseudoService, project string
 	var at, immediate int
 
-	// TODO(disabled-plan): `backup-1` is a real plan but backup plans are not yet
-	// enabled in the catalog (`zcp plan backup` returns []). Keep the example/help
-	// as-is — it works once backup plans are enabled.
+	// Backup plans are region-specific (`zcp plan backup --region yul-1` returns
+	// backup-yul; yow-1 returns backup-yow), verified against the live catalog.
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a block storage backup",
-		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-1 --project default
-  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --region yow-1 --billing-cycle hourly --plan backup-1 --project default`,
+		Example: `  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 --region yul-1 --billing-cycle hourly --plan backup-yul --project default-9
+  zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 0 --region yul-1 --billing-cycle hourly --plan backup-yul --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")
@@ -146,7 +145,7 @@ func newBackupCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. backup-1 (required)")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. backup-yul (required; see 'zcp plan backup')")
 	cmd.Flags().StringVar(&pseudoService, "pseudo-service", "Virtual Machine Backup", "Service type for the backup")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	return cmd

@@ -89,9 +89,9 @@ func newIPAllocateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "allocate",
 		Short: "Allocate a new public IP address",
-		Example: `  zcp ip allocate --plan ipv4-yow --billing-cycle hourly
-  zcp ip allocate --plan ipv4-yow --billing-cycle hourly --network en-001001-0018
-  zcp ip allocate --plan ipv4-yow --billing-cycle hourly --vpc my-vpc`,
+		Example: `  zcp ip allocate --plan ipv4-yul --billing-cycle hourly
+  zcp ip allocate --plan ipv4-yul --billing-cycle hourly --network en-001001-0018
+  zcp ip allocate --plan ipv4-yul --billing-cycle hourly --vpc my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
