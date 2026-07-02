@@ -191,8 +191,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
-  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-li-yow-1 --region yow-1 --project default --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-la-yul-1 --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
+  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-la-yul-1 --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -535,8 +535,8 @@ func newK8sClusterUpgradeCmd() *cobra.Command {
 		Use:   "upgrade <slug>",
 		Short: "Upgrade (change plan of) a Kubernetes cluster",
 		Args:  exactArgs(1),
-		Example: `  zcp kubernetes upgrade my-cluster --plan k8s-xli-yow-1
-  zcp kubernetes upgrade my-cluster --plan k8s-xli-yow-1 --billing-cycle hourly`,
+		Example: `  zcp kubernetes upgrade my-cluster --plan k8s-xla-yul-1
+  zcp kubernetes upgrade my-cluster --plan k8s-xla-yul-1 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")

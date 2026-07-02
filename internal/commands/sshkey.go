@@ -89,8 +89,8 @@ Keys must be unique — both fields are validated server-side:
     a key you already have (even under a different name) is rejected with
     "The public key has already been taken." To rename or replace a key, delete
     the existing one first ('zcp ssh-key delete <slug>'), then re-import.`,
-		Example: `  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..." --project default --region yul-1
-  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub --project default --region yul-1`,
+		Example: `  zcp ssh-key import --name mykey --public-key "ssh-rsa AAAA..." --project default-9 --region yul-1
+  zcp ssh-key import --name mykey --key-file ~/.ssh/id_rsa.pub --project default-9 --region yul-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -140,7 +140,7 @@ Keys must be unique — both fields are validated server-side:
 	cmd.Flags().StringVar(&publicKey, "public-key", "", "SSH public key string")
 	cmd.Flags().StringVar(&keyFile, "key-file", "", "Path to a file containing the SSH public key")
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required; or set ZCP_PROJECT)")
-	cmd.Flags().StringVar(&region, "region", "", "Region slug, e.g. yow-1, yul-1 (required; or set ZCP_REGION)")
+	cmd.Flags().StringVar(&region, "region", "", "Region slug, e.g. yul-1 (required; or set ZCP_REGION)")
 	return cmd
 }
 

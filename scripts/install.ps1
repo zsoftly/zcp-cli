@@ -51,5 +51,15 @@ if ($CurrentPath -notlike "*$InstallDir*") {
 
 Write-Ok "Installed ${BinaryName} to $InstallDir\${BinaryName}.exe"
 Write-Host ""
-Write-Info "Restart your terminal, then run: ${BinaryName} version"
+Write-Info "Restart your terminal, then configure ZCP:"
+Write-Host "    ${BinaryName} profile add default --region yul-1 --project default-9"
+Write-Host "    ${BinaryName} auth validate"
+Write-Host ""
+Write-Info "Or set PowerShell defaults for scripts:"
+Write-Host '    $env:ZCP_REGION="yul-1"'
+Write-Host '    $env:ZCP_PROJECT="default-9"'
+Write-Host ""
+Write-Info "Try it:"
+Write-Host "    ${BinaryName} instance list"
+Write-Host "    ${BinaryName} --help"
 Write-Host ""

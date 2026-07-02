@@ -119,7 +119,7 @@ func newVPNCGCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a new VPN customer gateway",
-		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 --region yow-1 --project default`,
+		Example: `  zcp vpn customer-gateway create --name remote-gw --gateway 203.0.113.1 --cidr 192.168.1.0/24 --psk mykey --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -230,7 +230,7 @@ func newVPNCGUpdateCmd() *cobra.Command {
 		Use:     "update <slug>",
 		Short:   "Update a VPN customer gateway",
 		Args:    exactArgs(1),
-		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --region yow-1 --project default`,
+		Example: `  zcp vpn customer-gateway update my-remote-gw --name new-name --psk newkey --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
@@ -417,8 +417,8 @@ func newVPNUserCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new VPN user",
-		Example: `  zcp vpn user create --username alice --region yow-1 --project default
-  zcp vpn user create --username alice --password secret --region yow-1 --project default`,
+		Example: `  zcp vpn user create --username alice --region yul-1 --project default-9
+  zcp vpn user create --username alice --password secret --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if username == "" {
 				return fmt.Errorf("--username is required")

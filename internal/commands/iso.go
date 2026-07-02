@@ -32,8 +32,8 @@ func newISOListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List ISO images",
-		Example: `  zcp iso list --region yow-1
-  zcp iso list --region yow-1 --output json`,
+		Example: `  zcp iso list --region yul-1
+  zcp iso list --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runISOList(cmd, region)
 		},
@@ -100,7 +100,7 @@ func newISOCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create (register) an ISO image",
 		Example: `  zcp iso create --name my-iso --url https://example.com/my.iso \
-    --project default --region yow-1 \
+    --project default-9 --region yul-1 \
     --os-type-id <uuid> --image-type "Operating System" \
     --os ubuntu --os-version "22.04 LTS" --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {

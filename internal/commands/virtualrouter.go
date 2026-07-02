@@ -77,8 +77,8 @@ func newVirtualRouterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a virtual router",
-		Example: `  zcp virtual-router create --name my-router --network en-001001-0018 --region yow-1 --project default
-  zcp virtual-router create --name my-router --network en-001001-0018 --plan virtual-private-cloud-vpc --region yow-1 --project default`,
+		Example: `  zcp virtual-router create --name my-router --network en-001001-0018 --region yul-1 --project default-9
+  zcp virtual-router create --name my-router --network en-001001-0018 --plan virtual-private-cloud-vpc-1 --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

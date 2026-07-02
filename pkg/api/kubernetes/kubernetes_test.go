@@ -86,8 +86,8 @@ func TestKubernetesListClustersWithFilters(t *testing.T) {
 		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
 			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
 		}
-		if got := r.URL.Query().Get("filter[project]"); got != "default" {
-			t.Errorf("filter[project] = %q, want %q", got, "default")
+		if got := r.URL.Query().Get("filter[project]"); got != "default-9" {
+			t.Errorf("filter[project] = %q, want %q", got, "default-9")
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":       "Success",
@@ -101,7 +101,7 @@ func TestKubernetesListClustersWithFilters(t *testing.T) {
 	defer srv.Close()
 
 	svc := kubernetes.NewService(newTestClient(srv))
-	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+	if _, err := svc.List(context.Background(), "yow-1", "default-9"); err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 }

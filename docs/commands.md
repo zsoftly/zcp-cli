@@ -3,9 +3,10 @@
 Copy-paste examples for every resource the CLI manages. Use `zcp <command> --help`
 for the full flag list of any command.
 
-> All examples use working defaults: region `yow-1`, project `default`, and billing
-> cycle `hourly`. Substitute your own values as needed — run `zcp region list` and
-> `zcp project list` to see what is available to your account.
+> All examples use working defaults: region `yul-1`, project `default-9` (every
+> account's initial project), and billing cycle `hourly`. Substitute your own values
+> as needed — run `zcp region list` and `zcp project list` to see what is available
+> to your account.
 
 ## The cloud provider is automatic
 
@@ -20,17 +21,19 @@ slugs.
 
 ## Set your other defaults once
 
-Region and project are still needed by most create commands. Export them once and
-omit the flags everywhere:
+Region and project are still needed by most create commands. Store them on your
+profile once (`zcp profile add default --region yul-1 --project default-9`) and
+every command picks them up automatically. For CI or scripts without a profile,
+export them instead:
 
 ```bash
-export ZCP_REGION=yow-1
-export ZCP_PROJECT=default
+export ZCP_REGION=yul-1
+export ZCP_PROJECT=default-9
 ```
 
-With those set, `zcp instance create --name my-vm --template ubuntu-2604-lts ...` no longer
-needs `--region` or `--project`. The examples below pass them explicitly so each one
-works on its own; drop them if you have exported the variables. See
+With either in place, `zcp instance create --name my-vm --template ubuntu-2604-lts-1 ...`
+no longer needs `--region` or `--project`. The examples below pass them explicitly so
+each one works on its own; drop them if you have configured defaults. See
 [configuration.md](configuration.md) for the full list of environment variables.
 
 ---
@@ -86,13 +89,13 @@ zcp instance get <id|name|slug>
 # Create — use --wait to block until the instance is Running
 zcp instance create \
   --name my-vm \
-  --project default \
-  --region yow-1 \
-  --template ubuntu-2604-lts \
-  --plan ci1l \
+  --project default-9 \
+  --region yul-1 \
+  --template ubuntu-2604-lts-1 \
+  --plan ca2sl \
   --billing-cycle hourly \
-  --storage-category nvme \
-  --blockstorage-plan b1g1 \
+  --storage-category pro-nvme \
+  --blockstorage-plan b2g1 \
   --ssh-key mykey
 
 zcp instance create ... --wait
@@ -110,7 +113,7 @@ zcp instance change-plan <slug> --plan <new-plan> --billing-cycle hourly
 zcp instance change-hostname <slug> --hostname new-hostname
 
 # Change OS (DESTRUCTIVE — reinstalls the VM)
-zcp instance change-os <slug> --template ubuntu-2604-lts
+zcp instance change-os <slug> --template ubuntu-2604-lts-1
 
 # Change startup script
 zcp instance change-script <slug> --user-data "#!/bin/bash\napt update"
@@ -155,11 +158,11 @@ reaches the target state, printing progress to stderr.
 zcp volume list
 zcp volume create \
   --name my-disk \
-  --project default \
-  --region yow-1 \
+  --project default-9 \
+  --region yul-1 \
   --billing-cycle hourly \
-  --storage-category nvme \
-  --plan b1g1
+  --storage-category pro-nvme \
+  --plan b2g1
 zcp volume create ... --vm <vm-slug>   # Attach on creation
 zcp volume attach <volume-slug> --vm <vm-slug>
 zcp volume detach <volume-slug>
@@ -171,9 +174,9 @@ zcp snapshot create \
   --volume <slug> \
   --name my-snapshot \
   --plan snapshot-per-gb \
-  --region yow-1 \
+  --region yul-1 \
   --billing-cycle hourly \
-  --project default
+  --project default-9
 zcp snapshot revert <snapshot-slug> --volume <volume-slug>
 
 # VM snapshots (whole-instance checkpoint)
@@ -181,10 +184,10 @@ zcp vm-snapshot list
 zcp vm-snapshot create \
   --vm <slug> \
   --name my-checkpoint \
-  --plan vm-snapshot-yow \
+  --plan vm-snapshot-yul \
   --billing-cycle hourly \
-  --project default \
-  --region yow-1
+  --project default-9 \
+  --region yul-1
 zcp vm-snapshot revert <slug>
 ```
 
@@ -197,15 +200,15 @@ zcp vm-snapshot revert <slug>
 zcp network list
 zcp network get <slug>                           # provider state: CIDR, state, VPC, attached ACL
 zcp plan network                                 # network plan slugs for --network-plan
-zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly \
-  --region yow-1 --project default
+zcp network create --name my-net --network-plan inet-yul --billing-cycle hourly \
+  --region yul-1 --project default-9
 zcp network update <slug> --name "New Name"
 zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
 
 # VPC subnets (tiers) — optionally attach a custom ACL at creation
 zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
   --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
-  --region yow-1 --project default
+  --region yul-1 --project default-9
 
 # Public IP addresses
 zcp ip list
@@ -243,18 +246,18 @@ zcp portforward create \
 zcp vpc list
 zcp vpc create \
   --name my-vpc \
-  --region yow-1 \
-  --project default \
+  --region yul-1 \
+  --project default-9 \
   --plan virtual-private-cloud-vpc-1 \
   --network-address 10.1.0.1 \
   --size 16 \
   --billing-cycle hourly \
-  --storage-category nvme
+  --storage-category pro-nvme
 
 # 1. add a tier (subnet) inside the VPC — REQUIRED before any VM can use it
 zcp network create --name web-tier --vpc my-vpc \
   --gateway 10.1.1.1 --netmask 255.255.255.0 \
-  --billing-cycle hourly --region yow-1 --project default
+  --billing-cycle hourly --region yul-1 --project default-9
 # 2. attach a VM to the tier ('instance create' provisions its own network via
 #    --network-plan and does not take a VPC tier directly, so attach afterward)
 zcp instance add-network <vm-slug> --network web-tier
@@ -296,7 +299,7 @@ zcp vpn delete <slug>
 # rejected with "The public key has already been taken." Delete the old key
 # first to rename/replace it.
 zcp ssh-key list
-zcp ssh-key import --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)" --project default --region yul-1
+zcp ssh-key import --name mykey --public-key "$(cat ~/.ssh/id_rsa.pub)" --project default-9 --region yul-1
 zcp ssh-key delete <slug>
 zcp instance create ... --ssh-key mykey   # reference the key by name on a new VM
 
@@ -307,8 +310,8 @@ zcp instance create ... --ssh-key mykey   # reference the key by name on a new V
 #   "non-strict host affinity"    best-effort same host (falls back if no capacity)
 #   "non-strict host anti-affinity"  best-effort different hosts (falls back if no capacity)
 # --region and --project are required; --cloud-provider is auto-detected.
-zcp affinity-group list --region yul-1 --project default
-zcp affinity-group create --name my-ag --type "host affinity" --region yul-1 --project default
+zcp affinity-group list --region yul-1 --project default-9
+zcp affinity-group create --name my-ag --type "host affinity" --region yul-1 --project default-9
 zcp affinity-group delete <slug>
 ```
 
@@ -357,7 +360,7 @@ zcp dns list
 zcp dns show <slug>
 
 # Create a domain (cloud provider + region are selected automatically)
-zcp dns create --name example.com --project default
+zcp dns create --name example.com --project default-9
 
 # Create a record
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
@@ -373,11 +376,17 @@ zcp dns delete <domain-slug>
 ## Backup
 
 ```bash
+# Block storage (volume) backups — plans are region-specific: zcp plan backup
 zcp backup list
-zcp backup get <slug>
-zcp backup create --instance <slug> --name my-backup
-zcp backup restore <slug>
+zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 \
+  --plan backup-yul --billing-cycle hourly --region yul-1 --project default-9
 zcp backup delete <slug>
+
+# VM backups
+zcp vm-backup list
+zcp vm-backup create <vm-slug> --interval daily --plan backup-yul \
+  --pseudo-service vm-backup --billing-cycle hourly --region yul-1 --project default-9
+zcp vm-backup delete <slug>
 ```
 
 ---
@@ -385,18 +394,18 @@ zcp backup delete <slug>
 ## Autoscale
 
 ```bash
-zcp autoscale list --region yow-1 --project default
+zcp autoscale list --region yul-1 --project default-9
 
 # Create a group. --name, --plan, --template, --zone, --min, --max, --region,
 # --project are required; --network, --cooldown optional; --cloud-provider auto-detected.
-zcp autoscale create --name web-group --plan ci1s --template ubuntu-2604-lts \
-  --min 1 --max 5 --zone yow-1 --region yow-1 --project default
+zcp autoscale create --name web-group --plan ca2sxs --template ubuntu-2604-lts-1 \
+  --min 1 --max 5 --zone yul-1 --region yul-1 --project default-9
 
 # Lifecycle
 zcp autoscale enable <slug>
 zcp autoscale disable <slug>
-zcp autoscale change-plan <slug> --plan ci2s
-zcp autoscale change-template <slug> --template ubuntu-2604-lts
+zcp autoscale change-plan <slug> --plan ca2sm
+zcp autoscale change-template <slug> --template ubuntu-2604-lts-1
 zcp autoscale delete <slug>
 
 # Scale-up policies (create / update / delete) and scale-down conditions.
@@ -422,7 +431,7 @@ zcp monitoring delete <slug>
 
 ```bash
 zcp project list
-zcp project create --name default --icon cloud-15 --purpose "Development"
+zcp project create --name dev-project --icon cloud-15 --purpose "Development"
 zcp project update <slug> --name "New Name" --description "Updated description"
 zcp project delete <slug>
 zcp project dashboard <slug>
@@ -445,9 +454,9 @@ zcp kubernetes list
 zcp kubernetes create \
   --name my-cluster \
   --version v1.36.1 \
-  --plan k8s-li-yow-1 \
-  --region yow-1 \
-  --project default \
+  --plan k8s-la-yul-1 \
+  --region yul-1 \
+  --project default-9 \
   --billing-cycle hourly \
   --workers 3 \
   --storage-category pro-nvme \
@@ -457,9 +466,9 @@ zcp kubernetes create \
 zcp kubernetes create \
   --name ha-cluster \
   --version v1.36.1 \
-  --plan k8s-li-yow-1 \
-  --region yow-1 \
-  --project default \
+  --plan k8s-la-yul-1 \
+  --region yul-1 \
+  --project default-9 \
   --billing-cycle hourly \
   --workers 3 \
   --control-nodes 3 \
@@ -470,7 +479,7 @@ zcp kubernetes create \
 # Start / stop / upgrade
 zcp kubernetes start <slug>
 zcp kubernetes stop <slug>
-zcp kubernetes upgrade <slug> --plan k8s-xli-yow-1
+zcp kubernetes upgrade <slug> --plan k8s-xla-yul-1
 
 # To cancel/delete a cluster, use billing cancel-service:
 zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
@@ -490,8 +499,8 @@ zcp object-storage get <slug>
 # from the plan automatically, so you do not pass --storage-category.
 zcp object-storage create \
   --name my-store \
-  --project default \
-  --region os-yow \
+  --project default-9 \
+  --region os-yul \
   --billing-cycle hourly \
   --plan o2100g
 
@@ -713,8 +722,8 @@ zcp region list --output json
 ```json
 [
   {
-    "slug": "yow-1",
-    "name": "YOW-1",
+    "slug": "yul-1",
+    "name": "YUL-1",
     "country": "Canada",
     "continent": "North America",
     "status": "active"
@@ -729,8 +738,8 @@ zcp region list --output yaml
 ```
 
 ```yaml
-- slug: yow-1
-  name: YOW-1
+- slug: yul-1
+  name: YUL-1
   country: Canada
   continent: North America
   status: active

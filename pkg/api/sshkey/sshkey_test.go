@@ -94,7 +94,7 @@ func TestSSHKeyCreate(t *testing.T) {
 	req := sshkey.CreateRequest{
 		Name:      "imported-key",
 		PublicKey: "ssh-rsa AAAAB3NzaC1yc2EAAAA test@host",
-		Project:   "default",
+		Project:   "default-9",
 		Region:    "yul-1",
 	}
 	key, err := svc.Create(context.Background(), req)
@@ -111,8 +111,8 @@ func TestSSHKeyCreate(t *testing.T) {
 		t.Errorf("body public_key = %v, want public_key value", gotBody["public_key"])
 	}
 	// project and region must always be sent — the API 500s without them.
-	if gotBody["project"] != "default" {
-		t.Errorf("body project = %v, want %q", gotBody["project"], "default")
+	if gotBody["project"] != "default-9" {
+		t.Errorf("body project = %v, want %q", gotBody["project"], "default-9")
 	}
 	if gotBody["region"] != "yul-1" {
 		t.Errorf("body region = %v, want %q", gotBody["region"], "yul-1")

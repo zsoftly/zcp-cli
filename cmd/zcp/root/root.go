@@ -89,6 +89,20 @@ func enforceScope(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Inject the resolved scope back onto the command's flags so the command
+	// layer sees the same flag > env > profile-default fallback the gate just
+	// applied. Without this a configured user passes the gate but commands that
+	// read their own --region/--project (e.g. create) still error "--region is
+	// required" because the bare resolvers don't consult the profile.
+	// NOTE: Set() marks the flag Changed, so gated commands must not use
+	// Flags().Changed("region"/"project") to detect an explicit user flag.
+	if region != "" {
+		_ = cmd.Flags().Set("region", region)
+	}
+	if project != "" {
+		_ = cmd.Flags().Set("project", project)
+	}
+
 	if region == "" {
 		return fmt.Errorf("--region is required (or set ZCP_REGION, or `zcp profile add` a default) for %q — "+
 			"resources and the catalog are region-specific; only DNS and account-level commands are region-free. "+
@@ -110,9 +124,10 @@ It provides a scriptable, cross-platform way to manage cloud resources including
 instances, volumes, networks, VPCs, Kubernetes clusters, and more.
 
 Get started:
-  zcp profile add default  Configure your API credentials
+  zcp profile add default --region yul-1 --project default-9
+                           Configure credentials + default region/project
   zcp auth validate        Verify your credentials work
-  zcp region list           List available regions
+  zcp region list          List available regions
   zcp instance list        List your instances
 
 Environment variables:

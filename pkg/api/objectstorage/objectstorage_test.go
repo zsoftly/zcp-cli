@@ -126,7 +126,7 @@ func TestCreate(t *testing.T) {
 	svc := objectstorage.NewService(newTestClient(t, srv))
 	req := objectstorage.CreateRequest{
 		Name:            "new-storage",
-		Project:         "default",
+		Project:         "default-9",
 		CloudProvider:   "ceph",
 		Region:          "yul-1",
 		BillingCycle:    "hourly",

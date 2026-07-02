@@ -81,7 +81,15 @@ else
 fi
 
 echo ""
-echo "  Usage:"
-echo "    zcp profile add default"
+echo "  Configure ZCP:"
+echo "    zcp profile add default --region yul-1 --project default-9"
+echo "    zcp auth validate"
+echo ""
+echo "  Or set shell defaults for scripts:"
+echo "    export ZCP_REGION=yul-1"
+echo "    export ZCP_PROJECT=default-9"
+echo ""
+echo "  Try it:"
+echo "    zcp instance list"
 echo "    zcp --help"
 echo ""

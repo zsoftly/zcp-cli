@@ -90,7 +90,7 @@ func TestVMBackupCreate(t *testing.T) {
 		BillingCycle:  "hourly",
 		Plan:          "vm-backup-basic",
 		PseudoService: "Virtual Machine Backup",
-		Project:       "default",
+		Project:       "default-9",
 	}
 	resp, err := svc.Create(context.Background(), "my-vm", req)
 	if err != nil {

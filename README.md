@@ -56,8 +56,10 @@ Requirements: Go 1.26.4+, GNU Make.
 ## Quick Start
 
 ```bash
-# 1. Add your first profile — prompts for bearer token
-zcp profile add default
+# 1. Add your first profile — prompts for bearer token. Every account starts
+#    with the project default-9 (like us-east-1 on AWS); if you use another
+#    project, find its slug with 'zcp project list'.
+zcp profile add default --region yul-1 --project default-9
 
 # 2. Confirm your credentials work
 zcp auth validate
@@ -69,11 +71,11 @@ zcp region list
 zcp instance list
 ```
 
-Your cloud provider is auto-detected and saved to your profile by `zcp auth validate`, so you never pass it. To also avoid repeating `--region` and `--project` on create commands, export them once:
+Your cloud provider is auto-detected and saved to your profile by `zcp auth validate`, so you never pass it. With region and project stored on the profile, every command — including create — picks them up automatically. For CI or scripts without a profile, export them instead:
 
 ```bash
-export ZCP_REGION=yow-1
-export ZCP_PROJECT=default
+export ZCP_REGION=yul-1
+export ZCP_PROJECT=default-9
 ```
 
 ---
@@ -88,8 +90,8 @@ Profiles store your bearer token (and optional API URL) and are written to a `06
 | Windows     | `%AppData%\zcp\config.yaml` |
 
 ```bash
-zcp profile add default                       # interactive (prompts for token)
-zcp profile add staging --bearer-token TOKEN  # non-interactive
+zcp profile add default --region yul-1 --project default-9
+zcp profile add staging --bearer-token TOKEN --region yul-1 --project default-9
 zcp profile list                              # list profiles
 zcp profile use staging                       # switch active profile
 ```
