@@ -23,8 +23,9 @@ slugs.
 
 Region and project are still needed by most create commands. Store them on your
 profile once (`zcp profile add default --region yul-1 --project default-9`) and
-every command picks them up automatically. For CI or scripts without a profile,
-export them instead:
+scoped commands pick them up automatically, except `dns create` and
+`object-storage`, which manage their own scope (see their sections below). For
+CI or scripts without a profile, export them instead:
 
 ```bash
 export ZCP_REGION=yul-1

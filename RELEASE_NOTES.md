@@ -1,13 +1,13 @@
 # zcp v0.0.21 Release Notes
 
-## Profile defaults now work everywhere — including create commands
+## Profile defaults now work everywhere, including create commands
 
 `zcp profile add default --region yul-1 --project default-9` stores your default scope
 so you never repeat `--region`/`--project`. Until now that promise only held for
 list/get commands: create and mutate commands (e.g. `network create`, `instance create`)
 resolved their own scope from flags and environment variables only, so a fully
-configured user still hit `--region is required`. That gap is closed — configure once,
-and every command picks the defaults up.
+configured user still hit `--region is required`. That gap is closed: configure once,
+and scoped commands pick the defaults up.
 
 Highlights:
 
@@ -15,10 +15,10 @@ Highlights:
   scope gate now injects the resolved scope (flag > env > profile default, respecting
   `--profile`) onto the command's flags. Verified end-to-end against the production API.
 - **First-run setup points at the production defaults.** The installers print
-  copy-paste setup for `zcp profile add default --region yul-1 --project default-9` —
+  copy-paste setup for `zcp profile add default --region yul-1 --project default-9`;
   every account's initial project is `default-9` (like `us-east-1` on AWS).
-- **All command examples use slugs verified against the live production catalog** —
-  broken template, backup, and virtual-router plan slugs are fixed.
+- **All command examples use slugs verified against the live production catalog.**
+  Broken template, backup, and virtual-router plan slugs are fixed.
 
 ---
 
@@ -70,7 +70,7 @@ restore` subcommands. Verified live in yul-1: `ca2sl`/`ca2sm`/`ca2sxs`, `b2g1`,
 
 No breaking changes. If you have profile defaults configured (`zcp profile add`
 with `--region`/`--project`), create/mutate commands that previously errored
-without explicit flags now use those defaults automatically — pass `--region`/
+without explicit flags now use those defaults automatically; pass `--region`/
 `--project` (or set `ZCP_REGION`/`ZCP_PROJECT`) to override per invocation.
 
 ---

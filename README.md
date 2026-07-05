@@ -56,7 +56,7 @@ Requirements: Go 1.26.4+, GNU Make.
 ## Quick Start
 
 ```bash
-# 1. Add your first profile — prompts for bearer token. Every account starts
+# 1. Add your first profile (prompts for bearer token). Every account starts
 #    with the project default-9 (like us-east-1 on AWS); if you use another
 #    project, find its slug with 'zcp project list'.
 zcp profile add default --region yul-1 --project default-9
@@ -71,7 +71,9 @@ zcp region list
 zcp instance list
 ```
 
-Your cloud provider is auto-detected and saved to your profile by `zcp auth validate`, so you never pass it. With region and project stored on the profile, every command — including create — picks them up automatically. For CI or scripts without a profile, export them instead:
+Your compute cloud provider is auto-detected and saved to your profile by `zcp auth validate` (and `zcp profile add`), so compute commands normally don't need it; `--cloud-provider` / `ZCP_CLOUD_PROVIDER` remain as overrides (e.g. for CI that skips `auth validate`). DNS and object storage select their own providers automatically.
+
+Region and project stored on the profile are picked up automatically by scoped commands, including create. Two groups manage their own scope instead: `dns create` (fixed `default` region; pass `--project` explicitly) and `object-storage` (object-storage regions `os-yul`/`os-yow`). For CI or scripts without a profile, export the defaults instead:
 
 ```bash
 export ZCP_REGION=yul-1
