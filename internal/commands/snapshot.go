@@ -72,7 +72,7 @@ func newSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Create a block storage snapshot",
-		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --region yow-1 --billing-cycle hourly --project default`,
+		Example: `  zcp snapshot create --volume root-1234 --name my-snapshot --plan snapshot-per-gb --region yul-1 --billing-cycle hourly --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if blockstorageSlug == "" {
 				return fmt.Errorf("--volume is required")

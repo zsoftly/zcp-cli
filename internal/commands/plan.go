@@ -57,8 +57,8 @@ func newPlanNetworkCmd() *cobra.Command {
 		Long: `List Network plans (isolated and L2 network offerings).
 
 The plan slug is the value for "zcp network create --network-plan".`,
-		Example: `  zcp plan network --region yow-1
-  zcp plan network --region yow-1 --output json`,
+		Example: `  zcp plan network --region yul-1
+  zcp plan network --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -103,8 +103,8 @@ func newPlanVMCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "vm",
 		Short: "List Virtual Machine plans",
-		Example: `  zcp plan vm --region yow-1
-  zcp plan vm --region yow-1 --output json`,
+		Example: `  zcp plan vm --region yul-1
+  zcp plan vm --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -151,8 +151,8 @@ func newPlanRouterCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "router",
 		Short: "List Virtual Router plans",
-		Example: `  zcp plan router --region yow-1
-  zcp plan router --region yow-1 --output json`,
+		Example: `  zcp plan router --region yul-1
+  zcp plan router --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -199,8 +199,8 @@ func newPlanStorageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "storage",
 		Short: "List Block Storage plans",
-		Example: `  zcp plan storage --region yow-1
-  zcp plan storage --region yow-1 --output json`,
+		Example: `  zcp plan storage --region yul-1
+  zcp plan storage --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -257,8 +257,8 @@ func newPlanLBCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "lb",
 		Short: "List Load Balancer plans",
-		Example: `  zcp plan lb --region yow-1
-  zcp plan lb --region yow-1 --output json`,
+		Example: `  zcp plan lb --region yul-1
+  zcp plan lb --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -304,8 +304,8 @@ func newPlanK8sCmd() *cobra.Command {
 		Use:     "kubernetes",
 		Short:   "List Kubernetes plans",
 		Aliases: []string{"k8s"},
-		Example: `  zcp plan kubernetes --region yow-1
-  zcp plan k8s --region yow-1 --output json`,
+		Example: `  zcp plan kubernetes --region yul-1
+  zcp plan k8s --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -351,8 +351,8 @@ func newPlanIPCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "ip",
 		Short: "List IP Address plans",
-		Example: `  zcp plan ip --region yow-1
-  zcp plan ip --region yow-1 --output json`,
+		Example: `  zcp plan ip --region yul-1
+  zcp plan ip --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -397,8 +397,8 @@ func newPlanVMSnapshotCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "vm-snapshot",
 		Short: "List VM Snapshot plans",
-		Example: `  zcp plan vm-snapshot --region yow-1
-  zcp plan vm-snapshot --region yow-1 --output json`,
+		Example: `  zcp plan vm-snapshot --region yul-1
+  zcp plan vm-snapshot --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -442,8 +442,8 @@ func newPlanTemplateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "template",
 		Short: "List My Template plans",
-		Example: `  zcp plan template --region yow-1
-  zcp plan template --region yow-1 --output json`,
+		Example: `  zcp plan template --region yul-1
+  zcp plan template --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -533,8 +533,8 @@ func newPlanISOCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "iso",
 		Short: "List ISO plans",
-		Example: `  zcp plan iso --region yow-1
-  zcp plan iso --region yow-1 --output json`,
+		Example: `  zcp plan iso --region yul-1
+  zcp plan iso --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -579,8 +579,8 @@ func newPlanBackupCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "backup",
 		Short: "List Backup plans",
-		Example: `  zcp plan backup --region yow-1
-  zcp plan backup --region yow-1 --output json`,
+		Example: `  zcp plan backup --region yul-1
+  zcp plan backup --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {

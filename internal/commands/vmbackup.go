@@ -87,15 +87,14 @@ func newVMBackupCreateCmd() *cobra.Command {
 		coupon        string
 	)
 
-	// TODO(disabled-plan): `backup-basic` is a real plan but backup plans are not
-	// yet enabled in the catalog (`zcp plan backup` returns []). Keep the example
-	// as-is — it works once backup plans are enabled.
+	// Backup plans are region-specific (`zcp plan backup --region yul-1` returns
+	// backup-yul; yow-1 returns backup-yow), verified against the live catalog.
 	cmd := &cobra.Command{
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",
 		Args:  exactArgs(1),
-		Example: `  zcp vm-backup create my-vm --interval daily --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default
-  zcp vm-backup create my-vm --interval daily --immediate 1 --region yow-1 --billing-cycle hourly --plan backup-basic --pseudo-service vm-backup --project default`,
+		Example: `  zcp vm-backup create my-vm --interval daily --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9
+  zcp vm-backup create my-vm --interval daily --immediate 1 --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {

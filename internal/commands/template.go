@@ -36,9 +36,9 @@ func newTemplateListCmd() *cobra.Command {
 		Long: `List available public templates for a region.
 
 A region is required; pass --region, set ZCP_REGION, or configure a profile default.`,
-		Example: `  zcp template list --region yow-1
-  ZCP_REGION=yow-1 zcp template list
-  zcp template list --region yow-1 --output json`,
+		Example: `  zcp template list --region yul-1
+  ZCP_REGION=yul-1 zcp template list
+  zcp template list --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTemplateList(cmd, region)
 		},
@@ -156,7 +156,7 @@ func newTemplateAccountCreateCmd() *cobra.Command {
 		Use:   "account-create",
 		Short: "Create an account template",
 		Example: `  zcp template account-create --name my-template \
-    --region yow-1 --project default --os-type-id <uuid> \
+    --region yul-1 --project default-9 --os-type-id <uuid> \
     --image-type "Operating System" --os ubuntu --os-version "22.04 LTS" \
     --billing-cycle hourly --url https://example.com/image.qcow2 --format QCOW2`,
 		RunE: func(cmd *cobra.Command, args []string) error {

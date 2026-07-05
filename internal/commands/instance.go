@@ -356,9 +356,9 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly
-  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --wait
-  zcp instance create --name my-vm --project default --region yow-1 --template ubuntu-2604-lts --plan ci1l --billing-cycle hourly --ssh-key mykey   # import the key first with 'zcp ssh-key import'`,
+		Example: `  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly
+  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --wait
+  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --ssh-key mykey   # import the key first with 'zcp ssh-key import'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -991,7 +991,7 @@ func newInstanceChangePlanCmd() *cobra.Command {
 		Use:     "change-plan <slug>",
 		Short:   "Change the plan of a virtual machine",
 		Args:    exactArgs(1),
-		Example: `  zcp instance change-plan my-vm --plan ci1m --billing-cycle hourly`,
+		Example: `  zcp instance change-plan my-vm --plan ca2sm --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if plan == "" {
 				return fmt.Errorf("--plan is required")
@@ -1047,8 +1047,8 @@ func newInstanceChangeOSCmd() *cobra.Command {
 		Use:   "change-os <slug>",
 		Short: "Change the OS template of a virtual machine (DESTRUCTIVE)",
 		Args:  exactArgs(1),
-		Example: `  zcp instance change-os my-vm --template ubuntu-2604-lts
-  zcp instance change-os my-vm --template ubuntu-2604-lts --yes`,
+		Example: `  zcp instance change-os my-vm --template ubuntu-2604-lts-1
+  zcp instance change-os my-vm --template ubuntu-2604-lts-1 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if template == "" {
 				return fmt.Errorf("--template is required")
@@ -1261,7 +1261,7 @@ func newInstancePurchaseAddonCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "purchase-addon",
 		Short:   "Purchase an addon for a virtual machine",
-		Example: `  zcp instance purchase-addon --vm my-vm --project default --region yow-1 --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
+		Example: `  zcp instance purchase-addon --vm my-vm --project default-9 --region yul-1 --addon-slug remote-desktop-license --addon-category microsoft-spla-licenses --addon-id a1b2c3d4-e5f6-7890-abcd-ef1234567890 --billing-cycle hourly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--vm is required")

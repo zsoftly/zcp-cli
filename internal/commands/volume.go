@@ -96,9 +96,9 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new block storage volume",
-		Example: `  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan b1g1
-  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category pro-nvme --size 50
-  zcp volume create --name my-disk --project default --region yow-1 --billing-cycle hourly --storage-category nvme --plan b1g1 --vm vm-slug`,
+		Example: `  zcp volume create --name my-disk --project default-9 --region yul-1 --billing-cycle hourly --storage-category pro-nvme --plan b2g1
+  zcp volume create --name my-disk --project default-9 --region yul-1 --billing-cycle hourly --storage-category pro-nvme --size 50
+  zcp volume create --name my-disk --project default-9 --region yul-1 --billing-cycle hourly --storage-category pro-nvme --plan b2g1 --vm vm-slug`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -176,8 +176,8 @@ func newVolumeCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly (required)")
-	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. nvme (required)")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. b1g1 (mutually exclusive with --size)")
+	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. pro-nvme (required)")
+	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug, e.g. b2g1 (mutually exclusive with --size)")
 	cmd.Flags().IntVar(&size, "size", 0, "Storage size in GB for custom-tier plans (mutually exclusive with --plan)")
 	cmd.Flags().StringVar(&vmSlug, "vm", "", "Virtual machine slug to attach on creation")
 	cmd.Flags().StringVar(&coupon, "coupon", "", "Coupon code")

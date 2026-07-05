@@ -148,7 +148,7 @@ func TestK8sCreateRequiresBillingCycle(t *testing.T) {
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs([]string{"kubernetes", "create",
 		"--name", "test", "--version", "v1.28.4", "--plan", "k8s-1",
-		"--cloud-provider", "nimbo", "--region", "noida", "--project", "default",
+		"--cloud-provider", "nimbo", "--region", "noida", "--project", "default-9",
 		"--workers", "1", "--ssh-key", "mykey"})
 
 	err := root.Execute()
@@ -662,7 +662,7 @@ func TestNetworkCreateVPCRequiresBillingCycle(t *testing.T) {
 	err := networkCreateExec(t,
 		"--name", "web-tier", "--vpc", "my-vpc",
 		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0",
-		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error when --billing-cycle is missing for a VPC subnet")
 	}
@@ -674,7 +674,7 @@ func TestNetworkCreateVPCRequiresBillingCycle(t *testing.T) {
 func TestNetworkCreateVPCRequiresGatewayNetmask(t *testing.T) {
 	err := networkCreateExec(t,
 		"--name", "web-tier", "--vpc", "my-vpc", "--billing-cycle", "hourly",
-		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error when --gateway/--netmask are missing for a VPC subnet")
 	}
@@ -687,7 +687,7 @@ func TestNetworkCreateVPCRejectsConflictingType(t *testing.T) {
 	err := networkCreateExec(t,
 		"--name", "web-tier", "--vpc", "my-vpc", "--type", "Isolated",
 		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
-		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error when --type conflicts with --vpc")
 	}
@@ -700,7 +700,7 @@ func TestNetworkCreateVPCRejectsNetworkPlan(t *testing.T) {
 	err := networkCreateExec(t,
 		"--name", "web-tier", "--vpc", "my-vpc", "--network-plan", "pnet-yul",
 		"--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
-		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default")
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error when --network-plan is combined with --vpc")
 	}
@@ -712,7 +712,7 @@ func TestNetworkCreateVPCRejectsNetworkPlan(t *testing.T) {
 func TestNetworkCreateIsolatedRequiresNetworkPlan(t *testing.T) {
 	err := networkCreateExec(t,
 		"--name", "my-net",
-		"--cloud-provider", "nimbo", "--region", "yow-1", "--project", "default")
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error when --network-plan is missing for an isolated network")
 	}
@@ -723,8 +723,8 @@ func TestNetworkCreateIsolatedRequiresNetworkPlan(t *testing.T) {
 
 func TestNetworkCreateRejectsUnknownType(t *testing.T) {
 	err := networkCreateExec(t,
-		"--name", "my-net", "--type", "Shared", "--network-plan", "inet-yow",
-		"--cloud-provider", "nimbo", "--region", "yow-1", "--project", "default")
+		"--name", "my-net", "--type", "Shared", "--network-plan", "inet-yul",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9")
 	if err == nil {
 		t.Fatal("expected error for unknown --type")
 	}

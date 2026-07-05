@@ -82,7 +82,7 @@ func newAffinityGroupCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create an affinity group",
 		Example: `  zcp affinity-group create --name my-group --type "host affinity" \
-    --project default --region yow-1`,
+    --project default-9 --region yul-1`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

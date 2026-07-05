@@ -44,7 +44,7 @@ func newProfileAddCmd() *cobra.Command {
 		Short: "Add or update a profile",
 		Args:  exactArgs(1),
 		Example: `  zcp profile add default
-  zcp profile add prod --bearer-token <token> --region yow-1 --project default-9`,
+  zcp profile add prod --bearer-token <token> --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 
@@ -63,7 +63,7 @@ func newProfileAddCmd() *cobra.Command {
 					}
 				}
 				if region == "" {
-					region, err = prompt("Default region (e.g. yow-1): ", false)
+					region, err = prompt("Default region (recommended: yul-1): ", false)
 					if err != nil {
 						return err
 					}
@@ -136,7 +136,7 @@ func newProfileAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&bearerToken, "bearer-token", "", "Bearer token (prompted if not provided)")
 	cmd.Flags().StringVar(&apiURL, "api-url-override", "", "Custom API URL (optional)")
-	cmd.Flags().StringVar(&region, "region", "", "Default region slug, e.g. yow-1 (required)")
+	cmd.Flags().StringVar(&region, "region", "", "Default region slug, e.g. yul-1 (required)")
 	cmd.Flags().StringVar(&project, "project", "", "Default project slug, e.g. default-9 (required)")
 	cmd.Flags().BoolVar(&nonInteractive, "no-input", false, "Fail if credentials not provided via flags")
 	return cmd

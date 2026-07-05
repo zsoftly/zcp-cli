@@ -121,8 +121,8 @@ func newLBCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new load balancer",
-		Example: `  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle hourly --acquire-new-ip --public-port 80 --private-port 8080 --algorithm roundrobin
-  zcp loadbalancer create --name my-lb --project default --region yul-1 --network my-network --plan lb-yul --billing-cycle monthly --ip existing-ip-slug --rule-name web --public-port 443 --private-port 8443 --algorithm leastconn --vm vm-slug-1 --vm vm-slug-2`,
+		Example: `  zcp loadbalancer create --name my-lb --project default-9 --region yul-1 --network my-network --plan lb-yul --billing-cycle hourly --acquire-new-ip --public-port 80 --private-port 8080 --algorithm roundrobin
+  zcp loadbalancer create --name my-lb --project default-9 --region yul-1 --network my-network --plan lb-yul --billing-cycle monthly --ip existing-ip-slug --rule-name web --public-port 443 --private-port 8443 --algorithm leastconn --vm vm-slug-1 --vm vm-slug-2`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -487,8 +487,8 @@ func newLBAttachVMCmd() *cobra.Command {
 		Use:   "attach-vm <lb-slug> <rule-id>",
 		Short: "Attach VMs to a load balancer rule",
 		Args:  exactArgs(2),
-		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --region yul-1 --project default
-  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --region yul-1 --project default --yes`,
+		Example: `  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --vm vm-slug-2 --region yul-1 --project default-9
+  zcp loadbalancer attach-vm my-lb rule-123 --vm vm-slug-1 --region yul-1 --project default-9 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(vmSlugs) == 0 {
 				return fmt.Errorf("at least one --vm is required")

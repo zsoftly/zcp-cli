@@ -95,13 +95,13 @@ Example usage in a pipeline:
 ```bash
 export ZCP_BEARER_TOKEN=ci-bearer-token
 export ZCP_PROJECT=prod-project
-export ZCP_REGION=yow-1
+export ZCP_REGION=yul-1
 # Cloud provider is auto-detected by 'zcp auth validate'. In CI that skips it,
 # set ZCP_CLOUD_PROVIDER to your provider slug (see 'zcp cloud-provider list').
 export ZCP_OUTPUT=json
 
 # Create a volume without passing repetitive flags
-zcp volume create --name my-disk --plan b1g1 --billing-cycle hourly
+zcp volume create --name my-disk --plan b2g1 --billing-cycle hourly
 ```
 
 ### Local development: a sourced secrets file
@@ -138,13 +138,18 @@ You can configure multiple profiles for different environments (e.g., developmen
 
 ### Adding Profiles
 
+Every account starts with the project `default-9` (like `us-east-1` on AWS);
+to use a different project, find its slug with `zcp project list`.
+
 ```bash
-# Interactive
-zcp profile add
+# Interactive — prompts for the bearer token
+zcp profile add default --region yul-1 --project default-9
 
 # Non-interactive
 zcp profile add staging \
   --bearer-token YOUR_STAGING_TOKEN \
+  --region yul-1 \
+  --project default-9 \
   --api-url https://staging-api.zcp.zsoftly.ca
 ```
 

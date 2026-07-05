@@ -41,7 +41,7 @@ func newVPCListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List VPCs",
 		Example: `  zcp vpc list
-  zcp vpc list --zone yow-1
+  zcp vpc list --zone yul-1
   zcp vpc list --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runVPCList(cmd, zoneSlug)
@@ -143,9 +143,9 @@ Note: 'zcp instance create' provisions its own network via --network-plan and
 does not yet accept a VPC tier directly, so attach the tier to the VM after
 creation with 'instance add-network'. A VPC with no network inside is unusable
 for VMs.`,
-		Example: `  zcp vpc create --name my-vpc --region yow-1 --project default --plan virtual-private-cloud-vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category nvme
+		Example: `  zcp vpc create --name my-vpc --region yul-1 --project default-9 --plan virtual-private-cloud-vpc-1 --network-address 10.1.0.1 --size 16 --billing-cycle hourly --storage-category pro-nvme
   # then add a tier (a bare VPC cannot host VMs):
-  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default`,
+  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

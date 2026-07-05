@@ -133,10 +133,10 @@ func newNetworkCreateCmd() *cobra.Command {
 For VPC subnets, --acl attaches a custom network ACL right after creation
 (the API has no attach-at-create parameter, so the network briefly carries
 the VPC default ACL before the replacement is applied).`,
-		Example: `  zcp network create --name my-net --network-plan inet-yow --billing-cycle hourly --region yow-1 --project default
-  zcp network create --name my-l2 --network-plan l2net-yow --type L2 --region yow-1 --project default
-  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default
-  zcp network create --name web-tier --vpc my-vpc --acl web-acl --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yow-1 --project default`,
+		Example: `  zcp network create --name my-net --network-plan inet-yul --billing-cycle hourly --region yul-1 --project default-9
+  zcp network create --name my-l2 --network-plan l2net-yul --type L2 --region yul-1 --project default-9
+  zcp network create --name web-tier --vpc my-vpc --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yul-1 --project default-9
+  zcp network create --name web-tier --vpc my-vpc --acl web-acl --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly --region yul-1 --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

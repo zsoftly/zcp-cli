@@ -79,8 +79,8 @@ func TestSnapshotListWithFilters(t *testing.T) {
 		if got := r.URL.Query().Get("filter[region]"); got != "yow-1" {
 			t.Errorf("filter[region] = %q, want %q", got, "yow-1")
 		}
-		if got := r.URL.Query().Get("filter[project]"); got != "default" {
-			t.Errorf("filter[project] = %q, want %q", got, "default")
+		if got := r.URL.Query().Get("filter[project]"); got != "default-9" {
+			t.Errorf("filter[project] = %q, want %q", got, "default-9")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(listResponse{
@@ -93,7 +93,7 @@ func TestSnapshotListWithFilters(t *testing.T) {
 	defer srv.Close()
 
 	svc := snapshot.NewService(newTestClient(t, srv))
-	if _, err := svc.List(context.Background(), "yow-1", "default"); err != nil {
+	if _, err := svc.List(context.Background(), "yow-1", "default-9"); err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 }

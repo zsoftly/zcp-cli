@@ -73,8 +73,8 @@ func newVMSnapshotCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a VM snapshot",
-		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yow --billing-cycle monthly --project default --region yow-1 --service virtual-machine
-  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yow --billing-cycle monthly --project default --region yow-1 --service virtual-machine --memory`,
+		Example: `  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yul --billing-cycle monthly --project default-9 --region yul-1 --service virtual-machine
+  zcp vm-snapshot create --vm my-vm --name my-snap --plan vm-snapshot-yul --billing-cycle monthly --project default-9 --region yul-1 --service virtual-machine --memory`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")

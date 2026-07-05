@@ -80,8 +80,8 @@ func newProjectCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new project",
-		Example: `  zcp project create --name default --icon cloud-15 --purpose "Development"
-  zcp project create --name default --description "My project" --icon cloud-13 --purpose "Testing"`,
+		Example: `  zcp project create --name dev-project --icon cloud-15 --purpose "Development"
+  zcp project create --name test-project --description "My project" --icon cloud-13 --purpose "Testing"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -145,8 +145,8 @@ func newProjectUpdateCmd() *cobra.Command {
 		Use:   "update <slug>",
 		Short: "Update an existing project",
 		Args:  exactArgs(1),
-		Example: `  zcp project update default --name "New Name"
-  zcp project update default --description "Updated description" --icon 3`,
+		Example: `  zcp project update default-9 --name "New Name"
+  zcp project update default-9 --description "Updated description" --icon 3`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectUpdate(cmd, args[0], project.UpdateRequest{
 				Name:        name,
@@ -195,8 +195,8 @@ func newProjectDeleteCmd() *cobra.Command {
 		Use:   "delete <slug>",
 		Short: "Delete a project",
 		Args:  exactArgs(1),
-		Example: `  zcp project delete default
-  zcp project delete default --yes`,
+		Example: `  zcp project delete default-9
+  zcp project delete default-9 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !confirmAction(cmd, "Delete project %q?", slug) {
@@ -238,7 +238,7 @@ func newProjectDashboardCmd() *cobra.Command {
 		Use:     "dashboard <slug>",
 		Short:   "Show project dashboard services",
 		Args:    exactArgs(1),
-		Example: `  zcp project dashboard default`,
+		Example: `  zcp project dashboard default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectDashboard(cmd, args[0])
 		},
@@ -336,7 +336,7 @@ func newProjectUserListCmd() *cobra.Command {
 		Use:     "list <slug>",
 		Short:   "List users in a project",
 		Args:    exactArgs(1),
-		Example: `  zcp project user list default`,
+		Example: `  zcp project user list default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runProjectUserList(cmd, args[0])
 		},
@@ -379,8 +379,8 @@ func newProjectUserAddCmd() *cobra.Command {
 		Use:   "add <slug>",
 		Short: "Add a user to a project",
 		Args:  exactArgs(1),
-		Example: `  zcp project user add default --email alice@example.com
-  zcp project user add default --email alice@example.com --role admin`,
+		Example: `  zcp project user add default-9 --email alice@example.com
+  zcp project user add default-9 --email alice@example.com --role admin`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if email == "" {
 				return fmt.Errorf("--email is required")
