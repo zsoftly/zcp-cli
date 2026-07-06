@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -128,23 +129,35 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, e
 	if resp.Data.ID != "" {
 		return &resp.Data, nil
 	}
-	rules, lerr := s.List(ctx, req.NetworkSlug)
-	if lerr != nil {
-		return nil, fmt.Errorf("egress rule for network %s was created, but fetching it back failed: %w", req.NetworkSlug, lerr)
-	}
-	for i := range rules {
-		r := &rules[i]
-		if r.Protocol != req.Protocol || r.StartPort != req.StartPort || r.EndPort != req.EndPort {
-			continue
+	// The rule list can lag the accepted create; retry a few times before
+	// giving up so eventual consistency is not reported as a failure.
+	const listAttempts = 3
+	for attempt := 1; attempt <= listAttempts; attempt++ {
+		rules, lerr := s.List(ctx, req.NetworkSlug)
+		if lerr != nil {
+			return nil, fmt.Errorf("egress rule for network %s was created, but fetching it back failed: %w", req.NetworkSlug, lerr)
 		}
-		// The API echoes the requested CIDR in destcidr_list; top-level cidr
-		// is the network's source CIDR and must not be compared here.
-		if req.CIDR != "" && r.DestCIDR != req.CIDR {
-			continue
+		for i := range rules {
+			r := &rules[i]
+			if r.Protocol != req.Protocol || r.StartPort != req.StartPort || r.EndPort != req.EndPort {
+				continue
+			}
+			// The API echoes the requested CIDR in destcidr_list; top-level cidr
+			// is the network's source CIDR and must not be compared here.
+			if req.CIDR != "" && r.DestCIDR != req.CIDR {
+				continue
+			}
+			return r, nil
 		}
-		return r, nil
+		if attempt < listAttempts {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+		}
 	}
-	return nil, fmt.Errorf("egress rule for network %s was created, but is not yet visible in the rule list — check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
+	return nil, fmt.Errorf("egress rule for network %s was accepted by the API but never appeared in the rule list — the backend may have silently dropped it; check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
 }
 
 // Delete removes an egress rule by ID from the given network.

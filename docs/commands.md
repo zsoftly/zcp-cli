@@ -211,17 +211,20 @@ zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
   --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
   --region yul-1 --project default-9
 
-# Public IP addresses
+# Public IP addresses — plan slugs from `zcp plan ip`
 zcp ip list
-zcp ip allocate --network <slug>
+zcp ip allocate --network <slug> --plan <ip-plan> --billing-cycle hourly
 zcp ip release <slug>
-zcp ip static-nat enable <slug> --instance <slug> --network <slug>
+zcp ip static-nat enable <ip-slug> --instance <vm-slug>
 
 # Firewall rules (ingress)
 zcp firewall list
 zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
 
 # Egress rules
+# Known issue: on some networks the API accepts the create but the rule never
+# appears in the list (the backend drops it silently). The CLI retries the
+# lookup and reports this explicitly when it happens.
 zcp egress list
 zcp egress create --network <slug> --protocol tcp
 
@@ -275,18 +278,36 @@ zcp acl delete-rule <vpc-slug> web-acl <rule-id>
 zcp acl replace --network <network-slug> --acl web-acl --vpc <vpc-slug>
 zcp acl delete <vpc-slug> web-acl
 
-# Public load balancers
+# Public load balancers — acquires a new public IP by default; pass --ip to reuse one
 zcp loadbalancer list
-zcp loadbalancer create --ip <ip-slug> --name my-lb --network <network-slug> \
-  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin
+zcp loadbalancer create --name my-lb --network <network-slug> \
+  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin \
+  --region yul-1 --project default-9
 zcp loadbalancer create-rule <lb-slug> --name api-rule \
   --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
+zcp loadbalancer attach-vm <lb-slug> <rule-id> --vm <vm-slug>
+zcp loadbalancer detach-vm <lb-slug> <rule-id> --vm <vm-slug>
+zcp loadbalancer delete-rule <lb-slug> <rule-id>
 zcp loadbalancer delete <slug>
 
-# VPN gateways and connections
-zcp vpn list
-zcp vpn create --vpc <slug> --name my-vpn
-zcp vpn delete <slug>
+# Site-to-site VPN — a gateway on the VPC plus a customer gateway for the remote end
+zcp vpc vpn-gateway list <vpc-slug>
+zcp vpc vpn-gateway create <vpc-slug>
+zcp vpc vpn-gateway delete <vpc-slug> <gateway-id>
+zcp vpn customer-gateway list
+zcp vpn customer-gateway create --name office --gateway 203.0.113.99 \
+  --cidr 192.168.10.0/24 --psk '<pre-shared-key>' \
+  --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 \
+  --region yul-1 --project default-9
+zcp vpn customer-gateway delete <slug>
+
+# Remote access VPN — enable it on a public IP, then add VPN users
+zcp ip vpn enable <ip-slug>
+zcp ip vpn list <ip-slug>
+zcp ip vpn disable <ip-slug> <vpn-id>
+zcp vpn user create --username alice --region yul-1 --project default-9   # prompts for password
+zcp vpn user list
+zcp vpn user delete <slug>
 ```
 
 ---
@@ -367,8 +388,8 @@ zcp dns create --name example.com --project default-9
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
 zcp dns record-create --domain <domain-slug> --name mail --type MX --content mail.example.com --ttl 3600
 
-# Delete a record or domain
-zcp dns record-delete --domain <domain-slug> --record-id 42
+# Delete a record set (records are addressed by name and type) or a domain
+zcp dns record-delete --domain <domain-slug> --name www --type A
 zcp dns delete <domain-slug>
 ```
 
@@ -419,11 +440,16 @@ zcp autoscale condition create web-group --name cpu-low --metric cpu --operator 
 
 ## Monitoring
 
+Read-only metrics; alerting is configured in the Web UI.
+
 ```bash
-zcp monitoring list
-zcp monitoring get <slug>
-zcp monitoring create --instance <slug> --type cpu --threshold 80
-zcp monitoring delete <slug>
+zcp monitoring global               # account-wide resource overview
+zcp monitoring charts               # chart data
+zcp monitoring cpu <vm-slug>        # per-VM metrics
+zcp monitoring memory <vm-slug>
+zcp monitoring disk <vm-slug>
+zcp monitoring disk-io <vm-slug>
+zcp monitoring network <vm-slug>
 ```
 
 ---
@@ -477,13 +503,18 @@ zcp kubernetes create \
   --storage-category pro-nvme \
   --ssh-key mykey
 
-# Start / stop / upgrade
+# Kubeconfig
+zcp kubernetes get-config <slug>
+
+# Lifecycle
 zcp kubernetes start <slug>
 zcp kubernetes stop <slug>
+zcp kubernetes scale <slug> --workers 5
 zcp kubernetes upgrade <slug> --plan k8s-xla-yul-1
+zcp kubernetes upgrade-version <slug> --version v1.36.1
 
-# To cancel/delete a cluster, use billing cancel-service:
-zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
+# Delete a cluster
+zcp kubernetes delete <slug>
 ```
 
 ---
@@ -671,10 +702,14 @@ zcp billing budget-alert-set --amount 500 --threshold 80 --enabled
 ## Support
 
 ```bash
-zcp support list
-zcp support get <ticket-id>
-zcp support create --subject "Issue title" --description "Details"
-zcp support close <ticket-id>
+zcp support ticket list
+zcp support ticket show <ticket-id>
+zcp support ticket create --subject "Issue title" --description "Details" --priority high
+zcp support ticket reply <ticket-id> --message "More details"
+zcp support ticket replies <ticket-id>
+zcp support ticket summary
+zcp support ticket delete <ticket-id>
+zcp support faq list
 ```
 
 ---
@@ -683,7 +718,7 @@ zcp support close <ticket-id>
 
 ```bash
 zcp dashboard summary
-zcp dashboard status
+zcp dashboard cancel-service --slug <service-slug>
 ```
 
 ---

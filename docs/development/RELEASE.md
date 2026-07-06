@@ -2,6 +2,19 @@
 
 Tag-based releases. Push version tag → automated builds → GitHub Release.
 
+## Prepare release content (before tagging)
+
+1. **`CHANGELOG.md`** — add the new `[vX.Y.Z] - YYYY-MM-DD` entry (Keep a
+   Changelog format, matching the existing entries).
+2. **`RELEASE_NOTES.md`** — rewrite for this release only; `build.yml` uploads
+   it verbatim as the GitHub release body (`body_path`). Required sections:
+   - A short narrative of the headline change, with highlights.
+   - **Installation and upgrade — ALWAYS included.** The install one-liners
+     (Linux/macOS `install.sh`, Windows `install.ps1`), the manual-download
+     pointer, and a `zcp version` verify line showing the new version. Copy the
+     section from the previous release notes and bump the version.
+   - Fixed / Added details with copy-paste examples.
+
 ## Steps
 
 ```bash
@@ -43,9 +56,11 @@ generated). After cutting a release, add the new version to the **CLI (`zcp`)** 
 
 ## Version Format
 
-`<major>.<minor>.<patch>` (semver, no `v` prefix)
+`v<major>.<minor>.<patch>` (semver, **with** the `v` prefix — the release
+workflow only triggers on tags matching `v[0-9]*`, and `install.sh`/version
+injection expect it).
 
-Examples: `0.0.1`, `0.1.0`, `1.0.0`
+Examples: `v0.0.22`, `v0.1.0`, `v1.0.0`
 
 ## Build Artifacts
 

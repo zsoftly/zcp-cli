@@ -116,11 +116,12 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 	if len(domain.Records) > 0 {
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintf(os.Stderr, "Records (%d):\n", len(domain.Records))
-		recHeaders := []string{"ID", "NAME", "TYPE", "CONTENT", "TTL"}
+		// The live DNS backend returns record sets without IDs, so the table
+		// is keyed by name and type.
+		recHeaders := []string{"NAME", "TYPE", "CONTENT", "TTL"}
 		recRows := make([][]string, 0, len(domain.Records))
 		for _, r := range domain.Records {
 			recRows = append(recRows, []string{
-				r.ID,
 				r.Name,
 				r.Type,
 				r.Content,
@@ -294,7 +295,7 @@ func newDNSRecordCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
-	cmd.Flags().StringVar(&name, "name", "", "Record name / subdomain (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Relative record name, e.g. www — the zone is appended by the backend (required)")
 	cmd.Flags().StringVar(&recordType, "type", "", "Record type: A, AAAA, CNAME, MX, TXT, etc. (required)")
 	cmd.Flags().StringVar(&content, "content", "", "Record content / value (required)")
 	cmd.Flags().IntVar(&ttl, "ttl", 14400, "Time-to-live in seconds (default: 14400)")
@@ -318,11 +319,10 @@ func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRec
 
 	// Show the record table for the domain
 	if len(domain.Records) > 0 {
-		headers := []string{"ID", "NAME", "TYPE", "CONTENT", "TTL"}
+		headers := []string{"NAME", "TYPE", "CONTENT", "TTL"}
 		rows := make([][]string, 0, len(domain.Records))
 		for _, r := range domain.Records {
 			rows = append(rows, []string{
-				r.ID,
 				r.Name,
 				r.Type,
 				r.Content,
@@ -337,29 +337,76 @@ func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRec
 }
 
 func newDNSRecordDeleteCmd() *cobra.Command {
-	var domain string
+	var domain, name, recordType string
 	var recordID int
 	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "record-delete",
-		Short: "Delete a DNS record",
-		Example: `  zcp dns record-delete --domain example-com-1 --record-id 42
-  zcp dns record-delete --domain example-com-1 --record-id 42 --yes`,
+		Short: "Delete a DNS record set by name and type",
+		Example: `  zcp dns record-delete --domain example-com-1 --name www --type A
+  zcp dns record-delete --domain example-com-1 --name www --type A --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if domain == "" {
 				return fmt.Errorf("--domain is required (use the domain slug)")
 			}
-			if recordID <= 0 {
-				return fmt.Errorf("--record-id is required")
+			if recordID > 0 {
+				// Legacy numeric-ID path; only works on deployments whose DNS
+				// backend exposes record IDs.
+				return runDNSRecordDelete(cmd, domain, recordID, yes)
 			}
-			return runDNSRecordDelete(cmd, domain, recordID, yes)
+			if name == "" || recordType == "" {
+				return fmt.Errorf("--name and --type are required (records are addressed by name and type)")
+			}
+			return runDNSRecordDeleteByName(cmd, domain, name, recordType, yes)
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
-	cmd.Flags().IntVar(&recordID, "record-id", 0, "Record ID to delete (required; use 'dns show' to find IDs)")
+	cmd.Flags().StringVar(&name, "name", "", "Record name, relative (www) or fully qualified (www.example.com.)")
+	cmd.Flags().StringVar(&recordType, "type", "", "Record type: A, AAAA, CNAME, MX, TXT, etc.")
+	cmd.Flags().IntVar(&recordID, "record-id", 0, "Legacy: numeric record ID (most deployments do not expose IDs)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
+}
+
+func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType string, yes bool) error {
+	if !yes && !autoApproved(cmd) {
+		fmt.Fprintf(os.Stderr, "Delete DNS record %s %q on domain %q? [y/N]: ", recordType, name, domainSlug)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+		if answer != "y" && answer != "yes" {
+			fmt.Fprintln(os.Stderr, "Aborted.")
+			return nil
+		}
+	}
+
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := dns.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	// Resolve the stored FQDN: the backend appends the zone to relative names.
+	domain, err := svc.Show(ctx, domainSlug)
+	if err != nil {
+		return fmt.Errorf("dns record-delete: resolving domain %s: %w", domainSlug, err)
+	}
+	fqdn := dns.CanonicalRecordFQDN(name, domain.Name)
+
+	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "DNS record %s %q not found — already deleted.\n", recordType, fqdn)
+			return nil
+		}
+		return fmt.Errorf("dns record-delete: %w", err)
+	}
+
+	printer.Fprintf("DNS record %s %q deleted from domain %q.\n", recordType, fqdn, domainSlug)
+	return nil
 }
 
 func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes bool) error {

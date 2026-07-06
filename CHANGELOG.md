@@ -5,6 +5,19 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.22] - 2026-07-06
+
+### Fixed
+
+- **DNS record display was blank and `dns record-delete` could not work against the live API.** The live PowerDNS-backed API returns record **sets** (RRsets): no record IDs at all, and values under a `contents` array rather than a `content` string. The SDK's `Record` decoded neither, so `zcp dns show` and `record-create` printed empty ID and CONTENT columns, and `record-delete --record-id` demanded a numeric ID the API never exposes — record deletion was impossible. Fixed end to end: `Record` now decodes both shapes (joined values in `Content` for display, individual values in a new `Contents` field); the record tables drop the dead ID column and show real content; and `zcp dns record-delete` now addresses records the way the API does — by `--name` and `--type` (`zcp dns record-delete --domain <slug> --name www --type A`). Names may be relative (`www`) or fully qualified; the CLI resolves the stored FQDN via the new `dns.CanonicalRecordFQDN` helper (`@` selects the zone apex). The legacy `--record-id` path remains for deployments whose DNS backend exposes IDs; the SDK's ID-based `DeleteRecord` is deprecated in favor of the new `DeleteRecordByName`. Verified live: create record → contents visible in `dns show` → delete by name/type → gone.
+- **`dns record-create --name` help now states the name is relative.** The backend appends the zone to whatever you pass, so supplying an FQDN silently created `www.example.com.example.com.` (found live). The help text and docs now say to pass the label only (e.g. `www`).
+- **`egress create` no longer misreports eventual consistency as failure — and is honest when the backend drops the rule.** The create endpoint returns no body, so the SDK resolves the new rule from the list; it now retries that lookup (3 attempts over ~4s) before giving up. When the rule never appears at all — the API returns 200 but silently creates nothing on some networks, reproduced live on an isolated network — the error now says the backend may have dropped the rule instead of implying a transient issue. The silent drop itself is a platform bug and needs a backend fix.
+- **`docs/commands.md` corrected against the real command tree — every example is now machine-validated.** Six sections documented commands that do not exist or missed required flags: `monitoring` (documented `list/get/create/delete`; the real surface is read-only metrics — `global`, `charts`, `cpu`/`memory`/`disk`/`disk-io`/`network <vm-slug>`); VPN (documented a nonexistent `zcp vpn create --vpc`; now shows the real trees — `vpc vpn-gateway *` and `vpn customer-gateway *` for site-to-site, `ip vpn enable/list/disable` plus `vpn user *` for remote access); `support` (documented `list/get/create/close`; real tree is `support ticket list/show/create/reply/replies/summary/delete` and `support faq list`); `dashboard` (documented a nonexistent `status`; `cancel-service` takes `--slug`); Kubernetes (added the missing `scale`, `get-config`, `upgrade-version`, and `delete` — deleting no longer routes through `billing cancel-service`); `ip allocate` (was missing the required `--plan` and `--billing-cycle`). Also fixed a phantom `--network` flag on `ip static-nat enable`, added the previously undocumented `loadbalancer attach-vm`/`detach-vm`/`delete-rule`, and noted the egress silent-drop issue. All 264 examples in the reference are now validated automatically against the built CLI (command paths and flags).
+
+### Added
+
+- **SDK (`pkg/api/dns`):** `DeleteRecordByName(domain, fqdn, type)`, `CanonicalRecordFQDN(name, zone)`, and `Record.Contents []string`. These are the primitives the Terraform provider's `zcp_dns_record` resource also relies on.
+
 ## [v0.0.21] - 2026-07-02
 
 ### Fixed
