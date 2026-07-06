@@ -1,11 +1,11 @@
-# ZCP CLI — Command Reference
+# ZCP CLI Command Reference
 
 Copy-paste examples for every resource the CLI manages. Use `zcp <command> --help`
 for the full flag list of any command.
 
 > All examples use working defaults: region `yul-1`, project `default-9` (every
 > account's initial project), and billing cycle `hourly`. Substitute your own values
-> as needed — run `zcp region list` and `zcp project list` to see what is available
+> as needed. Run `zcp region list` and `zcp project list` to see what is available
 > to your account.
 
 ## The cloud provider is automatic
@@ -41,7 +41,7 @@ each one works on its own; drop them if you have configured defaults. See
 
 ## Discovery
 
-Start here — these read-only commands show what your account can provision.
+Start here: these read-only commands show what your account can provision.
 
 ```bash
 # Regions, cloud providers, and other catalog data
@@ -54,7 +54,7 @@ zcp storage-category list  # storage-category slugs for --storage-category
 
 # Plans by service type (preferred over legacy 'offering' commands)
 zcp plan vm                # Virtual Machine plans
-zcp plan storage           # Block Storage plans — shows storage category slug and pool per plan
+zcp plan storage           # Block Storage plans: shows storage category slug and pool per plan
 zcp plan kubernetes        # Kubernetes plans
 zcp plan lb                # Load Balancer plans
 zcp plan router            # Virtual Router plans
@@ -64,7 +64,7 @@ zcp plan template          # My Template plans
 zcp plan iso               # ISO plans
 zcp plan backup            # Backup plans
 zcp plan network           # network plan slugs for --network-plan
-zcp plan object-storage    # Object Storage plans — slugs for object-storage create --plan
+zcp plan object-storage    # Object Storage plans: slugs for object-storage create --plan
 
 # Images and catalogs
 zcp template list          # VM templates
@@ -77,8 +77,8 @@ zcp store list             # Store
 
 ## Compute
 
-Instance subcommands accept any unique reference to the VM — its **instance ID**
-(`vm_id`), **name**, or **slug** — wherever `<slug>` appears below. `zcp instance list`
+Instance subcommands accept any unique reference to the VM (its **instance ID**
+(`vm_id`), **name**, or **slug**) wherever `<slug>` appears below. `zcp instance list`
 shows the `ID` column to copy from. If a name is ambiguous (two VMs share it), the
 command lists the matching IDs and asks you to use one.
 
@@ -87,7 +87,7 @@ command lists the matching IDs and asks you to use one.
 zcp instance list
 zcp instance get <id|name|slug>
 
-# Create — use --wait to block until the instance is Running
+# Create. Use --wait to block until the instance is Running
 zcp instance create \
   --name my-vm \
   --project default-9 \
@@ -113,7 +113,7 @@ zcp instance change-plan <slug> --plan <new-plan> --billing-cycle hourly
 # Change hostname
 zcp instance change-hostname <slug> --hostname new-hostname
 
-# Change OS (DESTRUCTIVE — reinstalls the VM)
+# Change OS (DESTRUCTIVE: reinstalls the VM)
 zcp instance change-os <slug> --template ubuntu-2604-lts-1
 
 # Change startup script
@@ -206,22 +206,25 @@ zcp network create --name my-net --network-plan inet-yul --billing-cycle hourly 
 zcp network update <slug> --name "New Name"
 zcp network delete <slug>                        # also releases the SOURCE-NAT IP; use after VMs are removed
 
-# VPC subnets (tiers) — optionally attach a custom ACL at creation
+# VPC subnets (tiers): optionally attach a custom ACL at creation
 zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
   --gateway 10.1.1.1 --netmask 255.255.255.0 --billing-cycle hourly \
   --region yul-1 --project default-9
 
-# Public IP addresses
+# Public IP addresses. Plan slugs come from `zcp plan ip`
 zcp ip list
-zcp ip allocate --network <slug>
+zcp ip allocate --network <slug> --plan <ip-plan> --billing-cycle hourly
 zcp ip release <slug>
-zcp ip static-nat enable <slug> --instance <slug> --network <slug>
+zcp ip static-nat enable <ip-slug> --instance <vm-slug>
 
 # Firewall rules (ingress)
 zcp firewall list
 zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
 
 # Egress rules
+# Known issue: on some networks the API accepts the create but the rule never
+# appears in the list (the backend drops it silently). The CLI retries the
+# lookup and reports this explicitly when it happens.
 zcp egress list
 zcp egress create --network <slug> --protocol tcp
 
@@ -255,7 +258,7 @@ zcp vpc create \
   --billing-cycle hourly \
   --storage-category pro-nvme
 
-# 1. add a tier (subnet) inside the VPC — REQUIRED before any VM can use it
+# 1. add a tier (subnet) inside the VPC. REQUIRED before any VM can use it
 zcp network create --name web-tier --vpc my-vpc \
   --gateway 10.1.1.1 --netmask 255.255.255.0 \
   --billing-cycle hourly --region yul-1 --project default-9
@@ -275,18 +278,36 @@ zcp acl delete-rule <vpc-slug> web-acl <rule-id>
 zcp acl replace --network <network-slug> --acl web-acl --vpc <vpc-slug>
 zcp acl delete <vpc-slug> web-acl
 
-# Public load balancers
+# Public load balancers. Acquires a new public IP by default; pass --ip to reuse one
 zcp loadbalancer list
-zcp loadbalancer create --ip <ip-slug> --name my-lb --network <network-slug> \
-  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin
+zcp loadbalancer create --name my-lb --network <network-slug> \
+  --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin \
+  --region yul-1 --project default-9
 zcp loadbalancer create-rule <lb-slug> --name api-rule \
   --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
+zcp loadbalancer attach-vm <lb-slug> <rule-id> --vm <vm-slug>
+zcp loadbalancer detach-vm <lb-slug> <rule-id> --vm <vm-slug>
+zcp loadbalancer delete-rule <lb-slug> <rule-id>
 zcp loadbalancer delete <slug>
 
-# VPN gateways and connections
-zcp vpn list
-zcp vpn create --vpc <slug> --name my-vpn
-zcp vpn delete <slug>
+# Site-to-site VPN: a gateway on the VPC plus a customer gateway for the remote end
+zcp vpc vpn-gateway list <vpc-slug>
+zcp vpc vpn-gateway create <vpc-slug>
+zcp vpc vpn-gateway delete <vpc-slug> <gateway-id>
+zcp vpn customer-gateway list
+zcp vpn customer-gateway create --name office --gateway 203.0.113.99 \
+  --cidr 192.168.10.0/24 --psk '<pre-shared-key>' \
+  --ike-policy aes128-sha1-dh5 --esp-policy aes128-sha1 \
+  --region yul-1 --project default-9
+zcp vpn customer-gateway delete <slug>
+
+# Remote access VPN: enable it on a public IP, then add VPN users
+zcp ip vpn enable <ip-slug>
+zcp ip vpn list <ip-slug>
+zcp ip vpn disable <ip-slug> <vpn-id>
+zcp vpn user create --username alice --region yul-1 --project default-9   # prompts for password
+zcp vpn user list
+zcp vpn user delete <slug>
 ```
 
 ---
@@ -296,7 +317,7 @@ zcp vpn delete <slug>
 ```bash
 # SSH keys (--project and --region are required on import)
 # Constraints: --name <= 20 chars and unique; the public key material must also
-# be unique — re-importing a key you already have (even under a new name) is
+# be unique. Re-importing a key you already have (even under a new name) is
 # rejected with "The public key has already been taken." Delete the old key
 # first to rename/replace it.
 zcp ssh-key list
@@ -305,7 +326,7 @@ zcp ssh-key delete <slug>
 zcp instance create ... --ssh-key mykey   # reference the key by name on a new VM
 
 # Affinity groups
-# --type must be one of (quote it — values contain a space):
+# --type must be one of (quote it, values contain a space):
 #   "host affinity"               strict: instances always on the SAME host
 #   "host anti-affinity"          strict: instances always on DIFFERENT hosts
 #   "non-strict host affinity"    best-effort same host (falls back if no capacity)
@@ -320,7 +341,7 @@ zcp affinity-group delete <slug>
 
 ## Access control (sub-users, roles, permissions)
 
-Account-level — these commands are **not** region/project-scoped.
+Account-level: these commands are **not** region/project-scoped.
 
 ```bash
 # Permissions: the read-only catalog you build roles from
@@ -367,8 +388,8 @@ zcp dns create --name example.com --project default-9
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
 zcp dns record-create --domain <domain-slug> --name mail --type MX --content mail.example.com --ttl 3600
 
-# Delete a record or domain
-zcp dns record-delete --domain <domain-slug> --record-id 42
+# Delete a record set (records are addressed by name and type) or a domain
+zcp dns record-delete --domain <domain-slug> --name www --type A
 zcp dns delete <domain-slug>
 ```
 
@@ -377,7 +398,7 @@ zcp dns delete <domain-slug>
 ## Backup
 
 ```bash
-# Block storage (volume) backups — plans are region-specific: zcp plan backup
+# Block storage (volume) backups. Plans are region-specific: zcp plan backup
 zcp backup list
 zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 \
   --plan backup-yul --billing-cycle hourly --region yul-1 --project default-9
@@ -419,11 +440,16 @@ zcp autoscale condition create web-group --name cpu-low --metric cpu --operator 
 
 ## Monitoring
 
+Read-only metrics; alerting is configured in the Web UI.
+
 ```bash
-zcp monitoring list
-zcp monitoring get <slug>
-zcp monitoring create --instance <slug> --type cpu --threshold 80
-zcp monitoring delete <slug>
+zcp monitoring global               # account-wide resource overview
+zcp monitoring charts               # chart data
+zcp monitoring cpu <vm-slug>        # per-VM metrics
+zcp monitoring memory <vm-slug>
+zcp monitoring disk <vm-slug>
+zcp monitoring disk-io <vm-slug>
+zcp monitoring network <vm-slug>
 ```
 
 ---
@@ -477,13 +503,18 @@ zcp kubernetes create \
   --storage-category pro-nvme \
   --ssh-key mykey
 
-# Start / stop / upgrade
+# Kubeconfig
+zcp kubernetes get-config <slug>
+
+# Lifecycle
 zcp kubernetes start <slug>
 zcp kubernetes stop <slug>
+zcp kubernetes scale <slug> --workers 5
 zcp kubernetes upgrade <slug> --plan k8s-xla-yul-1
+zcp kubernetes upgrade-version <slug> --version v1.36.1
 
-# To cancel/delete a cluster, use billing cancel-service:
-zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason not_needed_anymore
+# Delete a cluster
+zcp kubernetes delete <slug>
 ```
 
 ---
@@ -495,7 +526,7 @@ zcp billing cancel-service <subscription-slug> --service "Kubernetes" --reason n
 zcp object-storage list
 zcp object-storage get <slug>
 
-# Create an object storage instance — use an object-storage region (os-yul / os-yow)
+# Create an object storage instance. Use an object-storage region (os-yul / os-yow)
 # and a plan slug from `zcp plan object-storage`. The storage category is derived
 # from the plan automatically, so you do not pass --storage-category.
 zcp object-storage create \
@@ -564,7 +595,7 @@ zcp object-storage bucket cors delete <slug> <bucket-slug>
 zcp object-storage bucket empty <slug> <bucket-slug>
 zcp object-storage bucket delete <slug> <bucket-slug> --purge
 
-# Objects — list, inspect metadata, upload, download, share, delete
+# Objects: list, inspect metadata, upload, download, share, delete
 zcp object-storage object list <slug> <bucket>
 zcp object-storage object get <slug> <bucket> <key>          # metadata only
 zcp object-storage object put <slug> <bucket> ./photo.jpg
@@ -590,14 +621,14 @@ zcp object-storage object delete <slug> <bucket> <key> --version-id <id> # delet
 zcp object-storage object restore <slug> <bucket> <key>                  # undelete (remove latest delete marker)
 ```
 
-### Two backends — and what is CLI-only
+### Two backends, and what is CLI-only
 
 Object storage spans two backends, and this determines what is reachable outside
 the CLI:
 
-- **ZCP REST API (also available in the Web UI / CMP):** instance lifecycle —
-  `create`, `list`, `get`, `delete`, `resize`, `credentials` — and basic bucket
-  management — `bucket create`, `bucket list`, `bucket get`, `bucket delete`.
+- **ZCP REST API (also available in the Web UI / CMP):** instance lifecycle
+  (`create`, `list`, `get`, `delete`, `resize`, `credentials`) and basic bucket
+  management (`bucket create`, `bucket list`, `bucket get`, `bucket delete`).
   `object get` also goes through the REST API (it returns object metadata only).
 
 - **Direct to the Ceph RADOS Gateway over the S3 protocol** (AWS Signature V4,
@@ -613,10 +644,10 @@ the CLI:
 > **CLI-only (not yet on the REST API or Web UI):** every S3-direct operation in
 > the second group above is available **only through this CLI**. The CMP has not
 > yet exposed these operations via the ZCP REST API or the Web UI, so they cannot
-> be performed there — the CLI talks straight to Ceph RGW. Only the REST-backed
+> be performed there; the CLI talks straight to Ceph RGW. Only the REST-backed
 > operations in the first group are mirrored in the Web UI.
 
-`object get` returns metadata only — use `object download` to fetch the contents,
+`object get` returns metadata only. Use `object download` to fetch the contents,
 or `object url` to mint a time-limited link a client can use without ZCP
 credentials (works even when the bucket is private).
 
@@ -671,10 +702,14 @@ zcp billing budget-alert-set --amount 500 --threshold 80 --enabled
 ## Support
 
 ```bash
-zcp support list
-zcp support get <ticket-id>
-zcp support create --subject "Issue title" --description "Details"
-zcp support close <ticket-id>
+zcp support ticket list
+zcp support ticket show <ticket-id>
+zcp support ticket create --subject "Issue title" --description "Details" --priority high
+zcp support ticket reply <ticket-id> --message "More details"
+zcp support ticket replies <ticket-id>
+zcp support ticket summary
+zcp support ticket delete <ticket-id>
+zcp support faq list
 ```
 
 ---
@@ -683,7 +718,7 @@ zcp support close <ticket-id>
 
 ```bash
 zcp dashboard summary
-zcp dashboard status
+zcp dashboard cancel-service --slug <service-slug>
 ```
 
 ---

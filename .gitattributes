@@ -1,0 +1,9 @@
+# Normalize all text files to LF, including on Windows checkouts.
+#
+# gofmt requires LF; on windows-latest runners actions/checkout inherits
+# core.autocrlf=true from the runner image, which rewrites every file to CRLF
+# at checkout and makes the CI formatting gate flag the whole repo. Checkout
+# attributes take precedence over core.autocrlf, so this pins LF everywhere.
+# Every tracked blob is already LF (verified 2026-07-06), so no renormalization
+# is needed.
+* text=auto eol=lf

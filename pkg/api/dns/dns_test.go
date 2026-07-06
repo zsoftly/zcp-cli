@@ -281,3 +281,68 @@ func TestDNSDomainListRealShape(t *testing.T) {
 		t.Errorf("Status = false, want true")
 	}
 }
+
+func TestDNSRecordDecodeRRset(t *testing.T) {
+	// The live PowerDNS-backed API returns record sets: no id, contents array.
+	raw := []byte(`{"name":"www.example.com.","type":"A","ttl":3600,"contents":["192.0.2.10","192.0.2.11"]}`)
+	var rec dns.Record
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatalf("Unmarshal RRset: %v", err)
+	}
+	if rec.Content != "192.0.2.10, 192.0.2.11" {
+		t.Errorf("Content = %q, want joined contents", rec.Content)
+	}
+	if len(rec.Contents) != 2 {
+		t.Errorf("Contents = %v, want 2 values", rec.Contents)
+	}
+
+	// Legacy shape with id/content still decodes.
+	raw = []byte(`{"id":"41","name":"www","type":"A","content":"192.0.2.10","ttl":600}`)
+	rec = dns.Record{}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatalf("Unmarshal legacy: %v", err)
+	}
+	if rec.ID != "41" || rec.Content != "192.0.2.10" {
+		t.Errorf("legacy decode = %+v, want id 41 content 192.0.2.10", rec)
+	}
+}
+
+func TestDNSDeleteRecordByName(t *testing.T) {
+	var gotPath, gotName, gotType string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotName = r.URL.Query().Get("name")
+		gotType = r.URL.Query().Get("type")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "Success", "message": "deleted"})
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	if err := svc.DeleteRecordByName(context.Background(), "example-com-1", "www.example.com.", "A"); err != nil {
+		t.Fatalf("DeleteRecordByName() error = %v", err)
+	}
+	if gotPath != "/dns/domains/example-com-1/records" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotName != "www.example.com." || gotType != "A" {
+		t.Errorf("query = name %q type %q, want www.example.com. / A", gotName, gotType)
+	}
+}
+
+func TestCanonicalRecordFQDN(t *testing.T) {
+	cases := []struct{ name, zone, want string }{
+		{"www", "example.com", "www.example.com."},
+		{"www", "example.com.", "www.example.com."},
+		{"WWW.Example.com.", "example.com", "www.example.com."},
+		{"www.example.com", "example.com", "www.example.com."},
+		{"@", "example.com", "example.com."},
+		{"", "example.com", "example.com."},
+		{"example.com", "example.com", "example.com."},
+	}
+	for _, c := range cases {
+		if got := dns.CanonicalRecordFQDN(c.name, c.zone); got != c.want {
+			t.Errorf("CanonicalRecordFQDN(%q, %q) = %q, want %q", c.name, c.zone, got, c.want)
+		}
+	}
+}

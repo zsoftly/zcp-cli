@@ -143,8 +143,12 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            # .gitattributes pins eol=lf at checkout; this is the fallback.
+            # checkout-index --force rewrites every file from the index,
+            # unlike 'git checkout HEAD -- .', which skips paths the stat
+            # cache considers clean and silently leaves CRLF in place.
             git config core.autocrlf false
-            git checkout HEAD -- .
+            git checkout-index --force --all
           fi
 
           UNFORMATTED=$(gofmt -s -l .)

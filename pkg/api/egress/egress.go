@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -32,7 +33,7 @@ type EgressRule struct {
 	Status    string `json:"status"`
 }
 
-// flexString trims quotes from a raw JSON scalar — the live API returns ports
+// flexString trims quotes from a raw JSON scalar: the live API returns ports
 // and ICMP fields as numbers (80) while older deployments use strings ("80").
 func flexString(raw json.RawMessage) string {
 	v := strings.Trim(strings.TrimSpace(string(raw)), `"`)
@@ -119,7 +120,7 @@ func (s *Service) List(ctx context.Context, networkSlug string) ([]EgressRule, e
 }
 
 // Create adds a new egress rule to a network. The create endpoint returns
-// data:null — fall back to the list and return the rule matching the request.
+// data:null, so fall back to the list and return the rule matching the request.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, error) {
 	var resp singleEgressRuleResponse
 	if err := s.client.Post(ctx, "/networks/"+req.NetworkSlug+"/egress-firewall-rules", req, &resp); err != nil {
@@ -128,23 +129,44 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, e
 	if resp.Data.ID != "" {
 		return &resp.Data, nil
 	}
-	rules, lerr := s.List(ctx, req.NetworkSlug)
-	if lerr != nil {
-		return nil, fmt.Errorf("egress rule for network %s was created, but fetching it back failed: %w", req.NetworkSlug, lerr)
-	}
-	for i := range rules {
-		r := &rules[i]
-		if r.Protocol != req.Protocol || r.StartPort != req.StartPort || r.EndPort != req.EndPort {
-			continue
+	// The rule list can lag the accepted create; retry a few times before
+	// giving up so eventual consistency is not reported as a failure.
+	const listAttempts = 3
+	for attempt := 1; attempt <= listAttempts; attempt++ {
+		rules, lerr := s.List(ctx, req.NetworkSlug)
+		if lerr != nil {
+			return nil, fmt.Errorf("egress rule for network %s was created, but fetching it back failed: %w", req.NetworkSlug, lerr)
 		}
-		// The API echoes the requested CIDR in destcidr_list; top-level cidr
-		// is the network's source CIDR and must not be compared here.
-		if req.CIDR != "" && r.DestCIDR != req.CIDR {
-			continue
+		for i := range rules {
+			r := &rules[i]
+			if r.Protocol != req.Protocol {
+				continue
+			}
+			if strings.EqualFold(req.Protocol, "icmp") {
+				// ICMP rules carry no ports; type and code are the only
+				// discriminators between rules to the same CIDR.
+				if r.ICMPType != req.ICMPType || r.ICMPCode != req.ICMPCode {
+					continue
+				}
+			} else if r.StartPort != req.StartPort || r.EndPort != req.EndPort {
+				continue
+			}
+			// The API echoes the requested CIDR in destcidr_list; top-level cidr
+			// is the network's source CIDR and must not be compared here.
+			if req.CIDR != "" && r.DestCIDR != req.CIDR {
+				continue
+			}
+			return r, nil
 		}
-		return r, nil
+		if attempt < listAttempts {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+			}
+		}
 	}
-	return nil, fmt.Errorf("egress rule for network %s was created, but is not yet visible in the rule list — check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
+	return nil, fmt.Errorf("egress rule for network %s was accepted by the API but never appeared in the rule list. The backend may have silently dropped it. Check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
 }
 
 // Delete removes an egress rule by ID from the given network.

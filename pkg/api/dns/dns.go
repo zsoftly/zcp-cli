@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -27,16 +28,37 @@ type Domain struct {
 }
 
 // Record represents a single DNS record within a domain.
+//
+// The live PowerDNS-backed API returns record SETS (RRsets): no id, and the
+// values under a "contents" array rather than a "content" string (verified
+// live 2026-07-05). UnmarshalJSON accepts both shapes; Content carries the
+// joined values for display and Contents the individual values.
 type Record struct {
-	ID        string `json:"id"`
-	DomainID  int    `json:"domain_id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Content   string `json:"content"`
-	TTL       int    `json:"ttl"`
-	Priority  int    `json:"priority,omitempty"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID        string   `json:"id"`
+	DomainID  int      `json:"domain_id"`
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`
+	Content   string   `json:"content"`
+	Contents  []string `json:"contents"`
+	TTL       int      `json:"ttl"`
+	Priority  int      `json:"priority,omitempty"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+}
+
+// UnmarshalJSON tolerates both record shapes: legacy rows with id/content and
+// PowerDNS RRsets with a contents array and no id.
+func (r *Record) UnmarshalJSON(b []byte) error {
+	type recordAlias Record
+	var v recordAlias
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*r = Record(v)
+	if r.Content == "" && len(r.Contents) > 0 {
+		r.Content = strings.Join(r.Contents, ", ")
+	}
+	return nil
 }
 
 // CreateDomainRequest holds parameters for creating a DNS domain.
@@ -135,8 +157,10 @@ func (s *Service) CreateRecord(ctx context.Context, domainSlug string, req Creat
 	return &resp.Data, nil
 }
 
-// DeleteRecord removes a DNS record under the given domain slug.
-// The record is identified by its ID in the request body.
+// DeleteRecord removes a DNS record under the given domain slug by numeric ID.
+//
+// Deprecated: the live PowerDNS-backed API does not expose record IDs, so this
+// cannot work there; use DeleteRecordByName instead.
 func (s *Service) DeleteRecord(ctx context.Context, domainSlug string, recordID int) error {
 	path := "/dns/domains/" + domainSlug + "/records"
 	q := url.Values{}
@@ -145,4 +169,33 @@ func (s *Service) DeleteRecord(ctx context.Context, domainSlug string, recordID 
 		return fmt.Errorf("deleting DNS record %d on domain %s: %w", recordID, domainSlug, err)
 	}
 	return nil
+}
+
+// DeleteRecordByName removes a DNS record set identified by its fully
+// qualified name and type, the addressing scheme the live PowerDNS-backed
+// API uses (record sets carry no IDs). name should be the stored FQDN with a
+// trailing dot (e.g. "www.example.com.").
+func (s *Service) DeleteRecordByName(ctx context.Context, domainSlug, name, recordType string) error {
+	q := url.Values{}
+	q.Set("name", name)
+	q.Set("type", recordType)
+	if err := s.client.Delete(ctx, "/dns/domains/"+domainSlug+"/records", q); err != nil {
+		return fmt.Errorf("deleting DNS record %s %s on domain %s: %w", recordType, name, domainSlug, err)
+	}
+	return nil
+}
+
+// CanonicalRecordFQDN builds the backend's stored record name for a record in
+// the given zone: relative labels get the zone appended, absolute names are
+// normalized, and the result always carries a trailing dot.
+func CanonicalRecordFQDN(name, zoneName string) string {
+	n := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
+	zone := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zoneName), "."))
+	if n == "" || n == "@" || n == zone {
+		return zone + "."
+	}
+	if strings.HasSuffix(n, "."+zone) {
+		return n + "."
+	}
+	return n + "." + zone + "."
 }
