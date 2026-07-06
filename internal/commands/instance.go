@@ -356,9 +356,9 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
-		Example: `  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly
-  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --wait
-  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --ssh-key mykey   # import the key first with 'zcp ssh-key import'`,
+		Example: `  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --network-plan pnet-yul --storage-category premium-ssd
+  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --network-plan pnet-yul --storage-category premium-ssd --wait
+  zcp instance create --name my-vm --project default-9 --region yul-1 --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly --network-plan pnet-yul --storage-category premium-ssd --ssh-key mykey   # import the key first with 'zcp ssh-key import'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -383,6 +383,12 @@ func newInstanceCreateCmd() *cobra.Command {
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
+			}
+			if storageCategory == "" {
+				return fmt.Errorf("--storage-category is required")
+			}
+			if networkPlan == "" {
+				return fmt.Errorf("--network-plan is required")
 			}
 			if userData != "" && userDataFile != "" {
 				return fmt.Errorf("--user-data and --user-data-file are mutually exclusive")
@@ -479,10 +485,10 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&networkType, "network-type", "Isolated", "Network type (default: Isolated)")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Name of an existing SSH key to attach for login (optional; see 'zcp ssh-key list')")
 	cmd.Flags().StringVar(&hostname, "hostname", "", "Hostname (defaults to --name)")
-	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug (optional)")
+	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category (required, e.g. premium-ssd - see: zcp plan storage)")
 	cmd.Flags().StringVar(&computeCategory, "compute-category", "", "Compute category slug (optional)")
 	cmd.Flags().StringVar(&blockstoragePlan, "blockstorage-plan", "", "Block storage plan slug (optional, e.g. b2g1 — see: zcp plan storage)")
-	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (e.g. pnet-yow, pnet-yul — see: zcp plan network)")
+	cmd.Flags().StringVar(&networkPlan, "network-plan", "", "Network plan slug (required, e.g. pnet-yow, pnet-yul — see: zcp plan network)")
 	cmd.Flags().StringVar(&userData, "user-data", "", "Startup script content (cloud-init / bash)")
 	cmd.Flags().StringVar(&userDataFile, "user-data-file", "", "Path to a file containing the startup script")
 	cmd.Flags().IntVar(&cpu, "cpu", 0, "Number of vCPUs for a custom plan (e.g. 2)")
