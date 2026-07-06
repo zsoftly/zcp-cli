@@ -3,10 +3,12 @@
 ## DNS records now display and delete correctly
 
 The live DNS backend (PowerDNS) models records as record **sets** addressed by
-name and type. It exposes no record IDs, and returns values in a `contents`
-array. The CLI previously decoded neither, so record tables printed blank ID
-and CONTENT columns, and `dns record-delete` demanded a numeric `--record-id`
-that does not exist anywhere. Record deletion was impossible.
+name and type. PowerDNS exposes no record IDs and returns values in a
+`contents` array. The CLI previously decoded neither, so on PowerDNS-backed
+deployments record tables printed blank ID and CONTENT columns, and
+`dns record-delete` demanded a numeric `--record-id` those deployments never
+expose. Record deletion was impossible there. Backends that do expose record
+IDs keep the legacy `--record-id` path.
 
 This release aligns the CLI with how the backend actually works, verified live
 end to end (create → show → delete → confirm gone).

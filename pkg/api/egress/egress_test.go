@@ -179,3 +179,33 @@ func TestCreateFallbackNoMatchErrors(t *testing.T) {
 		t.Fatal("Create() = nil error, want explicit not-yet-visible error")
 	}
 }
+
+// TestCreateFallbackMatchesICMPTypeAndCode verifies the fallback lookup picks
+// the right ICMP rule when two rules to the same CIDR differ only in ICMP
+// type/code (ICMP rules carry no ports to discriminate on).
+func TestCreateFallbackMatchesICMPTypeAndCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+			return
+		}
+		fmt.Fprint(w, `{"status":"Success","data":[
+			{"id":"echo-reply","protocol":"icmp","icmp_type":0,"icmp_code":0,"destcidr_list":"0.0.0.0/0","_original":{"state":"Active"}},
+			{"id":"echo-request","protocol":"icmp","icmp_type":8,"icmp_code":0,"destcidr_list":"0.0.0.0/0","_original":{"state":"Active"}}
+		]}`)
+	}))
+	defer srv.Close()
+
+	svc := egress.NewService(newClient(srv.URL))
+
+	rule, err := svc.Create(context.Background(), egress.CreateRequest{
+		NetworkSlug: "my-net", Protocol: "icmp", ICMPType: "8", ICMPCode: "0", CIDR: "0.0.0.0/0",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if rule.ID != "echo-request" {
+		t.Errorf("Create() matched rule %q, want %q (must discriminate on icmp_type/icmp_code)", rule.ID, "echo-request")
+	}
+}

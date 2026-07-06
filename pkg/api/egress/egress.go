@@ -139,7 +139,16 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, e
 		}
 		for i := range rules {
 			r := &rules[i]
-			if r.Protocol != req.Protocol || r.StartPort != req.StartPort || r.EndPort != req.EndPort {
+			if r.Protocol != req.Protocol {
+				continue
+			}
+			if strings.EqualFold(req.Protocol, "icmp") {
+				// ICMP rules carry no ports; type and code are the only
+				// discriminators between rules to the same CIDR.
+				if r.ICMPType != req.ICMPType || r.ICMPCode != req.ICMPCode {
+					continue
+				}
+			} else if r.StartPort != req.StartPort || r.EndPort != req.EndPort {
 				continue
 			}
 			// The API echoes the requested CIDR in destcidr_list; top-level cidr
