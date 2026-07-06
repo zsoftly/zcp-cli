@@ -33,7 +33,7 @@ type EgressRule struct {
 	Status    string `json:"status"`
 }
 
-// flexString trims quotes from a raw JSON scalar — the live API returns ports
+// flexString trims quotes from a raw JSON scalar: the live API returns ports
 // and ICMP fields as numbers (80) while older deployments use strings ("80").
 func flexString(raw json.RawMessage) string {
 	v := strings.Trim(strings.TrimSpace(string(raw)), `"`)
@@ -120,7 +120,7 @@ func (s *Service) List(ctx context.Context, networkSlug string) ([]EgressRule, e
 }
 
 // Create adds a new egress rule to a network. The create endpoint returns
-// data:null — fall back to the list and return the rule matching the request.
+// data:null, so fall back to the list and return the rule matching the request.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, error) {
 	var resp singleEgressRuleResponse
 	if err := s.client.Post(ctx, "/networks/"+req.NetworkSlug+"/egress-firewall-rules", req, &resp); err != nil {
@@ -157,7 +157,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*EgressRule, e
 			}
 		}
 	}
-	return nil, fmt.Errorf("egress rule for network %s was accepted by the API but never appeared in the rule list — the backend may have silently dropped it; check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
+	return nil, fmt.Errorf("egress rule for network %s was accepted by the API but never appeared in the rule list. The backend may have silently dropped it. Check with: zcp egress list --network %s", req.NetworkSlug, req.NetworkSlug)
 }
 
 // Delete removes an egress rule by ID from the given network.

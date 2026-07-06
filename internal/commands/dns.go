@@ -251,7 +251,7 @@ func runDNSDelete(cmd *cobra.Command, slug string, yes bool) error {
 
 	if err := svc.Delete(ctx, slug); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "DNS domain %q not found — already deleted.\n", slug)
+			fmt.Fprintf(os.Stderr, "DNS domain %q not found (already deleted).\n", slug)
 			return nil
 		}
 		return fmt.Errorf("dns delete: %w", err)
@@ -295,7 +295,7 @@ func newDNSRecordCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
-	cmd.Flags().StringVar(&name, "name", "", "Relative record name, e.g. www — the zone is appended by the backend (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Relative record name, e.g. www. The backend appends the zone (required)")
 	cmd.Flags().StringVar(&recordType, "type", "", "Record type: A, AAAA, CNAME, MX, TXT, etc. (required)")
 	cmd.Flags().StringVar(&content, "content", "", "Record content / value (required)")
 	cmd.Flags().IntVar(&ttl, "ttl", 14400, "Time-to-live in seconds (default: 14400)")
@@ -399,7 +399,7 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 
 	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "DNS record %s %q not found — already deleted.\n", recordType, fqdn)
+			fmt.Fprintf(os.Stderr, "DNS record %s %q not found (already deleted).\n", recordType, fqdn)
 			return nil
 		}
 		return fmt.Errorf("dns record-delete: %w", err)
@@ -432,7 +432,7 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 
 	if err := svc.DeleteRecord(ctx, domainSlug, recordID); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "DNS record %d not found — already deleted.\n", recordID)
+			fmt.Fprintf(os.Stderr, "DNS record %d not found (already deleted).\n", recordID)
 			return nil
 		}
 		return fmt.Errorf("dns record-delete: %w", err)

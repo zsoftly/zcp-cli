@@ -172,7 +172,7 @@ func (s *Service) DeleteRecord(ctx context.Context, domainSlug string, recordID 
 }
 
 // DeleteRecordByName removes a DNS record set identified by its fully
-// qualified name and type — the addressing scheme the live PowerDNS-backed
+// qualified name and type, the addressing scheme the live PowerDNS-backed
 // API uses (record sets carry no IDs). name should be the stored FQDN with a
 // trailing dot (e.g. "www.example.com.").
 func (s *Service) DeleteRecordByName(ctx context.Context, domainSlug, name, recordType string) error {
