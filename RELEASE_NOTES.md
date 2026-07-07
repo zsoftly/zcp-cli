@@ -135,7 +135,7 @@ flags; 264 examples).
 
 ## New Contributors
 
-* @cokerrd made their first contributions in
+- @cokerrd made their first contributions in
   [#25](https://github.com/zsoftly/zcp-cli/pull/25) and
   [#27](https://github.com/zsoftly/zcp-cli/pull/27), fixing L2 instance
   creation and the `instance create` examples. Both fixes were verified
