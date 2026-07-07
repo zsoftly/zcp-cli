@@ -27,6 +27,10 @@ Highlights:
 - **`docs/commands.md` is now machine-validated:** all 264 examples checked
   against the built CLI. Six sections documented commands that did not exist
   and are rewritten to the real trees.
+- **L2 instances work, and `instance create` examples run as pasted** thanks
+  to first-time contributor @cokerrd: a new `--is-public` flag unblocks
+  `--network-type L2`, and the required `--network-plan`/`--storage-category`
+  flags are now in the examples and validated client-side.
 
 ---
 
@@ -96,6 +100,26 @@ and when the rule never appears (the API can return 200 yet create nothing on
 some networks), the error says the backend may have dropped the rule, pointing
 at the platform rather than the CLI.
 
+### L2 instance creation and complete create examples (community)
+
+Contributed by @cokerrd, our first outside contributor. Two fixes to
+`instance create`, both verified against the live API:
+
+```bash
+# L2 networks cannot carry a public IP. The new --is-public flag (default:
+# true) unblocks them; the CLI rejects the invalid combination client-side.
+zcp instance create --name my-l2-vm --template ubuntu-2604-lts-1 --plan ca2sl \
+  --billing-cycle hourly --network-plan l2net-yul --network-type L2 \
+  --storage-category premium-ssd --is-public=false \
+  --region yul-1 --project default-9
+
+# --network-plan and --storage-category are required by the API and are now
+# in every example, marked required in help, and validated client-side.
+zcp instance create --name my-vm --template ubuntu-2604-lts-1 --plan ca2sl \
+  --billing-cycle hourly --network-plan pnet-yul --storage-category premium-ssd \
+  --region yul-1 --project default-9
+```
+
 ### Command reference corrected and machine-validated
 
 Six sections of `docs/commands.md` documented commands that do not exist
@@ -106,3 +130,13 @@ the previously undocumented `kubernetes scale/get-config/upgrade-version/delete`
 and `loadbalancer attach-vm/detach-vm/delete-rule`. Every example in the
 reference is now validated automatically against the CLI (command paths and
 flags; 264 examples).
+
+---
+
+## New Contributors
+
+* @cokerrd made their first contributions in
+  [#25](https://github.com/zsoftly/zcp-cli/pull/25) and
+  [#27](https://github.com/zsoftly/zcp-cli/pull/27), fixing L2 instance
+  creation and the `instance create` examples. Both fixes were verified
+  against the live platform before merge. Welcome, and thank you!

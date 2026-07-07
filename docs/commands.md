@@ -87,7 +87,9 @@ command lists the matching IDs and asks you to use one.
 zcp instance list
 zcp instance get <id|name|slug>
 
-# Create. Use --wait to block until the instance is Running
+# Create. Use --wait to block until the instance is Running.
+# --network-plan and --storage-category are required (see: zcp plan network,
+# zcp storage-category list).
 zcp instance create \
   --name my-vm \
   --project default-9 \
@@ -95,11 +97,18 @@ zcp instance create \
   --template ubuntu-2604-lts-1 \
   --plan ca2sl \
   --billing-cycle hourly \
+  --network-plan pnet-yul \
   --storage-category pro-nvme \
   --blockstorage-plan b2g1 \
   --ssh-key mykey
 
 zcp instance create ... --wait
+
+# L2 networks cannot carry a public IP: pass --is-public=false (default: true)
+zcp instance create --name my-l2-vm --project default-9 --region yul-1 \
+  --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly \
+  --network-plan l2net-yul --network-type L2 --storage-category pro-nvme \
+  --is-public=false
 
 # Lifecycle
 zcp instance start <slug>
