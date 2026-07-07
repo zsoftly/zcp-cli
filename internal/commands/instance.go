@@ -351,6 +351,7 @@ func newInstanceCreateCmd() *cobra.Command {
 		memory           int
 		disk             int
 		wait             bool
+		isPublic         bool
 	)
 
 	cmd := &cobra.Command{
@@ -399,6 +400,10 @@ func newInstanceCreateCmd() *cobra.Command {
 					return fmt.Errorf("reading user-data file %q: %w", userDataFile, err)
 				}
 				userData = string(data)
+			}
+
+			if networkType == "L2" && isPublic {
+				return fmt.Errorf("--is-public cannot be true for L2 networks; pass --is-public=false")
 			}
 
 			h := hostname
@@ -453,7 +458,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				BootSource:       "image",
 				Server:           "cloud-compute",
 				Template:         template,
-				IsPublic:         true,
+				IsPublic:         isPublic,
 				NetworkType:      networkType,
 				Networks:         []string{},
 				BillingCycle:     billingCycle,
@@ -495,6 +500,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in MB for a custom plan (e.g. 2048)")
 	cmd.Flags().IntVar(&disk, "disk", 0, "Root disk size in GB for a custom plan (e.g. 50)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
+	cmd.Flags().BoolVar(&isPublic, "is-public", true, "Assign a public IP address")
 	return cmd
 }
 
