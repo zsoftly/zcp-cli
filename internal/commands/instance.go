@@ -1368,13 +1368,16 @@ func newInstanceDeleteCmd() *cobra.Command {
 		Example: `  zcp instance delete my-vm
   zcp instance delete my-vm --yes
   zcp instance delete my-vm --force --yes
-  zcp instance delete my-vm --delete-public-ip=false   # keep the auto-assigned public IP`,
+  # the auto-assigned public IP is NOT released yet (known CMP API bug); free it manually:
+  zcp instance delete my-vm --yes && zcp ip release <ip-slug> --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
 				ipNote := ""
 				if deletePublicIP {
-					ipNote = " Its auto-assigned public IP will also be released."
+					// --delete-public-ip is currently a no-op: the CMP endpoint that
+					// releases the IP rejects token auth (known bug, fix in progress).
+					ipNote = " NOTE: the auto-assigned public IP is NOT released automatically yet (known CMP API bug, fix in progress) — release it manually afterward with 'zcp ip release <ip-slug>'."
 				}
 				fmt.Fprintf(os.Stderr, "WARNING: Delete %q is permanent and cannot be undone.%s [y/N]: ", slug, ipNote)
 				scanner := bufio.NewScanner(os.Stdin)
@@ -1390,7 +1393,7 @@ func newInstanceDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&force, "force", false, "Force immediate expunge from hypervisor (passes expunge=true)")
-	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Release the public IP(s) auto-assigned to the VM at creation. Manually-acquired and source-NAT IPs are unaffected. Use --delete-public-ip=false to keep them (e.g. if the IP is reused by NAT/LB/shared networks)")
+	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Request release of the VM's auto-assigned public IP on delete. NOTE: currently a no-op — the CMP endpoint that releases the IP rejects API-token auth (known bug, fix in progress); until it lands, the IP is left Allocated, so release it manually with 'zcp ip release <ip-slug>' after deleting. Manually-acquired and source-NAT IPs are unaffected either way")
 	return cmd
 }
 
