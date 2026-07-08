@@ -2,7 +2,7 @@ module github.com/zsoftly/zcp-cli
 
 go 1.25.0
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	github.com/olekukonko/tablewriter v0.0.5
