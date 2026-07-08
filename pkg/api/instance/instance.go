@@ -581,7 +581,41 @@ func (s *Service) Delete(ctx context.Context, slug string, expunge, deletePublic
 	return nil
 }
 
+// VMMeta is the live, hypervisor-synced view of a VM from GET /virtual-machines/{slug}/meta.
+// This endpoint performs a real-time reconcile against the underlying platform (CloudStack/APC)
+// and updates the stored state before returning, so it reports the true state even when the
+// cached list/show endpoints lag — a Running VM can otherwise stay "Starting" in list/show
+// until the platform's own reconciliation catches up.
+type VMMeta struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// Meta returns the live, hypervisor-synced view of a VM (see VMMeta). Prefer this over Get when
+// you need the authoritative current lifecycle state (for example when polling for Running),
+// because Get/List can report a stale state for several minutes after a state change.
+func (s *Service) Meta(ctx context.Context, slug string) (*VMMeta, error) {
+	var env SingleEnvelope
+	if err := s.client.Get(ctx, "/virtual-machines/"+slug+"/meta", nil, &env); err != nil {
+		return nil, fmt.Errorf("getting virtual machine meta %s: %w", slug, err)
+	}
+	if env.Status != "Success" {
+		return nil, fmt.Errorf("getting virtual machine meta %s: %s", slug, env.Message)
+	}
+	var meta VMMeta
+	if err := json.Unmarshal(env.Data, &meta); err != nil {
+		return nil, fmt.Errorf("decoding virtual machine meta: %w", err)
+	}
+	return &meta, nil
+}
+
 // WaitForState polls the VM until it reaches one of the target states or the context is cancelled.
+//
+// It polls the meta endpoint rather than Get: /meta forces a live reconcile with the hypervisor
+// and reports the true state, whereas the cached Get/List can keep reporting "Starting" long
+// after the VM is actually Running (the CMP's background reconciliation is unreliable). Calling
+// meta also reconciles the stored state, so the follow-up Get returns a consistent object.
 func (s *Service) WaitForState(ctx context.Context, slug string, targetStates []string, pollInterval time.Duration) (*VirtualMachine, error) {
 	if pollInterval == 0 {
 		pollInterval = 5 * time.Second
@@ -593,12 +627,18 @@ func (s *Service) WaitForState(ctx context.Context, slug string, targetStates []
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ticker.C:
-			vm, err := s.Get(ctx, slug)
+			meta, err := s.Meta(ctx, slug)
 			if err != nil {
 				return nil, err
 			}
 			for _, target := range targetStates {
-				if strings.EqualFold(vm.State, target) {
+				if strings.EqualFold(meta.State, target) {
+					vm, err := s.Get(ctx, slug)
+					if err != nil {
+						return nil, err
+					}
+					// meta is authoritative; surface it even if Get is momentarily stale.
+					vm.State = meta.State
 					return vm, nil
 				}
 			}
