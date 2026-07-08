@@ -5,6 +5,13 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.23] - 2026-07-08
+
+### Fixed
+
+- **`instance create/start/stop --wait` now reports the real state — it polls the live `/meta` endpoint instead of the cached list/show.** The CMP's list and show endpoints can keep reporting `Starting` for many minutes after a VM is actually `Running` (the platform's background state reconciliation is unreliable; the state only refreshes on demand). `WaitForState` polled `GET /virtual-machines/{slug}` (cached), so `--wait` could hang until it timed out even though the VM was up. It now polls `GET /virtual-machines/{slug}/meta`, which performs a real-time reconcile against CloudStack/APC and returns the authoritative state (and reconciles the stored state as a side effect). Verified live: with `--wait`, `create` returned `Running` via `/meta` while the plain `instance list` still showed `Starting`. New SDK method `instance.Service.Meta(ctx, slug)` exposes this live view. (Workaround for the CMP background-sync bug; see the filed ticket.)
+- **Corrected the misleading `instance delete --delete-public-ip` help/prompt: the flag is currently a no-op.** v0.0.20 advertised that deleting a VM releases its auto-assigned public IP, but this was never true against the live API — the plain `DELETE /virtual-machines/{slug}` endpoint ignores `delete_public_ip`, so the IP is left `Allocated` (and billable). The IP-releasing path is `PUT /virtual-machines/{slug}/destroy`, but that endpoint currently **rejects API-token auth** with `"The selected action is invalid"` even for a Running VM (it succeeds only from a logged-in portal session) — a CMP API bug that has been filed and is being fixed. Until that lands, the flag/prompt/help now say plainly that the IP is **not** auto-released and that you must free it manually with `zcp ip release <ip-slug>` after deleting. The real fix (routing `instance delete` through `PUT .../destroy`) is implemented and verified at the request level but held back until the API accepts token auth.
+
 ## [v0.0.22] - 2026-07-07
 
 ### Fixed

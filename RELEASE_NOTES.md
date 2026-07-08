@@ -1,36 +1,39 @@
-# zcp v0.0.22 Release Notes
+# zcp v0.0.23 Release Notes
 
-## DNS records now display and delete correctly
+## `instance --wait` now reports the VM's real state
 
-The live DNS backend (PowerDNS) models records as record **sets** addressed by
-name and type. PowerDNS exposes no record IDs and returns values in a
-`contents` array. The CLI previously decoded neither, so on PowerDNS-backed
-deployments record tables printed blank ID and CONTENT columns, and
-`dns record-delete` demanded a numeric `--record-id` those deployments never
-expose. Record deletion was impossible there. Backends that do expose record
-IDs keep the legacy `--record-id` path.
+`zcp instance create --wait` (and `start --wait` / `stop --wait`) previously
+polled the CMP's cached list/show endpoint, which can keep reporting `Starting`
+for many minutes after a VM is actually `Running`. On affected deployments
+`--wait` could hang until it timed out even though the VM was already up.
 
-This release aligns the CLI with how the backend actually works, verified live
-end to end (create → show → delete → confirm gone).
+`--wait` now polls the live `GET /virtual-machines/{slug}/meta` endpoint, which
+performs a real-time reconcile against the underlying platform (CloudStack/APC)
+and returns the authoritative state. Verified live end to end: with `--wait`,
+`create` returned `Running` from `/meta` while the plain `instance list` still
+showed `Starting`.
 
-Highlights:
+This is a client-side workaround for a CMP background state-sync issue (the
+platform's own reconciliation is unreliable; state only refreshes on demand).
+The on-demand `/meta` sync is authoritative, so the CLI polls it.
 
-- **Record content is visible again.** `zcp dns show` and `record-create`
-  tables show real values (multi-value sets joined, e.g.
-  `ns1.zsoftly.ca., ns2.zsoftly.ca.`), and the dead ID column is gone.
-- **`dns record-delete` works, by name and type.**
-- **Record names are relative.** The backend appends the zone; the help text
-  now says so (passing an FQDN used to silently create
-  `www.example.com.example.com.`).
-- **`egress create` retries its lookup and reports honestly** when the backend
-  silently drops an accepted rule (a platform-side issue found while testing).
-- **`docs/commands.md` is now machine-validated:** all 264 examples checked
-  against the built CLI. Six sections documented commands that did not exist
-  and are rewritten to the real trees.
-- **L2 instances work, and `instance create` examples run as pasted** thanks
-  to first-time contributor @cokerrd: a new `--is-public` flag unblocks
-  `--network-type L2`, and the required `--network-plan`/`--storage-category`
-  flags are now in the examples and validated client-side.
+## `instance delete --delete-public-ip` help corrected — the flag is currently a no-op
+
+The flag advertised that deleting a VM releases its auto-assigned public IP, but
+that never worked against the live API: the `DELETE` endpoint ignores it, and
+the IP-releasing `PUT .../destroy` endpoint currently rejects API-token auth (a
+CMP bug, reported and under fix). Until that lands, the help text, confirmation
+prompt, and command examples now state plainly that the IP is **not** released
+automatically, and that you must free it manually:
+
+```bash
+zcp instance delete my-vm --yes
+zcp ip release <ip-slug> --yes
+```
+
+No behavior change — this corrects misleading messaging only. The real fix
+(routing `instance delete` through `PUT .../destroy`) is implemented and
+verified at the request level, and is held until the API accepts token auth.
 
 ---
 
@@ -58,7 +61,7 @@ place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v0.0.22
+zcp version   # zcp version v0.0.23
 ```
 
 First-time setup after installing:
@@ -72,71 +75,23 @@ zcp auth validate
 
 ## Fixed
 
-### DNS record display and deletion
+### `instance --wait` reflects the real state
 
 ```bash
-# Records show their content; sets are addressed by NAME + TYPE (no IDs)
-zcp dns show example-com
-# NAME               TYPE  CONTENT                           TTL
-# www.example.com.   A     192.0.2.50                        3600
-# example.com.       NS    ns1.zsoftly.ca., ns2.zsoftly.ca.  3600
-
-# Create with a RELATIVE name (the backend appends the zone)
-zcp dns record-create --domain example-com --name www --type A --content 192.0.2.50
-
-# Delete by name and type (relative or fully qualified both work)
-zcp dns record-delete --domain example-com --name www --type A
+# Create and wait: returns when the VM is actually Running (polled via /meta),
+# even while `instance list` still reports Starting.
+zcp instance create --name my-vm --project default-9 --region yul-1 \
+  --template ubuntu-2604-lts-1 --plan ca2m --billing-cycle hourly \
+  --network-plan pnet-yul --storage-category premium-ssd --wait
 ```
 
-The legacy `--record-id` flag remains for deployments whose DNS backend exposes
-record IDs. SDK consumers get `DeleteRecordByName`, `CanonicalRecordFQDN`, and
-`Record.Contents`; the ID-based `DeleteRecord` is deprecated.
+SDK consumers get a new `instance.Service.Meta(ctx, slug)` method that returns
+the live, hypervisor-synced view (authoritative `state`).
 
-### Egress rule creation reporting
-
-The create endpoint returns no body, so the CLI resolves the new rule from the
-rule list. It now retries that lookup (3 attempts over ~4s) before giving up,
-and when the rule never appears (the API can return 200 yet create nothing on
-some networks), the error says the backend may have dropped the rule, pointing
-at the platform rather than the CLI.
-
-### L2 instance creation and complete create examples (community)
-
-Contributed by @cokerrd, our first outside contributor. Two fixes to
-`instance create`, both verified against the live API:
+### `instance delete --delete-public-ip` messaging
 
 ```bash
-# L2 networks cannot carry a public IP. The new --is-public flag (default:
-# true) unblocks them; the CLI rejects the invalid combination client-side.
-zcp instance create --name my-l2-vm --template ubuntu-2604-lts-1 --plan ca2sl \
-  --billing-cycle hourly --network-plan l2net-yul --network-type L2 \
-  --storage-category premium-ssd --is-public=false \
-  --region yul-1 --project default-9
-
-# --network-plan and --storage-category are required by the API and are now
-# in every example, marked required in help, and validated client-side.
-zcp instance create --name my-vm --template ubuntu-2604-lts-1 --plan ca2sl \
-  --billing-cycle hourly --network-plan pnet-yul --storage-category premium-ssd \
-  --region yul-1 --project default-9
+# The auto-assigned public IP is NOT released automatically yet (known CMP API
+# bug, under fix). Free it manually after deleting:
+zcp instance delete my-vm --yes && zcp ip release <ip-slug> --yes
 ```
-
-### Command reference corrected and machine-validated
-
-Six sections of `docs/commands.md` documented commands that do not exist
-(`monitoring create`, `vpn create --vpc`, `support close`, `dashboard status`,
-among others) or missed required flags (`ip allocate` without `--plan`/
-`--billing-cycle`). All are rewritten to the real command trees, including
-the previously undocumented `kubernetes scale/get-config/upgrade-version/delete`
-and `loadbalancer attach-vm/detach-vm/delete-rule`. Every example in the
-reference is now validated automatically against the CLI (command paths and
-flags; 264 examples).
-
----
-
-## New Contributors
-
-- @cokerrd made their first contributions in
-  [#25](https://github.com/zsoftly/zcp-cli/pull/25) and
-  [#27](https://github.com/zsoftly/zcp-cli/pull/27), fixing L2 instance
-  creation and the `instance create` examples. Both fixes were verified
-  against the live platform before merge. Welcome, and thank you!
