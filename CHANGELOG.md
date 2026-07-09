@@ -5,6 +5,12 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Relicensed under the Apache License 2.0.** The CLI and its SDK (`pkg/`) were previously source-available for reference and evaluation only, which conflicted with the MIT-licensed Terraform/OpenTofu provider embedding the SDK and with Go module distribution. Apache-2.0 grants redistribution and patent rights and licenses future contributions under the same terms (section 5). Added a NOTICE file; copyright updated to 2024-2026.
+
 ## [v0.0.23] - 2026-07-08
 
 ### Fixed

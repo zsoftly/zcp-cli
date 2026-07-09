@@ -165,4 +165,4 @@ Requirements: Go 1.26.4, GNU Make, Git. See **[docs/development.md](docs/develop
 
 ## License
 
-Copyright (c) ZSoftly. All rights reserved.
+Licensed under the [Apache License, Version 2.0](LICENSE). Copyright 2024-2026 ZSoftly Technologies Inc. o/a ZSoftly.
