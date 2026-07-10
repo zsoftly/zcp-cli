@@ -71,6 +71,7 @@ type VirtualMachine struct {
 	IsVNF                bool            `json:"is_vnf"`
 	ConsoleURL           *string         `json:"console_url"`
 	Template             *VMTemplate     `json:"template"`
+	Offering             *Offering       `json:"offering"`
 	BillingCycle         *BillingCycle   `json:"billing_cycle"`
 	Region               *Region         `json:"region"`
 	CloudProvider        *CloudProvider  `json:"cloud_provider"`
@@ -161,6 +162,10 @@ type BillingCycle struct {
 	Slug     string `json:"slug"`
 	Duration int    `json:"duration"`
 	Unit     string `json:"unit"`
+}
+type Offering struct {
+	ID           string        `json:"id"`
+	BillingCycle *BillingCycle `json:"billing_cycle"`
 }
 
 // Region represents a cloud region.
@@ -345,7 +350,9 @@ func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMa
 	// resolution) see the full set rather than just the first page.
 	var all []VirtualMachine
 	for page := 1; ; page++ {
-		q := url.Values{}
+		q := url.Values{
+			"include": {"networks,ipaddresses"},
+		}
 		if region != "" {
 			q.Set("filter[region]", region)
 		}

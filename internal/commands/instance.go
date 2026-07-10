@@ -202,8 +202,8 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		regionName = vm.Region.Name
 	}
 	billingCycle := ""
-	if vm.BillingCycle != nil {
-		billingCycle = vm.BillingCycle.Name
+	if vm.Offering != nil {
+		billingCycle = vm.Offering.BillingCycle.Name
 	}
 	storageName := ""
 	if vm.StorageSetting != nil {
