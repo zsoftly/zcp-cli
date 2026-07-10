@@ -108,12 +108,13 @@ func runInstanceList(cmd *cobra.Command) error {
 		if privateIP == "" {
 			privateIP = vm.NetworkPrivateIP()
 		}
+		publicIP := vm.GetPublicIPAddress()
 		row := []string{
 			instanceDisplayID(vm),
 			vm.Name,
 			vm.State,
 			privateIP,
-			instance.StringVal(vm.PublicIP),
+			publicIP,
 			regionName,
 		}
 		if expandedOutput {
@@ -123,7 +124,7 @@ func runInstanceList(cmd *cobra.Command) error {
 				vm.Name,
 				vm.State,
 				privateIP,
-				instance.StringVal(vm.PublicIP),
+				publicIP,
 				regionName,
 				templateName,
 				vm.CreatedAt,
@@ -215,6 +216,8 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		privateIP = vm.NetworkPrivateIP()
 	}
 
+	pubicIP := vm.GetPublicIPAddress()
+
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
 		{"ID", instanceDisplayID(*vm)},
@@ -224,7 +227,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		{"State", vm.State},
 		{"Username", vm.Username},
 		{"Private IP", privateIP},
-		{"Public IP", instance.StringVal(vm.PublicIP)},
+		{"Public IP", pubicIP},
 		{"Region", regionName},
 		{"Template", templateName},
 		{"OS Family", osFamily},

@@ -60,6 +60,7 @@ type VirtualMachine struct {
 	Hostname             string          `json:"hostname"`
 	Username             string          `json:"username"`
 	State                string          `json:"state"`
+	IPAddresses          []IPAddresses   `json:"ipaddresses"`
 	PublicIP             *string         `json:"public_ip"`
 	PrivateIP            *string         `json:"private_ip"`
 	FrozenAt             *string         `json:"frozen_at"`
@@ -108,7 +109,7 @@ type VMNetworkIP struct {
 // NetworkPrivateIP returns the private IP from the default network, falling back
 // to the first network with an IP if no default is set.
 func (vm *VirtualMachine) NetworkPrivateIP() string {
-	var fallback string
+	fallback := "-"
 	for _, n := range vm.Networks {
 		if n.Pivot == nil || n.Pivot.IPAddress == "" {
 			continue
@@ -116,10 +117,31 @@ func (vm *VirtualMachine) NetworkPrivateIP() string {
 		if n.IsDefault || n.Pivot.IsDefault {
 			return n.Pivot.IPAddress
 		}
-		if fallback == "" {
+		if fallback == "-" {
 			fallback = n.Pivot.IPAddress
 		}
 	}
+	return fallback
+}
+
+// Returns the PublicIP if a VM is assigned one
+func (vm *VirtualMachine) GetPublicIPAddress() string {
+	fallback := "-"
+
+	for _, ip := range vm.IPAddresses {
+		if ip.IPAddress == "" {
+			continue
+		}
+
+		if ip.Type != "" {
+			return ip.IPAddress
+		}
+
+		if fallback == "-" {
+			fallback = ip.IPAddress
+		}
+	}
+
 	return fallback
 }
 
@@ -153,6 +175,13 @@ type OSVersion struct {
 	ID          string `json:"id"`
 	Version     string `json:"version"`
 	PricingType string `json:"pricing_type"`
+}
+
+// IPAddresses represents the IP address of a VM
+type IPAddresses struct {
+	ID        string `json:"id"`
+	IPAddress string `json:"ipaddress"`
+	Type      string `json:"type"`
 }
 
 // BillingCycle represents a billing period.
