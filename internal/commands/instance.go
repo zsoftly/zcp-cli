@@ -203,7 +203,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		regionName = vm.Region.Name
 	}
 	billingCycle := ""
-	if vm.Offering != nil {
+	if vm.Offering != nil && vm.Offering.BillingCycle != nil {
 		billingCycle = vm.Offering.BillingCycle.Name
 	}
 	storageName := ""
@@ -216,7 +216,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		privateIP = vm.NetworkPrivateIP()
 	}
 
-	pubicIP := vm.GetPublicIPAddress()
+	publicIP := vm.GetPublicIPAddress()
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
@@ -227,7 +227,7 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 		{"State", vm.State},
 		{"Username", vm.Username},
 		{"Private IP", privateIP},
-		{"Public IP", pubicIP},
+		{"Public IP", publicIP},
 		{"Region", regionName},
 		{"Template", templateName},
 		{"OS Family", osFamily},
