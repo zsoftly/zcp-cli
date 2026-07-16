@@ -89,7 +89,7 @@ func newIPAllocateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "allocate",
 		Short: "Allocate a new public IP address",
-		Example: `  zcp ip allocate --plan ipv4-yul --billing-cycle hourly
+		Example: `  
   zcp ip allocate --plan ipv4-yul --billing-cycle hourly --network en-001001-0018
   zcp ip allocate --plan ipv4-yul --billing-cycle hourly --vpc my-vpc`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -98,6 +98,12 @@ func newIPAllocateCmd() *cobra.Command {
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
+			}
+			if vpc == "" && network == "" {
+				return fmt.Errorf("either --vpc or --network is required")
+			}
+			if vpc != "" && network != "" {
+				return fmt.Errorf("cannot specify both --vpc and --network, choose one")
 			}
 			return runIPAllocate(cmd, ipaddress.CreateRequest{
 				VPC:          vpc,
