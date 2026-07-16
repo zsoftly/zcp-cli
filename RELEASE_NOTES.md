@@ -43,6 +43,18 @@ Both commands previously showed only the first page of results. They now page
 through the full set, so large accounts see everything (and `--release-ip` can
 find a load balancer that lands on a later page).
 
+## `ip allocate` validates `--vpc` / `--network`
+
+Allocating an IP requires exactly one of `--vpc` or `--network`; with neither,
+the API returned a raw `500` (`The vpc field is required when network is not
+present`). `ip allocate` now validates this client-side and the misleading
+example that omitted both flags was removed. Contributed by @cokerrd (#39).
+
+```bash
+zcp ip allocate --plan ipv4-yul --billing-cycle hourly --network en-001001-0018
+zcp ip allocate --plan ipv4-yul --billing-cycle hourly --vpc my-vpc
+```
+
 ---
 
 ## Installation and upgrade

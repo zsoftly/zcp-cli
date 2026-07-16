@@ -18,6 +18,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
   The SDK's direct `loadbalancer.Service.Delete` is retained (its doc notes it does not release the IP).
 
 - **`loadbalancer list` and `ip list` now return all results, not just the first page.** Both SDK `List` methods silently returned only page 1, so accounts with many load balancers or IPs saw truncated output (and `loadbalancer delete --release-ip` could fail to find an LB on a later page). They now follow the API's `?page=N` / `last_page` pagination to the end (bounded against a misreported `last_page`).
+- **`ip allocate` now validates that exactly one of `--vpc` or `--network` is given.** The API rejects an allocation with neither (`500: The vpc field is required when network is not present`), but the CLI forwarded the request and surfaced the raw 500 — and its help advertised a `--plan … --billing-cycle` example with neither flag. The command now requires exactly one of `--vpc`/`--network` (clear client-side error on neither or both) and the misleading example was removed. Contributed by @cokerrd (#39, fixes #38).
 
 ### Added
 
