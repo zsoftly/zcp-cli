@@ -5,7 +5,23 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.0.24] - 2026-07-16
+
+### Fixed
+
+- **`instance delete` now actually releases the VM's auto-assigned public IP.** The command called `DELETE /virtual-machines/{slug}?delete_public_ip=true`, but that endpoint **ignores** `delete_public_ip`, leaving the IP `Allocated` (and billable). Per the CMP team, the Web UI deletes a VM through the unified service-cancellation workflow — `POST /billing/service-cancel-requests/{slug}` with `{"service_name":"Virtual Machine","reason":"not_needed_anymore","type":"Immediate","status":"Pending","billing_cycle":<cycle>,"delete_public_ip":true}` — which releases the IP as part of the cancellation. `instance delete` now uses that endpoint (this supersedes the earlier no-op-flag note and the abandoned `PUT .../destroy` approach, which was deprecated). `--delete-public-ip` (default `true`) is honored; `billing_cycle` is derived from the VM. Deletion is asynchronous — the response means the request was accepted, not that the VM is gone; poll `zcp instance get` to confirm. The VM must be in a destroyable state. Verified end to end: the CLI issues the service-cancel request with `delete_public_ip` and never hits the direct DELETE endpoint. The SDK's `billing.CancelServiceRequest` gained `BillingCycle`/`Status` fields (both `omitempty`).
+- **`--force` on `instance delete` is now a deprecated no-op.** The service-cancellation workflow deletes immediately (`type=Immediate`), so the old `expunge` force flag no longer applies. It is hidden and ignored, and prints a deprecation notice; existing scripts that pass it still work.
+- **`loadbalancer delete` now routes through the service-cancellation workflow** (`POST /billing/service-cancel-requests/{slug}`, `service_name: "Load Balancer"`), matching the CMP Web UI and giving consistent async deletion, instead of the direct `DELETE /load-balancers/{slug}`. Unlike a VM's ephemeral auto-assigned IP, a load balancer's public IP is a **separate, reusable resource** (in the Web UI you Choose an existing IP or Acquire a new one), so it is **not** released by default — verified live that the service-cancel workflow leaves it `Allocated`. The command resolves the load balancer by slug, name, or id (so a name works and the cancel targets the right resource), and accepts an invalid `--billing-cycle` no longer — it is validated up front. Two new flags:
+  - `--release-ip` (default off) — after deleting the LB, also release its public IP. The network's **source-NAT** IP is never released (only a dedicated IP the LB holds); if you attached other rules such as port-forwarding to that IP, releasing it removes them too. When the IP's strategy can't be confirmed, the release is skipped for safety and the exact `zcp ip release <slug>` command is printed. The release runs on its own time budget and retries briefly because deletion is async.
+  - `--billing-cycle` (default `hourly`, accepts `hourly`/`monthly`) — LBs can be billed either way; this sets the cancellation's billing cycle (normalized to the `hour`/`month` unit form the endpoint expects).
+
+  The SDK's direct `loadbalancer.Service.Delete` is retained (its doc notes it does not release the IP).
+
+- **`loadbalancer list` and `ip list` now return all results, not just the first page.** Both SDK `List` methods silently returned only page 1, so accounts with many load balancers or IPs saw truncated output (and `loadbalancer delete --release-ip` could fail to find an LB on a later page). They now follow the API's `?page=N` / `last_page` pagination to the end (bounded against a misreported `last_page`).
+
+### Added
+
+- **`billing cancel-service` gained a `--billing-cycle` flag.** The service-cancellation body requires `billing_cycle` (unit form, e.g. `hour`/`month`) for some services such as Virtual Machine; the flag lets callers set it. The smoke suite now tears VMs down via `instance delete` (which derives it automatically) so the fixed path is exercised on every run.
 
 ### Changed
 

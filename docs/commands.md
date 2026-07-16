@@ -149,12 +149,18 @@ zcp instance ssh <slug>
 zcp instance ssh <slug> --user ubuntu
 zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
 
-# Delete an instance permanently
+# Delete an instance permanently (releases the auto-assigned public IP by default)
 zcp instance delete <slug>
 zcp instance delete <slug> --yes                # skip confirmation
-zcp instance delete <slug> --force --yes        # force-expunge from hypervisor immediately
 zcp instance delete <slug> --delete-public-ip=false   # keep the VM's auto-assigned public IP (default: released)
 ```
+
+`delete` submits an immediate service-cancellation request (the same workflow the
+CMP Web UI uses), so the VM's auto-assigned public IP is released along with the VM.
+Deletion is asynchronous — a successful response means the request was accepted, not
+that the VM is already gone; poll `zcp instance get <slug>` to confirm. The VM must be
+in a destroyable state (a VM mid-transition such as Starting/Stopping is rejected until
+it settles).
 
 The `--wait` flag on `create`, `start`, and `stop` polls the API until the instance
 reaches the target state, printing progress to stderr.
@@ -297,7 +303,9 @@ zcp loadbalancer create-rule <lb-slug> --name api-rule \
 zcp loadbalancer attach-vm <lb-slug> <rule-id> --vm <vm-slug>
 zcp loadbalancer detach-vm <lb-slug> <rule-id> --vm <vm-slug>
 zcp loadbalancer delete-rule <lb-slug> <rule-id>
-zcp loadbalancer delete <slug>
+zcp loadbalancer delete <slug>                       # deletes the LB; its public IP is kept (reusable)
+zcp loadbalancer delete <slug> --release-ip          # also release the LB's dedicated public IP (never the network source-NAT)
+zcp loadbalancer delete <slug> --billing-cycle monthly    # for a monthly-billed LB
 
 # Site-to-site VPN: a gateway on the VPC plus a customer gateway for the remote end
 zcp vpc vpn-gateway list <vpc-slug>

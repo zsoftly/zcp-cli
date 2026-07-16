@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -64,10 +65,16 @@ type RemoteAccessVPN struct {
 
 // listResponse is the STKCNSL envelope for paginated IP address lists.
 type listResponse struct {
-	Status  string      `json:"status"`
-	Message string      `json:"message"`
-	Data    []IPAddress `json:"data"`
+	Status      string      `json:"status"`
+	Message     string      `json:"message"`
+	CurrentPage int         `json:"current_page"`
+	LastPage    int         `json:"last_page"`
+	Data        []IPAddress `json:"data"`
 }
+
+// maxListPages bounds the paginated List loop so a server that misreports last_page can't
+// spin forever. Set well above any realistic page count.
+const maxListPages = 1000
 
 // singleResponse is the STKCNSL envelope for single IP address responses.
 type singleResponse struct {
@@ -102,21 +109,33 @@ func NewService(client *httpclient.Client) *Service {
 
 // List returns public IP addresses. Optional filters: vpcSlug.
 func (s *Service) List(ctx context.Context, vpcSlug, region, project string) ([]IPAddress, error) {
-	q := url.Values{}
-	if vpcSlug != "" {
-		q.Set("filter[vpc]", vpcSlug)
+	// Paginated (Laravel-style ?page=N with last_page); fetch every page so lookups by a
+	// specific IP don't miss one on a later page. A single-page response returns after page 1.
+	var all []IPAddress
+	for page := 1; page <= maxListPages; page++ {
+		q := url.Values{}
+		if vpcSlug != "" {
+			q.Set("filter[vpc]", vpcSlug)
+		}
+		if region != "" {
+			q.Set("filter[region]", region)
+		}
+		if project != "" {
+			q.Set("filter[project]", project)
+		}
+		if page > 1 {
+			q.Set("page", strconv.Itoa(page))
+		}
+		var resp listResponse
+		if err := s.client.Get(ctx, "/ipaddresses", q, &resp); err != nil {
+			return nil, fmt.Errorf("listing IP addresses: %w", err)
+		}
+		all = append(all, resp.Data...)
+		if len(resp.Data) == 0 || resp.LastPage <= page {
+			break
+		}
 	}
-	if region != "" {
-		q.Set("filter[region]", region)
-	}
-	if project != "" {
-		q.Set("filter[project]", project)
-	}
-	var resp listResponse
-	if err := s.client.Get(ctx, "/ipaddresses", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing IP addresses: %w", err)
-	}
-	return resp.Data, nil
+	return all, nil
 }
 
 // Allocate creates (allocates) a new public IP address.

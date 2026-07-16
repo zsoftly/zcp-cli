@@ -317,3 +317,28 @@ func TestIPDisableRemoteAccessVPN(t *testing.T) {
 		t.Errorf("path = %q, want %q", gotPath, "/ipaddresses/1030011/remote-access-vpns/vpn-1")
 	}
 }
+
+// TestIPAddressListPaginates verifies List walks every page so an IP-by-slug lookup
+// (used by `loadbalancer delete --release-ip`) doesn't miss an IP on a later page.
+func TestIPAddressListPaginates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			fmt.Fprint(w, `{"status":"Success","current_page":2,"last_page":2,"data":[{"slug":"ip-b","ipaddress":"2.2.2.2"}]}`)
+		} else {
+			fmt.Fprint(w, `{"status":"Success","current_page":1,"last_page":2,"data":[{"slug":"ip-a","ipaddress":"1.1.1.1"}]}`)
+		}
+	}))
+	defer srv.Close()
+
+	ips, err := ipaddress.NewService(newClient(srv.URL)).List(context.Background(), "", "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(ips) != 2 {
+		t.Fatalf("got %d IPs, want 2 (both pages)", len(ips))
+	}
+	if ips[0].Slug != "ip-a" || ips[1].Slug != "ip-b" {
+		t.Errorf("slugs = %q, %q; want ip-a, ip-b", ips[0].Slug, ips[1].Slug)
+	}
+}

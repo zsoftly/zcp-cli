@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/billing"
 	"github.com/zsoftly/zcp-cli/pkg/api/instance"
 )
 
@@ -1364,20 +1365,29 @@ func newInstanceDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
 		Short: "Permanently delete a virtual machine",
-		Args:  exactArgs(1),
+		Long: `Permanently delete a virtual machine.
+
+This submits an immediate service-cancellation request via
+POST /billing/service-cancel-requests/{slug} — the same workflow the CMP Web UI
+uses — so the VM's auto-assigned public IP is released along with the VM (unless
+--delete-public-ip=false). Deletion runs asynchronously in the background: a
+successful response means the request was accepted, not that the VM is already
+gone. Poll with 'zcp instance get <slug>' to confirm removal.
+
+The VM must be in a destroyable state; a VM that is mid-transition (e.g.
+Starting/Stopping) is rejected until it settles. Manually-acquired and source-NAT
+IPs are never touched by this command — release those with 'zcp ip release'.`,
+		Args: exactArgs(1),
 		Example: `  zcp instance delete my-vm
   zcp instance delete my-vm --yes
-  zcp instance delete my-vm --force --yes
-  # the auto-assigned public IP is NOT released yet (known CMP API bug); free it manually:
-  zcp instance delete my-vm --yes && zcp ip release <ip-slug> --yes`,
+  # keep the auto-assigned public IP allocated:
+  zcp instance delete my-vm --yes --delete-public-ip=false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				ipNote := ""
+				ipNote := " Its auto-assigned public IP will be retained (--delete-public-ip=false)."
 				if deletePublicIP {
-					// --delete-public-ip is currently a no-op: the CMP endpoint that
-					// releases the IP rejects token auth (known bug, fix in progress).
-					ipNote = " NOTE: the auto-assigned public IP is NOT released automatically yet (known CMP API bug, fix in progress) — release it manually afterward with 'zcp ip release <ip-slug>'."
+					ipNote = " Its auto-assigned public IP will also be released."
 				}
 				fmt.Fprintf(os.Stderr, "WARNING: Delete %q is permanent and cannot be undone.%s [y/N]: ", slug, ipNote)
 				scanner := bufio.NewScanner(os.Stdin)
@@ -1388,16 +1398,21 @@ func newInstanceDeleteCmd() *cobra.Command {
 					return nil
 				}
 			}
-			return runInstanceDelete(cmd, slug, force, deletePublicIP)
+			return runInstanceDelete(cmd, slug, deletePublicIP)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
-	cmd.Flags().BoolVar(&force, "force", false, "Force immediate expunge from hypervisor (passes expunge=true)")
-	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Request release of the VM's auto-assigned public IP on delete. NOTE: currently a no-op — the CMP endpoint that releases the IP rejects API-token auth (known bug, fix in progress); until it lands, the IP is left Allocated, so release it manually with 'zcp ip release <ip-slug>' after deleting. Manually-acquired and source-NAT IPs are unaffected either way")
+	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Release the VM's auto-assigned public IP as part of the deletion. Set to false to keep it Allocated. Manually-acquired and source-NAT IPs are unaffected either way")
+	// --force previously forced a hypervisor expunge on the direct DELETE endpoint.
+	// The service-cancellation workflow deletes immediately (type=Immediate), so the
+	// flag is a no-op; kept hidden to avoid breaking existing scripts.
+	cmd.Flags().BoolVar(&force, "force", false, "Deprecated: no-op (deletion is already immediate)")
+	_ = cmd.Flags().MarkHidden("force")
+	_ = cmd.Flags().MarkDeprecated("force", "deletion is already immediate; this flag has no effect")
 	return cmd
 }
 
-func runInstanceDelete(cmd *cobra.Command, slug string, force, deletePublicIP bool) error {
+func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool) error {
 	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -1418,7 +1433,19 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force, deletePublicIP bo
 		return err
 	}
 
-	if err := svc.Delete(ctx, vm.Slug, force, deletePublicIP); err != nil {
+	// The CMP Web UI deletes a VM (and releases its auto-assigned public IP) through the
+	// unified service-cancellation workflow, NOT the direct DELETE endpoint — the latter
+	// ignores delete_public_ip and leaves the IP Allocated/billable. Match the UI.
+	dip := deletePublicIP
+	req := billing.CancelServiceRequest{
+		ServiceName:    "Virtual Machine",
+		Reason:         "not_needed_anymore",
+		Type:           "Immediate",
+		Status:         "Pending",
+		BillingCycle:   cancelBillingCycle(vm),
+		DeletePublicIP: &dip,
+	}
+	if err := billing.NewService(client).CancelService(ctx, vm.Slug, req); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "Instance %q not found — already deleted.\n", vm.Slug)
 			return nil
@@ -1426,8 +1453,27 @@ func runInstanceDelete(cmd *cobra.Command, slug string, force, deletePublicIP bo
 		return fmt.Errorf("instance delete: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Instance %q deleted.\n", vm.Slug)
+	if deletePublicIP {
+		fmt.Fprintf(os.Stdout, "Deletion requested for %q; the VM and its auto-assigned public IP are being released in the background.\n", vm.Slug)
+	} else {
+		fmt.Fprintf(os.Stdout, "Deletion requested for %q (public IP retained); the VM is being removed in the background.\n", vm.Slug)
+	}
 	return nil
+}
+
+// cancelBillingCycle maps a VM's billing cycle to the "hour"/"month" form the
+// service-cancellation endpoint documents (create/order requests use "hourly"/"monthly",
+// but the cancel body uses the unit form). It tries the VM's unit, slug, then name, and
+// defaults to "month" when the VM carries no recognizable billing cycle.
+func cancelBillingCycle(vm *instance.VirtualMachine) string {
+	if vm != nil && vm.BillingCycle != nil {
+		for _, v := range []string{vm.BillingCycle.Unit, vm.BillingCycle.Slug, vm.BillingCycle.Name} {
+			if u, ok := billingCycleUnit(v); ok {
+				return u
+			}
+		}
+	}
+	return "month"
 }
 
 // ---------- ssh ----------

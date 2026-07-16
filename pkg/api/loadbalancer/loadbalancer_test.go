@@ -414,3 +414,56 @@ func TestLoadBalancerDelete_Error(t *testing.T) {
 		t.Fatal("Delete() expected error on 404, got nil")
 	}
 }
+
+// TestLoadBalancerListPaginates verifies List walks every page (last_page > 1) so a
+// resolve-by-slug caller doesn't miss an LB that lands on a later page.
+func TestLoadBalancerListPaginates(t *testing.T) {
+	var seenPages []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPages = append(seenPages, r.URL.Query().Get("page"))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			w.Write([]byte(`{"status":"Success","current_page":2,"last_page":2,"data":[{"slug":"lb-b","name":"lb-b"}]}`))
+		} else {
+			w.Write([]byte(`{"status":"Success","current_page":1,"last_page":2,"data":[{"slug":"lb-a","name":"lb-a"}]}`))
+		}
+	}))
+	defer srv.Close()
+
+	lbs, err := loadbalancer.NewService(newClient(srv.URL)).List(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(lbs) != 2 {
+		t.Fatalf("got %d load balancers, want 2 (both pages)", len(lbs))
+	}
+	if lbs[0].Slug != "lb-a" || lbs[1].Slug != "lb-b" {
+		t.Errorf("slugs = %q, %q; want lb-a, lb-b", lbs[0].Slug, lbs[1].Slug)
+	}
+	if len(seenPages) != 2 || seenPages[0] != "" || seenPages[1] != "2" {
+		t.Errorf("requested pages = %v, want ['' '2']", seenPages)
+	}
+}
+
+// TestLoadBalancerListSinglePage verifies a single-page response (last_page 1 or absent)
+// stops after one request.
+func TestLoadBalancerListSinglePage(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"Success","current_page":1,"last_page":1,"data":[{"slug":"only","name":"only"}]}`))
+	}))
+	defer srv.Close()
+
+	lbs, err := loadbalancer.NewService(newClient(srv.URL)).List(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(lbs) != 1 {
+		t.Fatalf("got %d, want 1", len(lbs))
+	}
+	if calls != 1 {
+		t.Errorf("made %d requests, want 1 for a single page", calls)
+	}
+}

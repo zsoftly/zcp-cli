@@ -632,7 +632,7 @@ func runBillingCancelRequests(cmd *cobra.Command) error {
 // --- cancel-service ---
 
 func newBillingCancelServiceCmd() *cobra.Command {
-	var serviceName, reason, cancelType, description string
+	var serviceName, reason, cancelType, description, billingCycle string
 	var deletePublicIP bool
 	cmd := &cobra.Command{
 		Use:   "cancel-service <subscription-slug>",
@@ -650,18 +650,19 @@ func newBillingCancelServiceCmd() *cobra.Command {
 			if cancelType == "" {
 				cancelType = "Immediate"
 			}
-			return runBillingCancelService(cmd, args[0], serviceName, reason, cancelType, description, deletePublicIP)
+			return runBillingCancelService(cmd, args[0], serviceName, reason, cancelType, description, billingCycle, deletePublicIP)
 		},
 	}
 	cmd.Flags().StringVar(&serviceName, "service", "", "Service type (e.g. 'Virtual Machine', 'Block Storage', 'IP Address', 'Object Storage')")
 	cmd.Flags().StringVar(&reason, "reason", "not_needed_anymore", "Reason: limit_expenses, not_needed_anymore, better_offer, not_satisfied, switch_product, other")
 	cmd.Flags().StringVar(&cancelType, "type", "Immediate", "Cancel type: Immediate or 'End of billing period'")
 	cmd.Flags().StringVar(&description, "description", "", "Additional description (optional)")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle of the service in unit form (e.g. hour, month). Required by the backend for some services such as Virtual Machine")
 	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", false, "Delete associated public IP addresses (required when VM has public IPs)")
 	return cmd
 }
 
-func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, cancelType, description string, deletePublicIP bool) error {
+func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, cancelType, description, billingCycle string, deletePublicIP bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -672,10 +673,11 @@ func runBillingCancelService(cmd *cobra.Command, slug, serviceName, reason, canc
 	defer cancel()
 
 	req := billing.CancelServiceRequest{
-		ServiceName: serviceName,
-		Reason:      reason,
-		Type:        cancelType,
-		Description: description,
+		ServiceName:  serviceName,
+		Reason:       reason,
+		Type:         cancelType,
+		Description:  description,
+		BillingCycle: billingCycle,
 	}
 	if cmd.Flags().Changed("delete-public-ip") {
 		bp := deletePublicIP
