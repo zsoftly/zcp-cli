@@ -2,53 +2,49 @@
 
 ## Deleting a VM now releases its public IP
 
-`zcp instance delete` previously called an endpoint that ignored the
-`delete_public_ip` request, so a deleted VM left its auto-assigned public IP
-`Allocated` (and billable). It now uses the same service-cancellation workflow as
-the CMP Web UI (`POST /billing/service-cancel-requests/{slug}`), which releases
-the IP as part of the cancellation. Verified live end to end: the VM is deleted
-and its public IP is released with no orphan left behind.
+`zcp instance delete` used to leave a deleted VM's auto-assigned public IP
+allocated (and billable). It now frees the IP as part of the deletion. Deletion
+is asynchronous — poll `zcp instance get <slug>` to confirm.
 
 ```bash
-zcp instance delete my-vm --yes                       # releases the auto-assigned IP too
+zcp instance delete my-vm --yes                            # deletes the VM and releases its IP
 zcp instance delete my-vm --yes --delete-public-ip=false   # keep the IP allocated
 ```
 
-Deletion is asynchronous — a successful response means the request was accepted,
-not that the VM is already gone; poll `zcp instance get <slug>` to confirm. The
-deprecated `--force` flag is now a hidden no-op (deletion is already immediate).
+The deprecated `--force` flag is now a hidden no-op (deletion is already immediate).
 
 ## Deleting a load balancer, and freeing its IP
 
-`zcp loadbalancer delete` now goes through the same service-cancellation workflow
-(matching the Web UI, with consistent async deletion). A load balancer's public
-IP is a **separate, reusable resource** — as in the Web UI, you Choose an existing
-IP or Acquire a new one — so it is kept by default. Pass `--release-ip` to also
-free it.
+`zcp loadbalancer delete` now deletes the way the Web UI does. Unlike a VM's IP, a
+load balancer's public IP is a **separate, reusable resource** (you pick or acquire
+it), so it is kept by default. Pass `--release-ip` to also free it.
 
 ```bash
-zcp loadbalancer delete my-lb --yes                   # deletes the LB; its IP is kept (reusable)
-zcp loadbalancer delete my-lb --yes --release-ip      # also release the LB's dedicated IP
+zcp loadbalancer delete my-lb --yes                    # deletes the LB; its IP is kept (reusable)
+zcp loadbalancer delete my-lb --yes --release-ip       # also release the LB's dedicated IP
 zcp loadbalancer delete my-lb --yes --billing-cycle monthly   # for a monthly-billed LB
 ```
 
-`--release-ip` never releases the network's **source-NAT** IP (that would break
-the network); if it can't confirm the IP is safe, it skips the release and prints
-the exact `zcp ip release <slug>` command. Verified live: a dedicated LB IP is
-released, a source-NAT IP is correctly left alone.
+`--release-ip` never releases the network's **source-NAT** IP; if it can't confirm
+an IP is safe to release, it skips it and prints the exact `zcp ip release <slug>`
+command.
+
+## Instances now show their public IP
+
+`zcp instance list` and `zcp instance get` now display the public IP (previously
+blank), and `get` also shows the billing cycle. Empty IP cells show `-`.
+_Contributed by @cokerrd._
 
 ## `loadbalancer list` and `ip list` return all results
 
-Both commands previously showed only the first page of results. They now page
-through the full set, so large accounts see everything (and `--release-ip` can
-find a load balancer that lands on a later page).
+Both commands used to show only the first page. They now page through everything,
+so large accounts see the full list.
 
 ## `ip allocate` validates `--vpc` / `--network`
 
-Allocating an IP requires exactly one of `--vpc` or `--network`; with neither,
-the API returned a raw `500` (`The vpc field is required when network is not
-present`). `ip allocate` now validates this client-side and the misleading
-example that omitted both flags was removed. Contributed by @cokerrd (#39).
+Allocating an IP requires exactly one of `--vpc` or `--network`. Passing neither
+used to fail with a raw API 500; it's now caught client-side with a clear message.
+_Contributed by @cokerrd._
 
 ```bash
 zcp ip allocate --plan ipv4-yul --billing-cycle hourly --network en-001001-0018
