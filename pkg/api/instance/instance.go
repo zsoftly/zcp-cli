@@ -107,9 +107,11 @@ type VMNetworkIP struct {
 }
 
 // NetworkPrivateIP returns the private IP from the default network, falling back
-// to the first network with an IP if no default is set.
+// to the first network with an IP if no default is set, or "" if the VM has none.
+// It returns "" (not a display placeholder) so callers such as `instance ssh` can
+// detect "no IP" and fall through; the "-" placeholder is applied at display time.
 func (vm *VirtualMachine) NetworkPrivateIP() string {
-	fallback := "-"
+	var fallback string
 	for _, n := range vm.Networks {
 		if n.Pivot == nil || n.Pivot.IPAddress == "" {
 			continue
@@ -117,32 +119,26 @@ func (vm *VirtualMachine) NetworkPrivateIP() string {
 		if n.IsDefault || n.Pivot.IsDefault {
 			return n.Pivot.IPAddress
 		}
-		if fallback == "-" {
+		if fallback == "" {
 			fallback = n.Pivot.IPAddress
 		}
 	}
 	return fallback
 }
 
-// Returns the PublicIP if a VM is assigned one
+// GetPublicIPAddress returns the VM's public IP address, or "" if it has none.
+// The VM's top-level public_ip is null even when a public IP is assigned, so the
+// address is read from the ipaddresses list, selecting the entry the platform marks
+// as a public IP (ip_type == "Public IP"). The per-entry "type" field is the IP
+// version ("IPv4"/"IPv6"), NOT a public/private marker, so it must not be used here.
+// Returns "" (not a display placeholder) for the same reason as NetworkPrivateIP.
 func (vm *VirtualMachine) GetPublicIPAddress() string {
-	fallback := "-"
-
 	for _, ip := range vm.IPAddresses {
-		if ip.IPAddress == "" {
-			continue
-		}
-
-		if ip.Type != "" {
+		if ip.IPAddress != "" && ip.IPType == "Public IP" {
 			return ip.IPAddress
 		}
-
-		if fallback == "-" {
-			fallback = ip.IPAddress
-		}
 	}
-
-	return fallback
+	return ""
 }
 
 // VMTemplate represents the template/OS info on a VM.
@@ -177,11 +173,12 @@ type OSVersion struct {
 	PricingType string `json:"pricing_type"`
 }
 
-// IPAddresses represents the IP address of a VM
+// IPAddresses represents an IP address entry attached to a VM.
 type IPAddresses struct {
 	ID        string `json:"id"`
 	IPAddress string `json:"ipaddress"`
-	Type      string `json:"type"`
+	Type      string `json:"type"`    // IP version, e.g. "IPv4" — NOT a public/private marker
+	IPType    string `json:"ip_type"` // platform label, e.g. "Public IP"
 }
 
 // BillingCycle represents a billing period.

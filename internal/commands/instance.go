@@ -24,6 +24,16 @@ var instanceGetRetryWait = func(attempt int) time.Duration {
 	return time.Duration(2<<uint(attempt)) * time.Second
 }
 
+// dashIfEmpty renders an empty value as "-" for table output readability. The SDK
+// accessors return "" for "no value" so callers like `instance ssh` can detect it;
+// the placeholder is applied only where we display.
+func dashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
 // NewInstanceCmd returns the 'instance' cobra command.
 func NewInstanceCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -109,7 +119,8 @@ func runInstanceList(cmd *cobra.Command) error {
 		if privateIP == "" {
 			privateIP = vm.NetworkPrivateIP()
 		}
-		publicIP := vm.GetPublicIPAddress()
+		privateIP = dashIfEmpty(privateIP)
+		publicIP := dashIfEmpty(vm.GetPublicIPAddress())
 		row := []string{
 			instanceDisplayID(vm),
 			vm.Name,
@@ -216,8 +227,9 @@ func runInstanceGet(cmd *cobra.Command, slug string) error {
 	if privateIP == "" {
 		privateIP = vm.NetworkPrivateIP()
 	}
+	privateIP = dashIfEmpty(privateIP)
 
-	publicIP := vm.GetPublicIPAddress()
+	publicIP := dashIfEmpty(vm.GetPublicIPAddress())
 
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
