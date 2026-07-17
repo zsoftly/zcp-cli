@@ -81,7 +81,7 @@ zcp
 │   ├── addons                         List available addons for an instance
 │   ├── purchase-addon                 Purchase an addon for an instance
 │   ├── ssh                            Open an SSH session to an instance
-│   └── delete                         Permanently delete an instance (--force to expunge immediately)
+│   └── delete                         Permanently delete an instance; releases its auto-assigned public IP by default (--delete-public-ip=false to keep it)
 │
 ├── volume                             Block storage volume operations
 │   ├── list                           List volumes
@@ -164,7 +164,7 @@ zcp
 ├── loadbalancer                       Load balancer operations
 │   ├── list                           List load balancers
 │   ├── create                         Create a load balancer with an initial rule (--public-port, --private-port, --algorithm required; --rule-name, --protocol, --sticky-method, --enable-tls, --enable-proxy-protocol, --vm optional)
-│   ├── delete                         Permanently delete a load balancer (--yes to skip prompt)
+│   ├── delete                         Permanently delete a load balancer (via service-cancel); IP kept by default, --release-ip to free the LB's dedicated IP (never source-NAT), --billing-cycle hourly|monthly
 │   ├── create-rule                    Create a load balancer rule
 │   ├── delete-rule                    Delete a rule from a load balancer (--yes to skip prompt)
 │   ├── attach-vm                      Attach a VM to a load balancer rule

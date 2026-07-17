@@ -49,6 +49,26 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListEmptyResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   []interface{}{},
+			"total":  0,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	vms, err := svc.List(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(vms) != 0 {
+		t.Errorf("got %d VMs, want 0", len(vms))
+	}
+}
+
 func TestListPaginatesAllPages(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/virtual-machines" {
@@ -121,6 +141,21 @@ func TestGet(t *testing.T) {
 	}
 }
 
+func TestGetNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Error",
+			"message": "not found",
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	_, err := svc.Get(context.Background(), "nonexistent")
+	if err == nil {
+		t.Error("expected error for not found")
+	}
+}
 func TestStart(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || r.URL.Path != "/virtual-machines/test-vm/start" {
@@ -261,5 +296,39 @@ func TestDelete_NotFound(t *testing.T) {
 	svc := instance.NewService(newClient(srv.URL))
 	if err := svc.Delete(context.Background(), "nonexistent", false, false); err == nil {
 		t.Fatal("Delete() expected error for 404, got nil")
+	}
+}
+
+// TestGetPublicIPAddress verifies the public IP is selected by ip_type ("Public IP"),
+// not by the "type" field (which is the IP version, e.g. "IPv4", for every entry), and
+// that "" is returned when the VM has no public IP.
+func TestGetPublicIPAddress(t *testing.T) {
+	cases := []struct {
+		name string
+		ips  []instance.IPAddresses
+		want string
+	}{
+		{"none", nil, ""},
+		{"non-public entry ignored", []instance.IPAddresses{{IPAddress: "10.0.0.5", Type: "IPv4", IPType: "Private IP"}}, ""},
+		{"picks public over an earlier non-public", []instance.IPAddresses{
+			{IPAddress: "10.0.0.5", Type: "IPv4", IPType: "Private IP"},
+			{IPAddress: "203.0.113.7", Type: "IPv4", IPType: "Public IP"},
+		}, "203.0.113.7"},
+		{"public source-nat", []instance.IPAddresses{{IPAddress: "203.0.113.9", Type: "IPv4", IPType: "Public IP"}}, "203.0.113.9"},
+	}
+	for _, c := range cases {
+		vm := instance.VirtualMachine{IPAddresses: c.ips}
+		if got := vm.GetPublicIPAddress(); got != c.want {
+			t.Errorf("%s: GetPublicIPAddress() = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestNetworkPrivateIPEmpty verifies NetworkPrivateIP returns "" (not "-") when the VM
+// has no network IP, which `instance ssh` relies on to fall through to other addresses.
+func TestNetworkPrivateIPEmpty(t *testing.T) {
+	vm := instance.VirtualMachine{}
+	if got := vm.NetworkPrivateIP(); got != "" {
+		t.Errorf("NetworkPrivateIP() = %q, want \"\" (ssh relies on empty for 'no IP')", got)
 	}
 }

@@ -436,6 +436,88 @@ func TestCancelService(t *testing.T) {
 	}
 }
 
+// TestCancelServiceReleasesPublicIP verifies the full VM-cancellation body — including
+// billing_cycle, status and delete_public_ip — is serialized and sent. This is the
+// endpoint that actually releases a VM's auto-assigned public IP (the direct DELETE
+// endpoint ignores delete_public_ip).
+func TestCancelServiceReleasesPublicIP(t *testing.T) {
+	var got map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decoding request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(envelope(map[string]string{"message": "Cancellation scheduled"}))
+	}))
+	defer srv.Close()
+
+	yes := true
+	svc := billing.NewService(newClient(srv.URL))
+	err := svc.CancelService(context.Background(), "vm-ip-test", billing.CancelServiceRequest{
+		ServiceName:    "Virtual Machine",
+		Reason:         "not_needed_anymore",
+		Type:           "Immediate",
+		Status:         "Pending",
+		BillingCycle:   "month",
+		DeletePublicIP: &yes,
+	})
+	if err != nil {
+		t.Fatalf("CancelService() error = %v", err)
+	}
+	if got["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q", got["billing_cycle"], "month")
+	}
+	if got["status"] != "Pending" {
+		t.Errorf("status = %v, want %q", got["status"], "Pending")
+	}
+	if got["delete_public_ip"] != true {
+		t.Errorf("delete_public_ip = %v, want true", got["delete_public_ip"])
+	}
+	if got["service_name"] != "Virtual Machine" {
+		t.Errorf("service_name = %v, want %q", got["service_name"], "Virtual Machine")
+	}
+}
+
+// TestCancelServiceOmitsUnsetOptionals verifies delete_public_ip / billing_cycle / status
+// are omitted from the body when unset, so non-VM cancellations aren't sent stray fields.
+func TestCancelServiceOmitsUnsetOptionals(t *testing.T) {
+	var got map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(envelope(map[string]string{"message": "Cancellation scheduled"}))
+	}))
+	defer srv.Close()
+
+	svc := billing.NewService(newClient(srv.URL))
+	if err := svc.CancelService(context.Background(), "my-volume", billing.CancelServiceRequest{
+		ServiceName: "Block Storage", Reason: "not_needed_anymore", Type: "Immediate",
+	}); err != nil {
+		t.Fatalf("CancelService() error = %v", err)
+	}
+	// Required fields must be present and correct.
+	if got["service_name"] != "Block Storage" {
+		t.Errorf("service_name = %v, want %q", got["service_name"], "Block Storage")
+	}
+	if got["reason"] != "not_needed_anymore" {
+		t.Errorf("reason = %v, want %q", got["reason"], "not_needed_anymore")
+	}
+	if got["type"] != "Immediate" {
+		t.Errorf("type = %v, want %q", got["type"], "Immediate")
+	}
+	// Unset optionals must be omitted.
+	for _, k := range []string{"delete_public_ip", "billing_cycle", "status", "description"} {
+		if _, ok := got[k]; ok {
+			t.Errorf("%q should be omitted when unset, got %v", k, got[k])
+		}
+	}
+}
+
 func TestSetBudgetAlert(t *testing.T) {
 	var gotReq billing.SetBudgetAlertRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

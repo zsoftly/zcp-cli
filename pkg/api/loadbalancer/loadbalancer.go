@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -138,6 +139,7 @@ type listResponse struct {
 	Status      string          `json:"status"`
 	Message     string          `json:"message"`
 	CurrentPage int             `json:"current_page"`
+	LastPage    int             `json:"last_page"`
 	Data        json.RawMessage `json:"data"`
 	Total       int             `json:"total"`
 }
@@ -161,25 +163,43 @@ func NewService(client *httpclient.Client) *Service {
 
 // List returns all load balancers. The include parameter requests nested relations.
 func (s *Service) List(ctx context.Context, region, project string) ([]LoadBalancer, error) {
-	q := url.Values{
-		"include": {"project,cloud_provider,ipaddress,region,load_balancer_rules,offering"},
+	// The endpoint is paginated (Laravel-style ?page=N with last_page). Fetch every page so
+	// callers that resolve a specific LB — e.g. `loadbalancer delete --release-ip` — don't
+	// miss one that lands on a later page. maxListPages caps the loop against a server that
+	// misreports last_page. A single-page (or non-paginated) response returns after page 1.
+	var all []LoadBalancer
+	for page := 1; page <= maxListPages; page++ {
+		q := url.Values{
+			"include": {"project,cloud_provider,ipaddress,region,load_balancer_rules,offering"},
+		}
+		if region != "" {
+			q.Set("filter[region]", region)
+		}
+		if project != "" {
+			q.Set("filter[project]", project)
+		}
+		if page > 1 {
+			q.Set("page", strconv.Itoa(page))
+		}
+		var resp listResponse
+		if err := s.client.Get(ctx, "/load-balancers", q, &resp); err != nil {
+			return nil, fmt.Errorf("listing load balancers: %w", err)
+		}
+		var lbs []LoadBalancer
+		if err := json.Unmarshal(resp.Data, &lbs); err != nil {
+			return nil, fmt.Errorf("decoding load balancers: %w", err)
+		}
+		all = append(all, lbs...)
+		if len(lbs) == 0 || resp.LastPage <= page {
+			break
+		}
 	}
-	var resp listResponse
-	if region != "" {
-		q.Set("filter[region]", region)
-	}
-	if project != "" {
-		q.Set("filter[project]", project)
-	}
-	if err := s.client.Get(ctx, "/load-balancers", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing load balancers: %w", err)
-	}
-	var lbs []LoadBalancer
-	if err := json.Unmarshal(resp.Data, &lbs); err != nil {
-		return nil, fmt.Errorf("decoding load balancers: %w", err)
-	}
-	return lbs, nil
+	return all, nil
 }
+
+// maxListPages bounds paginated List loops so a server that misreports last_page can't
+// spin forever. Set well above any realistic page count.
+const maxListPages = 1000
 
 // Create provisions a new load balancer.
 func (s *Service) Create(ctx context.Context, req CreateRequest) (*LoadBalancer, error) {
@@ -218,7 +238,14 @@ type DetachVMRequest struct {
 	VirtualMachine string `json:"virtual_machine"`
 }
 
-// Delete permanently deletes a load balancer.
+// Delete performs a direct delete of a load balancer via DELETE /load-balancers/{slug}.
+//
+// NOTE: this endpoint does NOT release the load balancer's public IP — it is left
+// Allocated/billable. Neither does the service-cancellation workflow ('zcp loadbalancer
+// delete'): unlike a VM's ephemeral auto-assigned IP, an LB's public IP is a separate,
+// reusable resource, so it must be released explicitly via ipaddress.Service.Release
+// (exposed as the CLI's --release-ip flag) — and only for a STATIC IP the LB owns, never
+// a network source-NAT IP.
 func (s *Service) Delete(ctx context.Context, slug string) error {
 	if err := s.client.Delete(ctx, "/load-balancers/"+slug, nil); err != nil {
 		return fmt.Errorf("deleting load balancer %s: %w", slug, err)

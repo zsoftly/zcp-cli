@@ -11,8 +11,18 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/billing"
+	"github.com/zsoftly/zcp-cli/pkg/api/ipaddress"
 	"github.com/zsoftly/zcp-cli/pkg/api/loadbalancer"
+	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
+
+// lbIPReleaseWait controls the backoff between --release-ip retries. The LB deletion
+// is async, so the IP can still be attached (and un-releasable) for a few seconds after
+// the cancel request is accepted. Overridden in tests to avoid real sleeps.
+var lbIPReleaseWait = func(attempt int) time.Duration {
+	return time.Duration(3*(attempt+1)) * time.Second
+}
 
 var validLBAlgorithms = map[string]bool{
 	"roundrobin": true,
@@ -253,18 +263,44 @@ func runLBCreate(cmd *cobra.Command, req loadbalancer.CreateRequest) error {
 }
 
 func newLBDeleteCmd() *cobra.Command {
-	var yes bool
+	var yes, releaseIP bool
+	var billingCycle string
 
 	cmd := &cobra.Command{
 		Use:   "delete <lb-slug>",
 		Short: "Permanently delete a load balancer",
-		Args:  exactArgs(1),
+		Long: `Permanently delete a load balancer.
+
+This submits an immediate service-cancellation request via
+POST /billing/service-cancel-requests/{slug} — the same workflow the CMP Web UI
+uses. Deletion runs asynchronously in the background: a successful response means
+the request was accepted, not that the LB is already gone. Poll with
+'zcp loadbalancer list' to confirm removal.
+
+The load balancer's public IP is a separate, reusable resource (as in the Web UI,
+you Choose an existing IP or Acquire a new one), so it is NOT released by default —
+you may want to reuse it. Pass --release-ip to also release it after deletion. The
+network's source-NAT IP is never released (only a dedicated IP the LB holds); and if
+you attached other rules such as port-forwarding to that IP, releasing it removes
+those too.
+--billing-cycle defaults to hourly; pass --billing-cycle monthly for a monthly-billed LB.`,
+		Args: exactArgs(1),
 		Example: `  zcp loadbalancer delete my-lb
-  zcp loadbalancer delete my-lb --yes`,
+  zcp loadbalancer delete my-lb --yes
+  # also release the load balancer's dedicated public IP:
+  zcp loadbalancer delete my-lb --yes --release-ip
+  zcp loadbalancer delete my-lb --yes --billing-cycle monthly`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
+			if _, ok := billingCycleUnit(billingCycle); !ok {
+				return fmt.Errorf("invalid --billing-cycle %q: use hourly or monthly", billingCycle)
+			}
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stderr, "Delete load balancer %q? This cannot be undone. [y/N]: ", slug)
+				ipNote := " Its public IP is kept (reusable); pass --release-ip to free it too."
+				if releaseIP {
+					ipNote = " Its dedicated public IP will also be released (the network source-NAT IP is never released)."
+				}
+				fmt.Fprintf(os.Stderr, "Delete load balancer %q? This cannot be undone.%s [y/N]: ", slug, ipNote)
 				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
 				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -273,26 +309,186 @@ func newLBDeleteCmd() *cobra.Command {
 					return nil
 				}
 			}
-			_, client, printer, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-			svc := loadbalancer.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-			if err := svc.Delete(ctx, slug); err != nil {
-				if apierrors.IsResourceNotFound(err) {
-					fmt.Fprintf(os.Stderr, "Load balancer %q not found — already deleted.\n", slug)
-					return nil
-				}
-				return fmt.Errorf("loadbalancer delete: %w", err)
-			}
-			printer.Fprintf("Load balancer %q deleted.\n", slug)
-			return nil
+			return runLBDelete(cmd, slug, billingCycle, releaseIP)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "hourly", "The load balancer's billing cycle: hourly or monthly")
+	cmd.Flags().BoolVar(&releaseIP, "release-ip", false, "Also release the load balancer's public IP after deletion. The network source-NAT IP is never released, only a dedicated IP the LB holds; if you attached other rules (e.g. port-forwarding) to that IP, releasing it removes them too. Off by default because the IP is a reusable resource you may want to keep")
 	return cmd
+}
+
+func runLBDelete(cmd *cobra.Command, slug, billingCycle string, releaseIP bool) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+	region, project := scopedRegionProject(cmd)
+
+	// When --release-ip is set, resolve the LB BEFORE deleting so we can (a) cancel by its
+	// canonical slug even if the caller passed a name/id, and (b) find its IP + strategy to
+	// release afterward — but only a STATIC IP the LB owns, never the network's source-NAT IP.
+	cancelSlug := slug
+	var releaseSlug, releaseAddr, ipNote string
+	if releaseIP {
+		lb, err := findLoadBalancer(ctx, client, region, project, slug)
+		if err != nil {
+			return err
+		}
+		if lb != nil {
+			cancelSlug = lb.Slug
+			releaseSlug, releaseAddr, ipNote = lbReleasableIP(ctx, client, region, project, lb)
+		} else {
+			// No match in the listing — a wrong ref, another page, or already gone. Don't
+			// silently skip: still delete via the raw ref, and tell the user how to free the IP.
+			ipNote = fmt.Sprintf("could not find load balancer %q to look up its public IP; if it had a dedicated IP, free it with 'zcp ip release <ip-slug>'", slug)
+		}
+	}
+
+	// Delete the LB through the unified service-cancellation workflow (matches the Web UI).
+	req := billing.CancelServiceRequest{
+		ServiceName:  "Load Balancer",
+		Reason:       "not_needed_anymore",
+		Type:         "Immediate",
+		Status:       "Pending",
+		BillingCycle: normalizeCancelBillingCycle(billingCycle),
+	}
+	switch err := billing.NewService(client).CancelService(ctx, cancelSlug, req); {
+	case err == nil:
+		printer.Fprintf("Deletion requested for %q; the load balancer is being removed in the background.\n", cancelSlug)
+	case apierrors.IsResourceNotFound(err):
+		// Already deleted (or a stale ref). Fall through to release a resolved dedicated IP,
+		// which may now be orphaned.
+		fmt.Fprintf(os.Stderr, "Load balancer %q not found — already deleted.\n", cancelSlug)
+	default:
+		return fmt.Errorf("loadbalancer delete: %w", err)
+	}
+
+	if releaseIP {
+		if releaseSlug != "" {
+			// Give the release its own budget from a fresh context: the LB delete is async and
+			// the IP can stay attached for a few seconds, so the retry backoff must not be
+			// starved by whatever is left of the command timeout after the list+cancel calls.
+			relBudget := time.Duration(getTimeout(cmd)) * time.Second
+			if relBudget < 20*time.Second {
+				relBudget = 20 * time.Second
+			}
+			relCtx, relCancel := context.WithTimeout(context.Background(), relBudget)
+			defer relCancel()
+			if err := releaseLBIP(relCtx, client, printer, releaseSlug, releaseAddr); err != nil {
+				return err
+			}
+		} else if ipNote != "" {
+			fmt.Fprintf(os.Stderr, "Public IP not released: %s.\n", ipNote)
+		}
+	}
+	return nil
+}
+
+// findLoadBalancer resolves a load balancer by slug, name, or id within the region/project.
+// Returns nil if no match is in the listing (a wrong ref, a paginated page we didn't get,
+// or already deleted) — the caller decides how to proceed.
+func findLoadBalancer(ctx context.Context, client *httpclient.Client, region, project, ref string) (*loadbalancer.LoadBalancer, error) {
+	lbs, err := loadbalancer.NewService(client).List(ctx, region, project)
+	if err != nil {
+		return nil, fmt.Errorf("resolving load balancer %q: %w", ref, err)
+	}
+	var byName []*loadbalancer.LoadBalancer
+	for i := range lbs {
+		if lbs[i].Slug == ref || lbs[i].ID == ref {
+			return &lbs[i], nil
+		}
+		if lbs[i].Name == ref {
+			byName = append(byName, &lbs[i])
+		}
+	}
+	switch len(byName) {
+	case 0:
+		return nil, nil // no match — caller decides how to proceed
+	case 1:
+		return byName[0], nil
+	default:
+		return nil, fmt.Errorf("%d load balancers are named %q; use the slug instead (run 'zcp loadbalancer list')", len(byName), ref)
+	}
+}
+
+// lbReleasableIP decides whether the resolved LB's public IP is safe to release. It returns
+// (ipSlug, ipAddress, "") when the IP is a releasable IP the LB owns, or ("", "", note) when
+// it must be left alone: no IP, a network source-NAT IP, or an IP whose strategy could not be
+// confirmed (in which case it is skipped for safety — we never risk releasing a source-NAT —
+// and the note tells the user how to release it manually).
+func lbReleasableIP(ctx context.Context, client *httpclient.Client, region, project string, lb *loadbalancer.LoadBalancer) (ipSlug, ipAddr, note string) {
+	if lb.IPAddress == nil || lb.IPAddress.Slug == "" {
+		return "", "", "the load balancer has no dedicated public IP"
+	}
+	ips, err := ipaddress.NewService(client).List(ctx, "", region, project)
+	if err != nil {
+		return "", "", fmt.Sprintf("could not look up the IP's strategy (%v) — free it manually with 'zcp ip release %s' if it is a dedicated IP", err, lb.IPAddress.Slug)
+	}
+	for _, ip := range ips {
+		if ip.Slug == lb.IPAddress.Slug {
+			if strings.EqualFold(ip.Strategy, "SOURCE-NAT") {
+				return "", "", fmt.Sprintf("IP %s is the network source-NAT (shared with the network)", ip.IPAddress)
+			}
+			return ip.Slug, ip.IPAddress, ""
+		}
+	}
+	// The LB's IP was not in the listing (already gone, another page, or a different scope).
+	// We can't confirm it isn't a source-NAT, so skip for safety and hand the user the slug.
+	return "", "", fmt.Sprintf("could not confirm IP %s is safe to release; free it manually with 'zcp ip release %s'", lb.IPAddress.IPAddress, lb.IPAddress.Slug)
+}
+
+// releaseLBIP releases the load balancer's IP, retrying briefly because the LB deletion
+// is async and the IP can stay attached (and un-releasable) for a few seconds.
+func releaseLBIP(ctx context.Context, client *httpclient.Client, printer *output.Printer, ipSlug, ipAddr string) error {
+	ipSvc := ipaddress.NewService(client)
+	var err error
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+			case <-time.After(lbIPReleaseWait(attempt - 1)):
+			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		if err = ipSvc.Release(ctx, ipSlug); err == nil {
+			printer.Fprintf("Released public IP %s (%s).\n", ipAddr, ipSlug)
+			return nil
+		}
+		if apierrors.IsResourceNotFound(err) {
+			printer.Fprintf("Public IP %s already released.\n", ipAddr)
+			return nil
+		}
+	}
+	return fmt.Errorf("load balancer deleted, but its public IP %s could not be released (%v); release it once deletion completes: zcp ip release %s", ipAddr, err, ipSlug)
+}
+
+// billingCycleUnit maps a billing-cycle string (hourly/monthly, or hour/month) to the unit
+// form the service-cancellation endpoint expects (hour/month), reporting whether it matched.
+func billingCycleUnit(s string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "hour", "hourly":
+		return "hour", true
+	case "month", "monthly":
+		return "month", true
+	default:
+		return "", false
+	}
+}
+
+// normalizeCancelBillingCycle maps a billing cycle to the endpoint's unit form, defaulting
+// to "month" for anything unrecognized. Callers that pass user input should validate with
+// billingCycleUnit first so a typo doesn't silently become "month".
+func normalizeCancelBillingCycle(s string) string {
+	if u, ok := billingCycleUnit(s); ok {
+		return u
+	}
+	return "month"
 }
 
 func newLBCreateRuleCmd() *cobra.Command {

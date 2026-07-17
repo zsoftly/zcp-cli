@@ -5,11 +5,26 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.0.24] - 2026-07-16
+
+### Fixed
+
+- **Deleting a VM now releases its auto-assigned public IP.** `instance delete` used to leave the IP allocated (and billable). It now deletes through the same service-cancellation workflow as the Web UI, which frees the IP. Pass `--delete-public-ip=false` to keep it. Deletion is asynchronous — poll `zcp instance get <slug>` to confirm.
+- **Deleting a load balancer no longer relies on a broken direct-delete path.** `loadbalancer delete` now uses the service-cancellation workflow too. Unlike a VM's IP, an LB's public IP is a separate, reusable resource (you pick or acquire it), so it is **kept by default**:
+  - `--release-ip` — also release the LB's own public IP after deletion. It never touches the network's source-NAT IP, and the command exits non-zero if the release fails (the LB is already deleted) so automation notices.
+  - `--billing-cycle hourly|monthly` (default `hourly`).
+- **`instance list` and `instance get` now show the public IP; `get` also shows the billing cycle.** These were blank because the values live in the VM's `ipaddresses`/`offering` data, not the top-level fields. Empty IP cells now show `-`. _Contributed by @cokerrd (#37, fixes #36)._
+- **`loadbalancer list` and `ip list` now return every result.** They previously stopped after the first page, truncating output on larger accounts.
+- **`ip allocate` requires exactly one of `--vpc` or `--network`.** Passing neither used to fail with a raw API 500; it's now caught client-side with a clear message. _Contributed by @cokerrd (#39, fixes #38)._
+- **`instance delete --force` is a deprecated no-op.** Deletion is already immediate, so the flag is ignored (hidden, with a deprecation notice). Existing scripts still work.
+
+### Added
+
+- **`instance delete --billing-cycle` and `billing cancel-service --billing-cycle`.** The cancellation request needs the service's billing cycle; it's read from the resource automatically, and these flags let you set it explicitly (`hourly`/`monthly`).
 
 ### Changed
 
-- **Relicensed under the Apache License 2.0.** The CLI and its SDK (`pkg/`) were previously source-available for reference and evaluation only, which conflicted with the MIT-licensed Terraform/OpenTofu provider embedding the SDK and with Go module distribution. Apache-2.0 grants redistribution and patent rights and licenses future contributions under the same terms (section 5). Added a NOTICE file; copyright updated to 2024-2026.
+- **Relicensed the CLI and its SDK under the Apache License 2.0** (previously source-available), so the MIT-licensed Terraform/OpenTofu provider can embed the SDK. Added a `NOTICE` file; copyright updated to 2024–2026.
 
 ## [v0.0.23] - 2026-07-08
 

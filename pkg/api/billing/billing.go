@@ -362,11 +362,21 @@ func (s *Service) ListCancelRequests(ctx context.Context) (json.RawMessage, erro
 }
 
 // CancelServiceRequest holds parameters for service cancellation.
+//
+// This is the request body for POST /billing/service-cancel-requests/{slug} — the
+// unified Service Cancellation workflow the CMP Web UI uses, across service types.
+// For a Virtual Machine the {slug} is the VM slug, BillingCycle is required by the
+// backend, and DeletePublicIP releases the VM's auto-assigned public IP through this
+// endpoint (the direct DELETE /virtual-machines/{slug} endpoint ignores delete_public_ip).
+// DeletePublicIP does NOT apply to every service — e.g. a Load Balancer's public IP is a
+// separate reusable resource that this workflow does not release; leave it unset there.
 type CancelServiceRequest struct {
 	ServiceName    string `json:"service_name"`
 	Reason         string `json:"reason"`
 	Type           string `json:"type"`
 	Description    string `json:"description,omitempty"`
+	Status         string `json:"status,omitempty"`
+	BillingCycle   string `json:"billing_cycle,omitempty"`
 	DeletePublicIP *bool  `json:"delete_public_ip,omitempty"`
 }
 

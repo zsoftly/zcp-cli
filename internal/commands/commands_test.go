@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -375,6 +376,522 @@ func TestInstanceGetRetryExhausted(t *testing.T) {
 	}
 	if calls.Load() != 5 {
 		t.Errorf("server called %d times, want 5 (all attempts exhausted)", calls.Load())
+	}
+}
+
+// vmListWithBillingCycle is a single-VM list whose billing cycle is hourly, used to
+// verify the delete command derives billing_cycle for the service-cancel request.
+const vmListWithBillingCycle = `{"status":"Success","message":"OK","data":[{"id":"a1b2c3","vm_id":"vm-1","name":"test-vm","slug":"test-vm","hostname":"test-vm","username":"ubuntu","state":"Running","request_status":true,"billing_cycle":{"id":"bc1","name":"Hourly","slug":"hourly","duration":1,"unit":"hour"},"is_vnf":false,"has_contract":false,"is_metrics_hidden":false,"is_restricted":false,"has_autoscale":false,"all_time_consumption":0,"created_at":"2026-01-01T00:00:00.000000Z","updated_at":"2026-01-01T00:00:00.000000Z","networks":[]}]}`
+
+// TestInstanceDeleteUsesServiceCancel verifies that `zcp instance delete` routes through
+// the unified service-cancellation endpoint (which releases the auto-assigned public IP),
+// NOT the direct DELETE endpoint (which ignores delete_public_ip). Regression test for the
+// public-IP-leak bug.
+func TestInstanceDeleteUsesServiceCancel(t *testing.T) {
+	var cancelBody map[string]interface{}
+	var cancelPath string
+	var directDelete atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListWithBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			cancelPath = r.URL.Path
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Cancellation scheduled","data":null}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/virtual-machines/test-vm":
+			directDelete.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"deleted","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	stdout, stderr, err := execCmd(t, NewInstanceCmd(), "delete", "test-vm", "--yes", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("delete error = %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if directDelete.Load() {
+		t.Error("delete called the direct DELETE /virtual-machines endpoint (leaks public IP); want service-cancel")
+	}
+	if cancelPath != "/billing/service-cancel-requests/test-vm" {
+		t.Errorf("cancel path = %q, want %q", cancelPath, "/billing/service-cancel-requests/test-vm")
+	}
+	if cancelBody["service_name"] != "Virtual Machine" {
+		t.Errorf("service_name = %v, want %q", cancelBody["service_name"], "Virtual Machine")
+	}
+	if cancelBody["type"] != "Immediate" {
+		t.Errorf("type = %v, want %q", cancelBody["type"], "Immediate")
+	}
+	if cancelBody["delete_public_ip"] != true {
+		t.Errorf("delete_public_ip = %v, want true (public IP must be released)", cancelBody["delete_public_ip"])
+	}
+	if cancelBody["billing_cycle"] != "hour" {
+		t.Errorf("billing_cycle = %v, want %q (derived from VM's hourly cycle)", cancelBody["billing_cycle"], "hour")
+	}
+}
+
+// TestInstanceDeleteRetainPublicIP verifies --delete-public-ip=false sends
+// delete_public_ip:false so the auto-assigned IP is kept.
+func TestInstanceDeleteRetainPublicIP(t *testing.T) {
+	var cancelBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListWithBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Cancellation scheduled","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "delete", "test-vm", "--yes", "--delete-public-ip=false", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("delete error = %v", err)
+	}
+	if cancelBody["delete_public_ip"] != false {
+		t.Errorf("delete_public_ip = %v, want false", cancelBody["delete_public_ip"])
+	}
+}
+
+// TestInstanceDeleteForceIsNoOp verifies the deprecated --force flag is accepted but
+// does not change the endpoint used (still service-cancel, not a direct expunge).
+func TestInstanceDeleteForceIsNoOp(t *testing.T) {
+	var sawCancel atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListWithBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			sawCancel.Store(true)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Cancellation scheduled","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewInstanceCmd(), "delete", "test-vm", "--yes", "--force", "--api-url", srv.URL); err != nil {
+		t.Fatalf("delete --force error = %v", err)
+	}
+	if !sawCancel.Load() {
+		t.Error("--force should still route through service-cancel")
+	}
+}
+
+// withFastLBRelease overrides lbIPReleaseWait so --release-ip retries don't sleep.
+func withFastLBRelease(t *testing.T) {
+	t.Helper()
+	orig := lbIPReleaseWait
+	lbIPReleaseWait = func(int) time.Duration { return time.Millisecond }
+	t.Cleanup(func() { lbIPReleaseWait = orig })
+}
+
+// TestLoadBalancerDeleteUsesServiceCancel verifies `zcp loadbalancer delete` routes through
+// the service-cancel endpoint (matching the CMP Web UI) instead of the direct DELETE, does
+// not send delete_public_ip (which the LB workflow does not honor), and by default does NOT
+// touch the LB's public IP (a reusable resource).
+func TestLoadBalancerDeleteUsesServiceCancel(t *testing.T) {
+	var cancelBody map[string]interface{}
+	var cancelPath string
+	var directDelete, ipReleased atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			cancelPath = r.URL.Path
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Cancellation scheduled","data":null}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/load-balancers/my-lb":
+			directDelete.Store(true)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			ipReleased.Store(true)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	stdout, stderr, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("lb delete error = %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if directDelete.Load() {
+		t.Error("lb delete called the direct DELETE /load-balancers endpoint; want service-cancel")
+	}
+	if ipReleased.Load() {
+		t.Error("lb delete released the public IP without --release-ip")
+	}
+	if cancelPath != "/billing/service-cancel-requests/my-lb" {
+		t.Errorf("cancel path = %q, want %q", cancelPath, "/billing/service-cancel-requests/my-lb")
+	}
+	if cancelBody["service_name"] != "Load Balancer" {
+		t.Errorf("service_name = %v, want %q", cancelBody["service_name"], "Load Balancer")
+	}
+	if _, ok := cancelBody["delete_public_ip"]; ok {
+		t.Errorf("delete_public_ip should be absent for LB cancel, got %v", cancelBody["delete_public_ip"])
+	}
+	if cancelBody["billing_cycle"] != "hour" {
+		t.Errorf("billing_cycle = %v, want %q (default hourly)", cancelBody["billing_cycle"], "hour")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIP verifies --release-ip releases the LB's dedicated public
+// IP after the cancel, and --billing-cycle monthly maps to "month". The IP's strategy is
+// left empty on purpose: an attached (non-source-NAT) LB IP reports an empty strategy in
+// practice, and the release gate is "not SOURCE-NAT", not literally "STATIC".
+func TestLoadBalancerDeleteReleaseIP(t *testing.T) {
+	withFastLBRelease(t)
+	var cancelBody map[string]interface{}
+	var releasedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"my-lb","name":"my-lb","id":"lb-1","ipaddress":{"id":"ipid","ip_address":"1.2.3.4","slug":"ip-1"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/ipaddresses":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"ip-1","ipaddress":"1.2.3.4","strategy":""}]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			releasedPath = r.URL.Path
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	stdout, stderr, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--release-ip", "--billing-cycle", "monthly", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("lb delete --release-ip error = %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if releasedPath != "/ipaddresses/ip-1" {
+		t.Errorf("released IP path = %q, want %q", releasedPath, "/ipaddresses/ip-1")
+	}
+	if cancelBody["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q", cancelBody["billing_cycle"], "month")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPSkipsSourceNAT verifies --release-ip never releases a
+// network source-NAT IP (which would break the network).
+func TestLoadBalancerDeleteReleaseIPSkipsSourceNAT(t *testing.T) {
+	withFastLBRelease(t)
+	var ipReleased atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"my-lb","name":"my-lb","id":"lb-1","ipaddress":{"id":"ipid","ip_address":"1.2.3.4","slug":"ip-1"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/ipaddresses":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"ip-1","ipaddress":"1.2.3.4","strategy":"SOURCE-NAT"}]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			ipReleased.Store(true)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--release-ip", "--api-url", srv.URL); err != nil {
+		t.Fatalf("lb delete error = %v", err)
+	}
+	// The critical safety property: a SOURCE-NAT IP is never released (it belongs to the
+	// network). The skip reason is printed to os.Stderr, which execCmd does not capture.
+	if ipReleased.Load() {
+		t.Error("--release-ip released a SOURCE-NAT IP; it must never touch the network source-NAT")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPResolvesName verifies that when a NAME (not a slug) is
+// passed with --release-ip, the cancel targets the LB's canonical SLUG (not the raw name),
+// so the deletion doesn't 404 and the IP is still released.
+func TestLoadBalancerDeleteReleaseIPResolvesName(t *testing.T) {
+	withFastLBRelease(t)
+	var cancelPath, releasedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"lb-canonical","name":"my-lb-name","id":"lb-1","ipaddress":{"id":"ipid","ip_address":"1.2.3.4","slug":"ip-1"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/ipaddresses":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"ip-1","ipaddress":"1.2.3.4","strategy":"STATIC"}]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			cancelPath = r.URL.Path
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			releasedPath = r.URL.Path
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	// Pass the NAME, not the slug.
+	if _, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb-name", "--yes", "--release-ip", "--api-url", srv.URL); err != nil {
+		t.Fatalf("lb delete error = %v", err)
+	}
+	if cancelPath != "/billing/service-cancel-requests/lb-canonical" {
+		t.Errorf("cancel path = %q, want the canonical slug %q (not the name)", cancelPath, "/billing/service-cancel-requests/lb-canonical")
+	}
+	if releasedPath != "/ipaddresses/ip-1" {
+		t.Errorf("released IP path = %q, want %q", releasedPath, "/ipaddresses/ip-1")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPNotFound verifies that when --release-ip can't find the LB
+// in the listing (wrong ref, pagination, or already gone), it still deletes via the raw ref
+// and does not attempt to release any IP (no silent wrong release, no crash).
+func TestLoadBalancerDeleteReleaseIPNotFound(t *testing.T) {
+	withFastLBRelease(t)
+	var cancelPath string
+	var ipReleased atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			cancelPath = r.URL.Path
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			ipReleased.Store(true)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "some-lb", "--yes", "--release-ip", "--api-url", srv.URL); err != nil {
+		t.Fatalf("lb delete error = %v", err)
+	}
+	if cancelPath != "/billing/service-cancel-requests/some-lb" {
+		t.Errorf("cancel path = %q, want the raw ref %q (deletion must still proceed)", cancelPath, "/billing/service-cancel-requests/some-lb")
+	}
+	if ipReleased.Load() {
+		t.Error("released an IP despite not resolving the LB; must never release an unconfirmed IP")
+	}
+}
+
+// TestLoadBalancerDeleteRejectsBadBillingCycle verifies an unknown --billing-cycle is
+// rejected up front instead of being silently coerced to "month".
+func TestLoadBalancerDeleteRejectsBadBillingCycle(t *testing.T) {
+	var hit atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit.Store(true)
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--billing-cycle", "weekly", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected an error for an invalid --billing-cycle, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid --billing-cycle") {
+		t.Errorf("error = %q, want it to mention 'invalid --billing-cycle'", err)
+	}
+	if hit.Load() {
+		t.Error("a bad --billing-cycle should be rejected before any API call")
+	}
+}
+
+// TestBillingCycleUnit locks the exact-match normalization (no loose prefix matching).
+func TestBillingCycleUnit(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"hour", "hour", true}, {"hourly", "hour", true}, {"Hourly", "hour", true},
+		{"month", "month", true}, {"monthly", "month", true}, {"MONTHLY", "month", true},
+		{"hourlyx", "", false}, {"hourfoo", "", false}, {"weekly", "", false}, {"", "", false},
+	}
+	for _, c := range cases {
+		if got, ok := billingCycleUnit(c.in); got != c.want || ok != c.ok {
+			t.Errorf("billingCycleUnit(%q) = (%q,%v), want (%q,%v)", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// vmListNoBillingCycle is a single-VM list with no billing cycle metadata.
+const vmListNoBillingCycle = `{"status":"Success","message":"OK","data":[{"id":"a1","vm_id":"vm-1","name":"nc-vm","slug":"nc-vm","state":"Running","request_status":true,"networks":[]}]}`
+
+// TestInstanceDeleteRequiresBillingCycle verifies delete fails (and submits no cancel) when
+// the VM's billing cycle can't be determined and no --billing-cycle override is given.
+func TestInstanceDeleteRequiresBillingCycle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/virtual-machines" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListNoBillingCycle)
+			return
+		}
+		if r.Method == http.MethodPost {
+			t.Error("cancel must not be submitted when the billing cycle can't be determined")
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "delete", "nc-vm", "--yes", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "could not determine the billing cycle") {
+		t.Fatalf("want 'could not determine the billing cycle' error, got %v", err)
+	}
+}
+
+// TestInstanceDeleteBillingCycleOverride verifies --billing-cycle is used when the VM has none.
+func TestInstanceDeleteBillingCycleOverride(t *testing.T) {
+	var cancelBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListNoBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewInstanceCmd(), "delete", "nc-vm", "--yes", "--billing-cycle", "monthly", "--api-url", srv.URL); err != nil {
+		t.Fatalf("delete with --billing-cycle override error = %v", err)
+	}
+	if cancelBody["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q", cancelBody["billing_cycle"], "month")
+	}
+}
+
+// vmListOfferingBillingCycle is a single-VM list whose billing cycle exists only under
+// offering.billing_cycle (top-level billing_cycle absent), as get-shaped responses do.
+const vmListOfferingBillingCycle = `{"status":"Success","message":"OK","data":[{"id":"a1","vm_id":"vm-1","name":"off-vm","slug":"off-vm","state":"Running","request_status":true,"offering":{"id":"o1","billing_cycle":{"id":"bc1","name":"Monthly","slug":"monthly","duration":1,"unit":"month"}},"networks":[]}]}`
+
+// TestInstanceDeleteDerivesBillingCycleFromOffering verifies the cancel cycle is taken from
+// offering.billing_cycle when the top-level billing_cycle is absent, so the delete succeeds.
+func TestInstanceDeleteDerivesBillingCycleFromOffering(t *testing.T) {
+	var cancelBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListOfferingBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewInstanceCmd(), "delete", "off-vm", "--yes", "--api-url", srv.URL); err != nil {
+		t.Fatalf("delete should succeed using offering.billing_cycle, got %v", err)
+	}
+	if cancelBody["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q (from offering)", cancelBody["billing_cycle"], "month")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPAmbiguousName verifies a name matching >1 LB is an error
+// (never silently cancel the wrong one).
+func TestLoadBalancerDeleteReleaseIPAmbiguousName(t *testing.T) {
+	withFastLBRelease(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/load-balancers" {
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"lb-1","name":"dup","id":"1"},{"slug":"lb-2","name":"dup","id":"2"}]}`)
+			return
+		}
+		if r.Method == http.MethodPost {
+			t.Error("must not cancel when the name is ambiguous")
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "dup", "--yes", "--release-ip", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "named") {
+		t.Fatalf("want ambiguous-name error, got %v", err)
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPFailsLoud verifies that when --release-ip's IP release
+// exhausts its retries, the command exits with an error (not silently 0).
+func TestLoadBalancerDeleteReleaseIPFailsLoud(t *testing.T) {
+	withFastLBRelease(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"my-lb","name":"my-lb","id":"lb-1","ipaddress":{"id":"ipid","ip_address":"1.2.3.4","slug":"ip-1"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/ipaddresses":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"ip-1","ipaddress":"1.2.3.4","strategy":""}]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"status":"Error","message":"boom"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--release-ip", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "could not be released") {
+		t.Fatalf("want a non-nil IP-release-failed error, got %v", err)
 	}
 }
 

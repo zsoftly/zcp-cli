@@ -122,10 +122,16 @@ destroy_one() {
     egress)         zcp egress delete "$slug" --network "$extra" -y >/dev/null 2>&1 ;;
     portforward)    zcp portforward delete "$slug" -y      >/dev/null 2>&1 ;;
     loadbalancer)
-      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      # `loadbalancer delete` routes through the service-cancel workflow; --release-ip also
+      # frees the LB's dedicated STATIC IP (a network source-NAT IP is auto-skipped). Retry
+      # once; deletion is async.
+      zcp loadbalancer delete "$slug" --release-ip -y >/dev/null 2>&1 || true
       sleep 5
-      zcp billing cancel-service "$slug" --service "Load Balancer" --type Immediate --delete-public-ip -y >/dev/null 2>&1 || true
+      zcp loadbalancer delete "$slug" --release-ip -y >/dev/null 2>&1 || true
       ;;
+    # `instance delete` routes through the service-cancel workflow (releases the
+    # VM's auto-assigned public IP); it supersedes the raw `cancel` path for VMs.
+    vm)             zcp instance delete "$slug" -y         >/dev/null 2>&1 ;;
     vm-snapshot)    zcp vm-snapshot delete "$slug" -y      >/dev/null 2>&1 ;;
     object-storage) zcp object-storage delete "$slug" -y   >/dev/null 2>&1 ;;
     template-acct)  zcp template account-delete "$slug" -y >/dev/null 2>&1 ;;

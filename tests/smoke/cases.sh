@@ -188,7 +188,9 @@ fx_vm() {
   FX_VM="$(_jq_slug <<<"$out")"
   [[ -z "$FX_VM" ]] && FX_VM="$(zcp instance list -o json 2>/dev/null | jq -r --arg n "$name" '(.[]//.data[])|select(.name==$n or .slug==$n)|.slug' | head -1)"
   [[ -z "$FX_VM" ]] && return 1
-  defer cancel "$FX_VM" "Virtual Machine"
+  # Tear down via `instance delete`, which routes through the service-cancel workflow
+  # and releases the VM's auto-assigned public IP (exercises that fixed path in smoke).
+  defer vm "$FX_VM"
   # wait for Running (VM boot can take a few minutes; tunable via ZCP_SMOKE_VM_WAIT)
   local state polls="${ZCP_SMOKE_VM_WAIT:-30}"
   for _ in $(seq 1 "$polls"); do

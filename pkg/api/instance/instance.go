@@ -60,6 +60,7 @@ type VirtualMachine struct {
 	Hostname             string          `json:"hostname"`
 	Username             string          `json:"username"`
 	State                string          `json:"state"`
+	IPAddresses          []IPAddresses   `json:"ipaddresses"`
 	PublicIP             *string         `json:"public_ip"`
 	PrivateIP            *string         `json:"private_ip"`
 	FrozenAt             *string         `json:"frozen_at"`
@@ -71,6 +72,7 @@ type VirtualMachine struct {
 	IsVNF                bool            `json:"is_vnf"`
 	ConsoleURL           *string         `json:"console_url"`
 	Template             *VMTemplate     `json:"template"`
+	Offering             *Offering       `json:"offering"`
 	BillingCycle         *BillingCycle   `json:"billing_cycle"`
 	Region               *Region         `json:"region"`
 	CloudProvider        *CloudProvider  `json:"cloud_provider"`
@@ -105,7 +107,9 @@ type VMNetworkIP struct {
 }
 
 // NetworkPrivateIP returns the private IP from the default network, falling back
-// to the first network with an IP if no default is set.
+// to the first network with an IP if no default is set, or "" if the VM has none.
+// It returns "" (not a display placeholder) so callers such as `instance ssh` can
+// detect "no IP" and fall through; the "-" placeholder is applied at display time.
 func (vm *VirtualMachine) NetworkPrivateIP() string {
 	var fallback string
 	for _, n := range vm.Networks {
@@ -120,6 +124,21 @@ func (vm *VirtualMachine) NetworkPrivateIP() string {
 		}
 	}
 	return fallback
+}
+
+// GetPublicIPAddress returns the VM's public IP address, or "" if it has none.
+// The VM's top-level public_ip is null even when a public IP is assigned, so the
+// address is read from the ipaddresses list, selecting the entry the platform marks
+// as a public IP (ip_type == "Public IP"). The per-entry "type" field is the IP
+// version ("IPv4"/"IPv6"), NOT a public/private marker, so it must not be used here.
+// Returns "" (not a display placeholder) for the same reason as NetworkPrivateIP.
+func (vm *VirtualMachine) GetPublicIPAddress() string {
+	for _, ip := range vm.IPAddresses {
+		if ip.IPAddress != "" && ip.IPType == "Public IP" {
+			return ip.IPAddress
+		}
+	}
+	return ""
 }
 
 // VMTemplate represents the template/OS info on a VM.
@@ -154,6 +173,14 @@ type OSVersion struct {
 	PricingType string `json:"pricing_type"`
 }
 
+// IPAddresses represents an IP address entry attached to a VM.
+type IPAddresses struct {
+	ID        string `json:"id"`
+	IPAddress string `json:"ipaddress"`
+	Type      string `json:"type"`    // IP version, e.g. "IPv4" — NOT a public/private marker
+	IPType    string `json:"ip_type"` // platform label, e.g. "Public IP"
+}
+
 // BillingCycle represents a billing period.
 type BillingCycle struct {
 	ID       string `json:"id"`
@@ -161,6 +188,10 @@ type BillingCycle struct {
 	Slug     string `json:"slug"`
 	Duration int    `json:"duration"`
 	Unit     string `json:"unit"`
+}
+type Offering struct {
+	ID           string        `json:"id"`
+	BillingCycle *BillingCycle `json:"billing_cycle"`
 }
 
 // Region represents a cloud region.
@@ -345,7 +376,9 @@ func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMa
 	// resolution) see the full set rather than just the first page.
 	var all []VirtualMachine
 	for page := 1; ; page++ {
-		q := url.Values{}
+		q := url.Values{
+			"include": {"networks,ipaddresses,offering"},
+		}
 		if region != "" {
 			q.Set("filter[region]", region)
 		}
@@ -558,12 +591,14 @@ func (s *Service) PurchaseAddon(ctx context.Context, req PurchaseAddonRequest) (
 	return &resp, nil
 }
 
-// Delete permanently destroys a virtual machine.
+// Delete performs a direct destroy of a virtual machine via DELETE /virtual-machines/{slug}.
 // If expunge is true, ?expunge=true is sent to force immediate purge from the hypervisor
 // rather than leaving the VM in a soft-deleted/Destroyed state pending CloudStack expunge.
-// If deletePublicIP is true, ?delete_public_ip=true is sent so the CMP releases the public
-// IP(s) auto-assigned to the VM at creation. Manually-acquired and source-NAT IPs are not
-// affected — those are released only when their network/IP is removed.
+//
+// NOTE: this endpoint does NOT release the VM's auto-assigned public IP — the delete_public_ip
+// query param is accepted but ignored by the CMP, leaving the IP Allocated/billable. To delete
+// a VM AND release its public IP (as the CMP Web UI does), use the service-cancellation workflow
+// instead: billing.Service.CancelService with delete_public_ip set (see 'zcp instance delete').
 func (s *Service) Delete(ctx context.Context, slug string, expunge, deletePublicIP bool) error {
 	q := url.Values{}
 	if expunge {
