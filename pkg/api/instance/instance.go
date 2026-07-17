@@ -377,7 +377,7 @@ func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMa
 	var all []VirtualMachine
 	for page := 1; ; page++ {
 		q := url.Values{
-			"include": {"networks,ipaddresses"},
+			"include": {"networks,ipaddresses,offering"},
 		}
 		if region != "" {
 			q.Set("filter[region]", region)

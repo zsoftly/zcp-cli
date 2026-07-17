@@ -1496,12 +1496,25 @@ func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool, bil
 
 // cancelBillingCycle maps a VM's billing cycle to the "hour"/"month" form the
 // service-cancellation endpoint documents (create/order requests use "hourly"/"monthly",
-// but the cancel body uses the unit form). It tries the VM's unit, slug, then name, and
-// returns ok=false when the VM carries no recognizable billing cycle so the caller can
-// require an explicit --billing-cycle rather than guessing one.
+// but the cancel body uses the unit form). It checks the VM's top-level billing cycle and
+// its offering.billing_cycle (the field the API populates varies by list vs get response),
+// trying unit, slug, then name. Returns ok=false when no recognizable cycle is present so
+// the caller can require an explicit --billing-cycle rather than guessing one.
 func cancelBillingCycle(vm *instance.VirtualMachine) (string, bool) {
-	if vm != nil && vm.BillingCycle != nil {
-		for _, v := range []string{vm.BillingCycle.Unit, vm.BillingCycle.Slug, vm.BillingCycle.Name} {
+	if vm == nil {
+		return "", false
+	}
+	// The cycle may live at the top level (list responses) or under offering (get
+	// responses), so check both.
+	cycles := []*instance.BillingCycle{vm.BillingCycle}
+	if vm.Offering != nil {
+		cycles = append(cycles, vm.Offering.BillingCycle)
+	}
+	for _, bc := range cycles {
+		if bc == nil {
+			continue
+		}
+		for _, v := range []string{bc.Unit, bc.Slug, bc.Name} {
 			if u, ok := billingCycleUnit(v); ok {
 				return u, true
 			}

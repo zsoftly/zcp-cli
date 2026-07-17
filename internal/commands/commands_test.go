@@ -810,6 +810,38 @@ func TestInstanceDeleteBillingCycleOverride(t *testing.T) {
 	}
 }
 
+// vmListOfferingBillingCycle is a single-VM list whose billing cycle exists only under
+// offering.billing_cycle (top-level billing_cycle absent), as get-shaped responses do.
+const vmListOfferingBillingCycle = `{"status":"Success","message":"OK","data":[{"id":"a1","vm_id":"vm-1","name":"off-vm","slug":"off-vm","state":"Running","request_status":true,"offering":{"id":"o1","billing_cycle":{"id":"bc1","name":"Monthly","slug":"monthly","duration":1,"unit":"month"}},"networks":[]}]}`
+
+// TestInstanceDeleteDerivesBillingCycleFromOffering verifies the cancel cycle is taken from
+// offering.billing_cycle when the top-level billing_cycle is absent, so the delete succeeds.
+func TestInstanceDeleteDerivesBillingCycleFromOffering(t *testing.T) {
+	var cancelBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListOfferingBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewInstanceCmd(), "delete", "off-vm", "--yes", "--api-url", srv.URL); err != nil {
+		t.Fatalf("delete should succeed using offering.billing_cycle, got %v", err)
+	}
+	if cancelBody["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q (from offering)", cancelBody["billing_cycle"], "month")
+	}
+}
+
 // TestLoadBalancerDeleteReleaseIPAmbiguousName verifies a name matching >1 LB is an error
 // (never silently cancel the wrong one).
 func TestLoadBalancerDeleteReleaseIPAmbiguousName(t *testing.T) {
