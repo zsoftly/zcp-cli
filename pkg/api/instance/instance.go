@@ -60,6 +60,7 @@ type VirtualMachine struct {
 	Hostname             string          `json:"hostname"`
 	Username             string          `json:"username"`
 	State                string          `json:"state"`
+	IPAddresses          []IPAddresses   `json:"ipaddresses"`
 	PublicIP             *string         `json:"public_ip"`
 	PrivateIP            *string         `json:"private_ip"`
 	FrozenAt             *string         `json:"frozen_at"`
@@ -71,6 +72,7 @@ type VirtualMachine struct {
 	IsVNF                bool            `json:"is_vnf"`
 	ConsoleURL           *string         `json:"console_url"`
 	Template             *VMTemplate     `json:"template"`
+	Offering             *Offering       `json:"offering"`
 	BillingCycle         *BillingCycle   `json:"billing_cycle"`
 	Region               *Region         `json:"region"`
 	CloudProvider        *CloudProvider  `json:"cloud_provider"`
@@ -107,7 +109,7 @@ type VMNetworkIP struct {
 // NetworkPrivateIP returns the private IP from the default network, falling back
 // to the first network with an IP if no default is set.
 func (vm *VirtualMachine) NetworkPrivateIP() string {
-	var fallback string
+	fallback := "-"
 	for _, n := range vm.Networks {
 		if n.Pivot == nil || n.Pivot.IPAddress == "" {
 			continue
@@ -115,10 +117,31 @@ func (vm *VirtualMachine) NetworkPrivateIP() string {
 		if n.IsDefault || n.Pivot.IsDefault {
 			return n.Pivot.IPAddress
 		}
-		if fallback == "" {
+		if fallback == "-" {
 			fallback = n.Pivot.IPAddress
 		}
 	}
+	return fallback
+}
+
+// Returns the PublicIP if a VM is assigned one
+func (vm *VirtualMachine) GetPublicIPAddress() string {
+	fallback := "-"
+
+	for _, ip := range vm.IPAddresses {
+		if ip.IPAddress == "" {
+			continue
+		}
+
+		if ip.Type != "" {
+			return ip.IPAddress
+		}
+
+		if fallback == "-" {
+			fallback = ip.IPAddress
+		}
+	}
+
 	return fallback
 }
 
@@ -154,6 +177,13 @@ type OSVersion struct {
 	PricingType string `json:"pricing_type"`
 }
 
+// IPAddresses represents the IP address of a VM
+type IPAddresses struct {
+	ID        string `json:"id"`
+	IPAddress string `json:"ipaddress"`
+	Type      string `json:"type"`
+}
+
 // BillingCycle represents a billing period.
 type BillingCycle struct {
 	ID       string `json:"id"`
@@ -161,6 +191,10 @@ type BillingCycle struct {
 	Slug     string `json:"slug"`
 	Duration int    `json:"duration"`
 	Unit     string `json:"unit"`
+}
+type Offering struct {
+	ID           string        `json:"id"`
+	BillingCycle *BillingCycle `json:"billing_cycle"`
 }
 
 // Region represents a cloud region.
@@ -345,7 +379,9 @@ func (s *Service) List(ctx context.Context, region, project string) ([]VirtualMa
 	// resolution) see the full set rather than just the first page.
 	var all []VirtualMachine
 	for page := 1; ; page++ {
-		q := url.Values{}
+		q := url.Values{
+			"include": {"networks,ipaddresses"},
+		}
 		if region != "" {
 			q.Set("filter[region]", region)
 		}

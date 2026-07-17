@@ -49,6 +49,26 @@ func TestList(t *testing.T) {
 	}
 }
 
+func TestListEmptyResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success",
+			"data":   []interface{}{},
+			"total":  0,
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	vms, err := svc.List(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(vms) != 0 {
+		t.Errorf("got %d VMs, want 0", len(vms))
+	}
+}
+
 func TestListPaginatesAllPages(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/virtual-machines" {
@@ -121,6 +141,21 @@ func TestGet(t *testing.T) {
 	}
 }
 
+func TestGetNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Error",
+			"message": "not found",
+		})
+	}))
+	defer srv.Close()
+
+	svc := instance.NewService(newClient(srv.URL))
+	_, err := svc.Get(context.Background(), "nonexistent")
+	if err == nil {
+		t.Error("expected error for not found")
+	}
+}
 func TestStart(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || r.URL.Path != "/virtual-machines/test-vm/start" {
