@@ -333,11 +333,15 @@ func runLBDelete(cmd *cobra.Command, slug, billingCycle string, releaseIP bool) 
 	cancelSlug := slug
 	var releaseSlug, releaseAddr, ipNote string
 	if releaseIP {
-		if lb := findLoadBalancer(ctx, client, region, project, slug); lb != nil {
+		lb, err := findLoadBalancer(ctx, client, region, project, slug)
+		if err != nil {
+			return err
+		}
+		if lb != nil {
 			cancelSlug = lb.Slug
 			releaseSlug, releaseAddr, ipNote = lbReleasableIP(ctx, client, region, project, lb)
 		} else {
-			// Not found in the listing — a wrong ref, another page, or already gone. Don't
+			// No match in the listing — a wrong ref, another page, or already gone. Don't
 			// silently skip: still delete via the raw ref, and tell the user how to free the IP.
 			ipNote = fmt.Sprintf("could not find load balancer %q to look up its public IP; if it had a dedicated IP, free it with 'zcp ip release <ip-slug>'", slug)
 		}
@@ -373,7 +377,9 @@ func runLBDelete(cmd *cobra.Command, slug, billingCycle string, releaseIP bool) 
 			}
 			relCtx, relCancel := context.WithTimeout(context.Background(), relBudget)
 			defer relCancel()
-			releaseLBIP(relCtx, client, printer, releaseSlug, releaseAddr)
+			if err := releaseLBIP(relCtx, client, printer, releaseSlug, releaseAddr); err != nil {
+				return err
+			}
 		} else if ipNote != "" {
 			fmt.Fprintf(os.Stderr, "Public IP not released: %s.\n", ipNote)
 		}
@@ -384,17 +390,28 @@ func runLBDelete(cmd *cobra.Command, slug, billingCycle string, releaseIP bool) 
 // findLoadBalancer resolves a load balancer by slug, name, or id within the region/project.
 // Returns nil if no match is in the listing (a wrong ref, a paginated page we didn't get,
 // or already deleted) — the caller decides how to proceed.
-func findLoadBalancer(ctx context.Context, client *httpclient.Client, region, project, ref string) *loadbalancer.LoadBalancer {
+func findLoadBalancer(ctx context.Context, client *httpclient.Client, region, project, ref string) (*loadbalancer.LoadBalancer, error) {
 	lbs, err := loadbalancer.NewService(client).List(ctx, region, project)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("resolving load balancer %q: %w", ref, err)
 	}
+	var byName []*loadbalancer.LoadBalancer
 	for i := range lbs {
-		if lbs[i].Slug == ref || lbs[i].Name == ref || lbs[i].ID == ref {
-			return &lbs[i]
+		if lbs[i].Slug == ref || lbs[i].ID == ref {
+			return &lbs[i], nil
+		}
+		if lbs[i].Name == ref {
+			byName = append(byName, &lbs[i])
 		}
 	}
-	return nil
+	switch len(byName) {
+	case 0:
+		return nil, nil // no match — caller decides how to proceed
+	case 1:
+		return byName[0], nil
+	default:
+		return nil, fmt.Errorf("%d load balancers are named %q; use the slug instead (run 'zcp loadbalancer list')", len(byName), ref)
+	}
 }
 
 // lbReleasableIP decides whether the resolved LB's public IP is safe to release. It returns
@@ -425,7 +442,7 @@ func lbReleasableIP(ctx context.Context, client *httpclient.Client, region, proj
 
 // releaseLBIP releases the load balancer's IP, retrying briefly because the LB deletion
 // is async and the IP can stay attached (and un-releasable) for a few seconds.
-func releaseLBIP(ctx context.Context, client *httpclient.Client, printer *output.Printer, ipSlug, ipAddr string) {
+func releaseLBIP(ctx context.Context, client *httpclient.Client, printer *output.Printer, ipSlug, ipAddr string) error {
 	ipSvc := ipaddress.NewService(client)
 	var err error
 	for attempt := 0; attempt < 4; attempt++ {
@@ -441,23 +458,23 @@ func releaseLBIP(ctx context.Context, client *httpclient.Client, printer *output
 		}
 		if err = ipSvc.Release(ctx, ipSlug); err == nil {
 			printer.Fprintf("Released public IP %s (%s).\n", ipAddr, ipSlug)
-			return
+			return nil
 		}
 		if apierrors.IsResourceNotFound(err) {
 			printer.Fprintf("Public IP %s already released.\n", ipAddr)
-			return
+			return nil
 		}
 	}
-	fmt.Fprintf(os.Stderr, "Load balancer deleted, but its public IP %s could not be released yet (%v).\nRelease it once deletion completes: zcp ip release %s\n", ipAddr, err, ipSlug)
+	return fmt.Errorf("load balancer deleted, but its public IP %s could not be released (%v); release it once deletion completes: zcp ip release %s", ipAddr, err, ipSlug)
 }
 
 // billingCycleUnit maps a billing-cycle string (hourly/monthly, or hour/month) to the unit
 // form the service-cancellation endpoint expects (hour/month), reporting whether it matched.
 func billingCycleUnit(s string) (string, bool) {
-	switch low := strings.ToLower(strings.TrimSpace(s)); {
-	case strings.HasPrefix(low, "hour"):
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "hour", "hourly":
 		return "hour", true
-	case strings.HasPrefix(low, "month"):
+	case "month", "monthly":
 		return "month", true
 	default:
 		return "", false

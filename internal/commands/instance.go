@@ -1376,6 +1376,7 @@ func runInstancePurchaseAddon(cmd *cobra.Command, vmSlug, project, region, cloud
 
 func newInstanceDeleteCmd() *cobra.Command {
 	var yes, force, deletePublicIP bool
+	var billingCycle string
 
 	cmd := &cobra.Command{
 		Use:   "delete <slug>",
@@ -1399,6 +1400,11 @@ IPs are never touched by this command — release those with 'zcp ip release'.`,
   zcp instance delete my-vm --yes --delete-public-ip=false`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
+			if billingCycle != "" {
+				if _, ok := billingCycleUnit(billingCycle); !ok {
+					return fmt.Errorf("invalid --billing-cycle %q: use hourly or monthly", billingCycle)
+				}
+			}
 			if !yes && !autoApproved(cmd) {
 				ipNote := " Its auto-assigned public IP will be retained (--delete-public-ip=false)."
 				if deletePublicIP {
@@ -1413,11 +1419,12 @@ IPs are never touched by this command — release those with 'zcp ip release'.`,
 					return nil
 				}
 			}
-			return runInstanceDelete(cmd, slug, deletePublicIP)
+			return runInstanceDelete(cmd, slug, deletePublicIP, billingCycle)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	cmd.Flags().BoolVar(&deletePublicIP, "delete-public-ip", true, "Release the VM's auto-assigned public IP as part of the deletion. Set to false to keep it Allocated. Manually-acquired and source-NAT IPs are unaffected either way")
+	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "The VM's billing cycle (hourly or monthly). Normally derived from the VM; required only if it can't be determined")
 	// --force previously forced a hypervisor expunge on the direct DELETE endpoint.
 	// The service-cancellation workflow deletes immediately (type=Immediate), so the
 	// flag is a no-op; kept hidden to avoid breaking existing scripts.
@@ -1427,7 +1434,7 @@ IPs are never touched by this command — release those with 'zcp ip release'.`,
 	return cmd
 }
 
-func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool) error {
+func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool, billingCycle string) error {
 	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -1448,6 +1455,17 @@ func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool) err
 		return err
 	}
 
+	// The cancellation body requires the VM's billing cycle. Prefer the --billing-cycle
+	// override (already validated); otherwise derive it from the VM. Don't guess a default:
+	// if it can't be determined, fail so the user supplies it rather than cancel with a
+	// fabricated cycle.
+	cycle, ok := billingCycleUnit(billingCycle)
+	if !ok {
+		if cycle, ok = cancelBillingCycle(vm); !ok {
+			return fmt.Errorf("could not determine the billing cycle for %q; pass --billing-cycle hourly|monthly", vm.Slug)
+		}
+	}
+
 	// The CMP Web UI deletes a VM (and releases its auto-assigned public IP) through the
 	// unified service-cancellation workflow, NOT the direct DELETE endpoint — the latter
 	// ignores delete_public_ip and leaves the IP Allocated/billable. Match the UI.
@@ -1457,7 +1475,7 @@ func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool) err
 		Reason:         "not_needed_anymore",
 		Type:           "Immediate",
 		Status:         "Pending",
-		BillingCycle:   cancelBillingCycle(vm),
+		BillingCycle:   cycle,
 		DeletePublicIP: &dip,
 	}
 	if err := billing.NewService(client).CancelService(ctx, vm.Slug, req); err != nil {
@@ -1479,16 +1497,17 @@ func runInstanceDelete(cmd *cobra.Command, slug string, deletePublicIP bool) err
 // cancelBillingCycle maps a VM's billing cycle to the "hour"/"month" form the
 // service-cancellation endpoint documents (create/order requests use "hourly"/"monthly",
 // but the cancel body uses the unit form). It tries the VM's unit, slug, then name, and
-// defaults to "month" when the VM carries no recognizable billing cycle.
-func cancelBillingCycle(vm *instance.VirtualMachine) string {
+// returns ok=false when the VM carries no recognizable billing cycle so the caller can
+// require an explicit --billing-cycle rather than guessing one.
+func cancelBillingCycle(vm *instance.VirtualMachine) (string, bool) {
 	if vm != nil && vm.BillingCycle != nil {
 		for _, v := range []string{vm.BillingCycle.Unit, vm.BillingCycle.Slug, vm.BillingCycle.Name} {
 			if u, ok := billingCycleUnit(v); ok {
-				return u
+				return u, true
 			}
 		}
 	}
-	return "month"
+	return "", false
 }
 
 // ---------- ssh ----------

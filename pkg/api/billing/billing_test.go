@@ -486,7 +486,9 @@ func TestCancelServiceReleasesPublicIP(t *testing.T) {
 func TestCancelServiceOmitsUnsetOptionals(t *testing.T) {
 	var got map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&got)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decoding request body: %v", err)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(envelope(map[string]string{"message": "Cancellation scheduled"}))
 	}))
@@ -498,6 +500,17 @@ func TestCancelServiceOmitsUnsetOptionals(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CancelService() error = %v", err)
 	}
+	// Required fields must be present and correct.
+	if got["service_name"] != "Block Storage" {
+		t.Errorf("service_name = %v, want %q", got["service_name"], "Block Storage")
+	}
+	if got["reason"] != "not_needed_anymore" {
+		t.Errorf("reason = %v, want %q", got["reason"], "not_needed_anymore")
+	}
+	if got["type"] != "Immediate" {
+		t.Errorf("type = %v, want %q", got["type"], "Immediate")
+	}
+	// Unset optionals must be omitted.
 	for _, k := range []string{"delete_public_ip", "billing_cycle", "status", "description"} {
 		if _, ok := got[k]; ok {
 			t.Errorf("%q should be omitted when unset, got %v", k, got[k])

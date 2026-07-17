@@ -738,6 +738,131 @@ func TestLoadBalancerDeleteRejectsBadBillingCycle(t *testing.T) {
 	}
 }
 
+// TestBillingCycleUnit locks the exact-match normalization (no loose prefix matching).
+func TestBillingCycleUnit(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{"hour", "hour", true}, {"hourly", "hour", true}, {"Hourly", "hour", true},
+		{"month", "month", true}, {"monthly", "month", true}, {"MONTHLY", "month", true},
+		{"hourlyx", "", false}, {"hourfoo", "", false}, {"weekly", "", false}, {"", "", false},
+	}
+	for _, c := range cases {
+		if got, ok := billingCycleUnit(c.in); got != c.want || ok != c.ok {
+			t.Errorf("billingCycleUnit(%q) = (%q,%v), want (%q,%v)", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// vmListNoBillingCycle is a single-VM list with no billing cycle metadata.
+const vmListNoBillingCycle = `{"status":"Success","message":"OK","data":[{"id":"a1","vm_id":"vm-1","name":"nc-vm","slug":"nc-vm","state":"Running","request_status":true,"networks":[]}]}`
+
+// TestInstanceDeleteRequiresBillingCycle verifies delete fails (and submits no cancel) when
+// the VM's billing cycle can't be determined and no --billing-cycle override is given.
+func TestInstanceDeleteRequiresBillingCycle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/virtual-machines" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListNoBillingCycle)
+			return
+		}
+		if r.Method == http.MethodPost {
+			t.Error("cancel must not be submitted when the billing cycle can't be determined")
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewInstanceCmd(), "delete", "nc-vm", "--yes", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "could not determine the billing cycle") {
+		t.Fatalf("want 'could not determine the billing cycle' error, got %v", err)
+	}
+}
+
+// TestInstanceDeleteBillingCycleOverride verifies --billing-cycle is used when the VM has none.
+func TestInstanceDeleteBillingCycleOverride(t *testing.T) {
+	var cancelBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, vmListNoBillingCycle)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			json.NewDecoder(r.Body).Decode(&cancelBody)
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	if _, _, err := execCmd(t, NewInstanceCmd(), "delete", "nc-vm", "--yes", "--billing-cycle", "monthly", "--api-url", srv.URL); err != nil {
+		t.Fatalf("delete with --billing-cycle override error = %v", err)
+	}
+	if cancelBody["billing_cycle"] != "month" {
+		t.Errorf("billing_cycle = %v, want %q", cancelBody["billing_cycle"], "month")
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPAmbiguousName verifies a name matching >1 LB is an error
+// (never silently cancel the wrong one).
+func TestLoadBalancerDeleteReleaseIPAmbiguousName(t *testing.T) {
+	withFastLBRelease(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/load-balancers" {
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"lb-1","name":"dup","id":"1"},{"slug":"lb-2","name":"dup","id":"2"}]}`)
+			return
+		}
+		if r.Method == http.MethodPost {
+			t.Error("must not cancel when the name is ambiguous")
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "dup", "--yes", "--release-ip", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "named") {
+		t.Fatalf("want ambiguous-name error, got %v", err)
+	}
+}
+
+// TestLoadBalancerDeleteReleaseIPFailsLoud verifies that when --release-ip's IP release
+// exhausts its retries, the command exits with an error (not silently 0).
+func TestLoadBalancerDeleteReleaseIPFailsLoud(t *testing.T) {
+	withFastLBRelease(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/load-balancers":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"my-lb","name":"my-lb","id":"lb-1","ipaddress":{"id":"ipid","ip_address":"1.2.3.4","slug":"ip-1"}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/ipaddresses":
+			fmt.Fprint(w, `{"status":"Success","data":[{"slug":"ip-1","ipaddress":"1.2.3.4","strategy":""}]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/billing/service-cancel-requests/"):
+			fmt.Fprint(w, `{"status":"Success","data":null}`)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/ipaddresses/"):
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"status":"Error","message":"boom"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewLoadBalancerCmd(), "delete", "my-lb", "--yes", "--release-ip", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "could not be released") {
+		t.Fatalf("want a non-nil IP-release-failed error, got %v", err)
+	}
+}
+
 // TestInstanceGetNonRoutingErrorNoRetry verifies that a non-routing 403 (e.g.
 // a plain "forbidden") is returned immediately without any retry.
 func TestInstanceGetNonRoutingErrorNoRetry(t *testing.T) {
