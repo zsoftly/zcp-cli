@@ -229,6 +229,88 @@ func TestDNSRecordCreate(t *testing.T) {
 	}
 }
 
+func TestDNSRecordCreateMXSendsPriority(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Created",
+			"data":    dns.Domain{Name: "example.com", Slug: "example-com-1"},
+		})
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	p := 10
+	req := dns.CreateRecordRequest{
+		Name:     "@",
+		Type:     "MX",
+		Content:  "mail.example.com.",
+		TTL:      3600,
+		Priority: &p,
+	}
+	if _, err := svc.CreateRecord(context.Background(), "example-com-1", req); err != nil {
+		t.Fatalf("CreateRecord() error = %v", err)
+	}
+	// JSON numbers decode into float64.
+	if gotBody["priority"] != float64(10) {
+		t.Errorf("body priority = %v, want 10", gotBody["priority"])
+	}
+}
+
+// A zero MX preference is valid and must still be sent, which a plain int with
+// omitempty would drop. The pointer field guarantees it reaches the wire.
+func TestDNSRecordCreateMXPriorityZeroIsSent(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Created",
+			"data":    dns.Domain{Name: "example.com", Slug: "example-com-1"},
+		})
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	p := 0
+	req := dns.CreateRecordRequest{Name: "@", Type: "MX", Content: "mail.example.com.", TTL: 3600, Priority: &p}
+	if _, err := svc.CreateRecord(context.Background(), "example-com-1", req); err != nil {
+		t.Fatalf("CreateRecord() error = %v", err)
+	}
+	if _, present := gotBody["priority"]; !present {
+		t.Errorf("priority missing from body, want 0 present")
+	}
+}
+
+// Records that do not use a preference must omit priority entirely; sending it
+// on an A record can be rejected by the backend.
+func TestDNSRecordCreateOmitsPriorityWhenUnset(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "Created",
+			"data":    dns.Domain{Name: "example.com", Slug: "example-com-1"},
+		})
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	req := dns.CreateRecordRequest{Name: "www", Type: "A", Content: "192.0.2.1", TTL: 3600}
+	if _, err := svc.CreateRecord(context.Background(), "example-com-1", req); err != nil {
+		t.Fatalf("CreateRecord() error = %v", err)
+	}
+	if _, present := gotBody["priority"]; present {
+		t.Errorf("priority present in body for A record, want omitted")
+	}
+}
+
 func TestDNSRecordDelete(t *testing.T) {
 	var gotPath, gotMethod string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -304,6 +304,9 @@ lc_dns() {
   if _lc_result "dns domain" "$s"; then
     defer dns "$s"
     run_case "dns record-create" -- zcp dns record-create --domain "$s" --name www --type A --content "1.2.3.4"
+    # MX needs --priority; without it the API returns 403. Cleaned up with the
+    # domain by the deferred delete above.
+    run_case "dns record-create MX" -- zcp dns record-create --domain "$s" --name @ --type MX --content "mail.${dom}." --priority 10
   fi
 }
 

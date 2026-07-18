@@ -1517,3 +1517,77 @@ func TestOSFlagValidation(t *testing.T) {
 		})
 	}
 }
+
+// ─── DNS record-create priority ─────────────────────────────────────────────
+
+func TestDNSRecordCreateMXRequiresPriority(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			"MX without priority",
+			[]string{"record-create", "--domain", "d", "--name", "@", "--type", "MX", "--content", "mail.example.com."},
+			"--priority is required for MX",
+		},
+		{
+			"priority on non-MX record",
+			[]string{"record-create", "--domain", "d", "--name", "www", "--type", "A", "--content", "192.0.2.1", "--priority", "10"},
+			"--priority is only valid for MX",
+		},
+		{
+			"priority above range",
+			[]string{"record-create", "--domain", "d", "--name", "@", "--type", "MX", "--content", "mail.example.com.", "--priority", "70000"},
+			"--priority must be between 0 and 65535",
+		},
+		{
+			"priority below range",
+			[]string{"record-create", "--domain", "d", "--name", "@", "--type", "MX", "--content", "mail.example.com.", "--priority", "-1"},
+			"--priority must be between 0 and 65535",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := execCmd(t, NewDNSCmd(), tt.args...)
+			if err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("error = %q, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+// A full MX create through the command path must put priority in the request
+// body. This is the regression that caused every CLI MX attempt to 403.
+func TestDNSRecordCreateMXSendsPriorityEndToEnd(t *testing.T) {
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/records") {
+			json.NewDecoder(r.Body).Decode(&gotBody)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","message":"Created","data":{"id":"1","name":"example.com","slug":"example-com-1"}}`)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewDNSCmd(),
+		"record-create", "--domain", "example-com-1", "--name", "@", "--type", "MX",
+		"--content", "mail.example.com.", "--priority", "10", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("record-create MX error = %v", err)
+	}
+	if gotBody["priority"] != float64(10) {
+		t.Errorf("request priority = %v, want 10", gotBody["priority"])
+	}
+	if gotBody["type"] != "MX" {
+		t.Errorf("request type = %v, want MX", gotBody["type"])
+	}
+}
