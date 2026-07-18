@@ -292,15 +292,24 @@ func newDNSRecordCreateCmd() *cobra.Command {
 				Content: content,
 				TTL:     ttl,
 			}
-			// An MX record carries its preference in a separate priority field
-			// the backend requires; sent without one it is rejected. Require
-			// --priority here so the failure is a clear CLI message rather than
-			// a server-side error.
+			// Priority applies only to MX records, which carry their preference
+			// in a separate field the backend requires; sent without one they
+			// are rejected. Require --priority for MX and reject it for every
+			// other type, so both failures are clear CLI messages rather than
+			// server-side errors. SRV also uses priority/weight/port/target,
+			// but the ZCP CMP DNS API rejects SRV (and LOC) in every request
+			// shape while accepting A/AAAA/CNAME/MX/TXT/CAA. PowerDNS itself
+			// stores and serves SRV fine (verified live 2026-07-18), so the gap
+			// is in the CMP layer; SRV stays unsupported here until CMP adds it.
 			prioritySet := cmd.Flags().Changed("priority")
-			if strings.EqualFold(recordType, "MX") && !prioritySet {
+			isMX := strings.EqualFold(recordType, "MX")
+			if isMX && !prioritySet {
 				return fmt.Errorf("--priority is required for MX records (e.g. --priority 10)")
 			}
 			if prioritySet {
+				if !isMX {
+					return fmt.Errorf("--priority is only valid for MX records")
+				}
 				if priority < 0 || priority > 65535 {
 					return fmt.Errorf("--priority must be between 0 and 65535")
 				}

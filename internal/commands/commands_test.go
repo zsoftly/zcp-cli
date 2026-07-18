@@ -1532,6 +1532,11 @@ func TestDNSRecordCreateMXRequiresPriority(t *testing.T) {
 			"--priority is required for MX",
 		},
 		{
+			"priority on non-MX record",
+			[]string{"record-create", "--domain", "d", "--name", "www", "--type", "A", "--content", "192.0.2.1", "--priority", "10"},
+			"--priority is only valid for MX",
+		},
+		{
 			"priority above range",
 			[]string{"record-create", "--domain", "d", "--name", "@", "--type", "MX", "--content", "mail.example.com.", "--priority", "70000"},
 			"--priority must be between 0 and 65535",

@@ -16,8 +16,8 @@ zcp dns record-create --domain example-com-1 --name @ --type MX --content mail.e
 
 `--priority` is required for `MX` and must be between 0 and 65535. Leaving it off
 stops with a clear error instead of a server-side 403. A `0` preference is sent
-correctly. Other record types (A, AAAA, CNAME, TXT) are unchanged and do not take
-a priority.
+correctly. Other record types (A, AAAA, CNAME, TXT) do not take a priority, and
+passing `--priority` with a non-`MX` type is rejected with a clear error.
 
 ---
 
