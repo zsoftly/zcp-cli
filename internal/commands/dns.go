@@ -263,13 +263,13 @@ func runDNSDelete(cmd *cobra.Command, slug string, yes bool) error {
 
 func newDNSRecordCreateCmd() *cobra.Command {
 	var domain, name, recordType, content string
-	var ttl int
+	var ttl, priority int
 
 	cmd := &cobra.Command{
 		Use:   "record-create",
 		Short: "Create a DNS record",
 		Example: `  zcp dns record-create --domain example-com-1 --name www --type A --content 192.0.2.1
-  zcp dns record-create --domain example-com-1 --name mail --type MX --content mail.example.com --ttl 3600`,
+  zcp dns record-create --domain example-com-1 --name @ --type MX --content mail.example.com. --priority 10 --ttl 3600`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if domain == "" {
 				return fmt.Errorf("--domain is required (use the domain slug)")
@@ -286,12 +286,28 @@ func newDNSRecordCreateCmd() *cobra.Command {
 			if ttl <= 0 {
 				ttl = 14400
 			}
-			return runDNSRecordCreate(cmd, domain, dns.CreateRecordRequest{
+			req := dns.CreateRecordRequest{
 				Name:    name,
 				Type:    recordType,
 				Content: content,
 				TTL:     ttl,
-			})
+			}
+			// An MX record carries its preference in a separate priority field
+			// the backend requires; sent without one it is rejected. Require
+			// --priority here so the failure is a clear CLI message rather than
+			// a server-side error.
+			prioritySet := cmd.Flags().Changed("priority")
+			if strings.EqualFold(recordType, "MX") && !prioritySet {
+				return fmt.Errorf("--priority is required for MX records (e.g. --priority 10)")
+			}
+			if prioritySet {
+				if priority < 0 || priority > 65535 {
+					return fmt.Errorf("--priority must be between 0 and 65535")
+				}
+				p := priority
+				req.Priority = &p
+			}
+			return runDNSRecordCreate(cmd, domain, req)
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
@@ -299,6 +315,7 @@ func newDNSRecordCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recordType, "type", "", "Record type: A, AAAA, CNAME, MX, TXT, etc. (required)")
 	cmd.Flags().StringVar(&content, "content", "", "Record content / value (required)")
 	cmd.Flags().IntVar(&ttl, "ttl", 14400, "Time-to-live in seconds (default: 14400)")
+	cmd.Flags().IntVar(&priority, "priority", 0, "Preference for MX records, 0-65535 (required for MX)")
 	return cmd
 }
 

@@ -5,6 +5,16 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.25] - 2026-07-18
+
+### Fixed
+
+- **`dns record-create` can now create `MX` records.** The command never sent the record's `priority`, so the API rejected every `MX` create with a 403 (the Web UI worked because it sends `priority` as a separate field). `MX` records now take a `--priority` flag (0–65535, required for `MX`): put the mail server in `--content` and the preference number in `--priority`. A `0` preference is sent correctly. Other record types (A, AAAA, CNAME, TXT) are unaffected and still omit priority. Verified live against the API.
+
+  ```bash
+  zcp dns record-create --domain example-com-1 --name @ --type MX --content mail.example.com. --priority 10
+  ```
+
 ## [v0.0.24] - 2026-07-16
 
 ### Fixed

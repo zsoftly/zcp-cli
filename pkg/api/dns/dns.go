@@ -71,11 +71,18 @@ type CreateDomainRequest struct {
 }
 
 // CreateRecordRequest holds parameters for creating a DNS record.
+//
+// Priority is a pointer so it is sent only when set. MX records carry their
+// preference in a separate priority field the backend requires (it rejects an
+// MX record sent without one); A/AAAA/CNAME/TXT records must omit it. A zero
+// preference is valid for MX, so the pointer distinguishes "unset" from "0",
+// which a plain int with omitempty could not.
 type CreateRecordRequest struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Content string `json:"content"`
-	TTL     int    `json:"ttl"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Content  string `json:"content"`
+	TTL      int    `json:"ttl"`
+	Priority *int   `json:"priority,omitempty"`
 }
 
 // DeleteRecordRequest holds parameters for deleting a DNS record.
