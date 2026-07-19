@@ -1591,3 +1591,64 @@ func TestDNSRecordCreateMXSendsPriorityEndToEnd(t *testing.T) {
 		t.Errorf("request type = %v, want MX", gotBody["type"])
 	}
 }
+
+// ─── ssh-key delete identifier resolution ───────────────────────────────────
+
+// The delete endpoint addresses keys by slug; the UUID shown as "ID" in the
+// list 404s. The command must resolve any identifier to the slug.
+func TestSSHKeyDeleteResolvesIdentifierToSlug(t *testing.T) {
+	const uuid = "a24bee1f-495a-48b7-a2d8-d689fb54f238"
+	var deletedPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/users/ssh-keys":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"status":"Success","data":[{"id":%q,"name":"My Key","slug":"my-key"}]}`, uuid)
+		case r.Method == http.MethodDelete:
+			deletedPath = r.URL.Path
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	for _, id := range []string{uuid, "my-key", "My Key"} {
+		deletedPath = ""
+		_, _, err := execCmd(t, NewSSHKeyCmd(), "delete", id, "--yes", "--api-url", srv.URL)
+		if err != nil {
+			t.Fatalf("delete %q error = %v", id, err)
+		}
+		if deletedPath != "/users/ssh-keys/my-key" {
+			t.Errorf("delete %q -> DELETE path %q, want /users/ssh-keys/my-key", id, deletedPath)
+		}
+	}
+}
+
+// An identifier that matches no key is a no-op (already deleted), not an error,
+// and must not issue a DELETE.
+func TestSSHKeyDeleteUnknownIsNoOp(t *testing.T) {
+	var deleteCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteCalled = true
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","data":[{"id":"other","name":"other","slug":"other"}]}`)
+	}))
+	defer srv.Close()
+
+	os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+	defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+	_, _, err := execCmd(t, NewSSHKeyCmd(), "delete", "ghost-key", "--yes", "--api-url", srv.URL)
+	if err != nil {
+		t.Fatalf("unknown key should be a no-op, got error = %v", err)
+	}
+	if deleteCalled {
+		t.Error("DELETE was issued for a key that does not exist")
+	}
+}

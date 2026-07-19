@@ -157,6 +157,14 @@ func runPortForwardCreate(cmd *cobra.Command, ipSlug string, req portforward.Cre
 		return fmt.Errorf("portforward create: %w", err)
 	}
 
+	// Creation is asynchronous: the API accepts the request and returns no rule
+	// object (data: null), so there is nothing to tabulate yet. Report the
+	// accepted request instead of an empty table.
+	if rule.ID == "" {
+		printer.Fprintf("Port forwarding rule creation accepted. Run 'zcp portforward list --ip %s' to confirm.\n", ipSlug)
+		return nil
+	}
+
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
 		{"ID", rule.ID},
