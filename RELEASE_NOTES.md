@@ -1,23 +1,39 @@
-# zcp v0.0.25 Release Notes
+# zcp v0.0.26 Release Notes
 
-Hotfix: `zcp dns record-create` can now create `MX` records.
+Bug fixes for port forwarding, firewall, and SSH key commands.
 
-## `dns record-create` now supports MX records
+## `portforward list` shows the ports again
 
-Creating an `MX` record with `zcp dns record-create` used to fail with a 403. The
-command never sent the record's priority, which the API requires for `MX`. (The
-Web UI worked because it sends `priority` as its own field.) The command now takes
-a `--priority` flag: put the mail server in `--content` and the preference number
-in `--priority`.
+The public and private port columns in `zcp portforward list` were blank. The
+response was decoded from the wrong field names, so the ports never populated.
+They now show correctly. The rules themselves were always fine, so no action is
+needed beyond upgrading.
+
+## `portforward create` and `firewall create` report clearly
+
+Both commands used to print a table of empty fields after a successful create.
+The API accepts these requests asynchronously and returns no rule object, so
+there was nothing to show yet. They now confirm the request was accepted and
+point you to the matching `list` command.
 
 ```bash
-zcp dns record-create --domain example-com-1 --name @ --type MX --content mail.example.com. --priority 10
+zcp portforward create --ip <slug> --protocol tcp \
+  --public-port 22 --public-end-port 22 --private-port 22 --private-end-port 22 \
+  --instance my-vm
+# Port forwarding rule creation accepted. Run 'zcp portforward list --ip <slug>' to confirm.
 ```
 
-`--priority` is required for `MX` and must be between 0 and 65535. Leaving it off
-stops with a clear error instead of a server-side 403. A `0` preference is sent
-correctly. Other record types (A, AAAA, CNAME, TXT) do not take a priority, and
-passing `--priority` with a non-`MX` type is rejected with a clear error.
+## `ssh-key delete` accepts the ID, name, or slug
+
+`zcp ssh-key delete` only worked with the key's slug. The ID (UUID) shown by
+`zcp ssh-key list` was rejected as not found. You can now pass any of the ID,
+name, or slug, and the command resolves it to the slug before deleting. Deleting
+a key that is already gone is a no-op instead of an error.
+
+```bash
+zcp ssh-key delete my-key          # slug
+zcp ssh-key delete a24bee1f-...    # ID from 'ssh-key list' now works too
+```
 
 ---
 
@@ -45,7 +61,7 @@ place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v0.0.25
+zcp version   # zcp version v0.0.26
 ```
 
 First-time setup after installing:

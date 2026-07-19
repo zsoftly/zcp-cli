@@ -243,13 +243,13 @@ zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
 zcp egress list
 zcp egress create --network <slug> --protocol tcp
 
-# Port forwarding
+# Port forwarding. The API requires the end-port flags even for a single port.
 zcp portforward list
 zcp portforward create \
   --ip <slug> \
   --protocol tcp \
-  --public-port 2222 \
-  --private-port 22 \
+  --public-port 2222 --public-end-port 2222 \
+  --private-port 22 --private-end-port 22 \
   --instance <slug>
 ```
 
