@@ -64,10 +64,12 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*SSHKey, error
 	return &key, nil
 }
 
-// Delete removes an SSH key by key identifier (slug or ID).
-func (s *Service) Delete(ctx context.Context, keyID string) error {
-	if err := s.client.Delete(ctx, "/users/ssh-keys/"+keyID, nil); err != nil {
-		return fmt.Errorf("deleting SSH key %s: %w", keyID, err)
+// Delete removes an SSH key by its slug. The API rejects the key's ID (UUID)
+// here as not-found (verified live 2026-07-19), so callers must pass the slug;
+// the command layer resolves other identifiers to it.
+func (s *Service) Delete(ctx context.Context, slug string) error {
+	if err := s.client.Delete(ctx, "/users/ssh-keys/"+slug, nil); err != nil {
+		return fmt.Errorf("deleting SSH key %s: %w", slug, err)
 	}
 	return nil
 }

@@ -37,13 +37,19 @@ func (v *VMRef) UnmarshalJSON(b []byte) error {
 }
 
 // PortForwardRule represents a ZCP port forwarding rule from the STKCNSL API.
+//
+// The request and response use different names for the start port: creation
+// takes public_start_port/private_start_port (see CreateRequest), but the list
+// and get responses return the start port as public_port/private_port (verified
+// live 2026-07-19). These fields must match the response, or the ports render
+// blank.
 type PortForwardRule struct {
 	ID               string `json:"id"`
 	RuleID           string `json:"rule_id"`
 	Protocol         string `json:"protocol"`
-	PublicStartPort  string `json:"public_start_port"`
+	PublicStartPort  string `json:"public_port"`
 	PublicEndPort    string `json:"public_end_port"`
-	PrivateStartPort string `json:"private_start_port"`
+	PrivateStartPort string `json:"private_port"`
 	PrivateEndPort   string `json:"private_end_port"`
 	VirtualMachine   VMRef  `json:"virtual_machine"`
 	State            string `json:"state"`

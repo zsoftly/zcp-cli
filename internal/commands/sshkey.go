@@ -173,11 +173,14 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "delete <uuid>",
+		Use:   "delete <key>",
 		Short: "Delete an SSH key",
 		Args:  exactArgs(1),
-		Example: `  zcp ssh-key delete a1b2c3d4-e5f6-7890-abcd-ef1234567890
-  zcp ssh-key delete a1b2c3d4-e5f6-7890-abcd-ef1234567890 --yes`,
+		Long: `Delete an SSH key. <key> may be the key's slug, name, or ID as shown by
+'zcp ssh-key list'. The API deletes by slug, so any other identifier is
+resolved to the slug first.`,
+		Example: `  zcp ssh-key delete my-key
+  zcp ssh-key delete my-key --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSSHKeyDelete(cmd, args[0], yes)
 		},
@@ -186,9 +189,9 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func runSSHKeyDelete(cmd *cobra.Command, uuid string, yes bool) error {
+func runSSHKeyDelete(cmd *cobra.Command, identifier string, yes bool) error {
 	if !yes && !autoApproved(cmd) {
-		fmt.Fprintf(os.Stderr, "Delete SSH key %q? [y/N]: ", uuid)
+		fmt.Fprintf(os.Stderr, "Delete SSH key %q? [y/N]: ", identifier)
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -207,14 +210,34 @@ func runSSHKeyDelete(cmd *cobra.Command, uuid string, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.Delete(ctx, uuid); err != nil {
+	// The delete endpoint addresses keys by slug only; the ID (UUID) shown by
+	// 'ssh-key list' is rejected as not-found (verified live 2026-07-19). Resolve
+	// whatever identifier the user passed to the slug so slug, name, and ID all
+	// work.
+	keys, err := svc.List(ctx)
+	if err != nil {
+		return fmt.Errorf("ssh-key delete: resolving %q: %w", identifier, err)
+	}
+	slug := ""
+	for _, k := range keys {
+		if k.Slug == identifier || k.ID == identifier || k.Name == identifier {
+			slug = k.Slug
+			break
+		}
+	}
+	if slug == "" {
+		fmt.Fprintf(os.Stderr, "SSH key %q not found — already deleted.\n", identifier)
+		return nil
+	}
+
+	if err := svc.Delete(ctx, slug); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "SSH key %q not found — already deleted.\n", uuid)
+			fmt.Fprintf(os.Stderr, "SSH key %q not found — already deleted.\n", identifier)
 			return nil
 		}
 		return fmt.Errorf("ssh-key delete: %w", err)
 	}
 
-	printer.Fprintf("SSH key %q deleted.\n", uuid)
+	printer.Fprintf("SSH key %q deleted.\n", identifier)
 	return nil
 }

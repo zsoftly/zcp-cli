@@ -139,6 +139,14 @@ func runFirewallCreate(cmd *cobra.Command, ipSlug string, req firewall.CreateReq
 		return fmt.Errorf("firewall create: %w", err)
 	}
 
+	// Creation is asynchronous: the API accepts the request and returns no rule
+	// object (data: null), so there is nothing to tabulate yet. Report the
+	// accepted request instead of an empty table.
+	if rule.ID == "" {
+		printer.Fprintf("Firewall rule creation accepted. Run 'zcp firewall list --ip %s' to confirm.\n", ipSlug)
+		return nil
+	}
+
 	headers := []string{"FIELD", "VALUE"}
 	rows := [][]string{
 		{"ID", rule.ID},

@@ -5,6 +5,18 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.26] - 2026-07-19
+
+### Fixed
+
+- **`portforward list` now shows the ports.** The public and private port columns were blank because the response was decoded from `public_start_port`/`private_start_port`, but the API returns them as `public_port`/`private_port`. (The create request still sends `*_start_port`, which the API requires there — the request and response names differ.) Verified live against the API.
+- **`portforward create` and `firewall create` no longer print an empty table.** Both endpoints accept the request asynchronously and return no rule object (`data: null`), so the commands now report that creation was accepted and point to the matching `list` command instead of tabulating a blank object.
+- **`ssh-key delete` accepts the key's ID, name, or slug.** The API deletes by slug only and rejected the ID (UUID) that `ssh-key list` shows as "not found". The command now resolves any of those identifiers to the slug before deleting, and an unknown key is a no-op instead of an error. Help text corrected from `<uuid>` to `<key>`.
+
+### Tests
+
+- Smoke tests now exercise `ip release` (allocate a dedicated IP and release it) in addition to `ip allocate`.
+
 ## [v0.0.25] - 2026-07-18
 
 ### Fixed

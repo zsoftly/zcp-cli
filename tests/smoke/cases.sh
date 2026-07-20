@@ -312,7 +312,24 @@ lc_dns() {
 
 lc_ip()       {
   local s; fx_ip; s="$FX_IP"; _lc_result "ip allocate" "$s" \
-    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '(if type==\"array\" then . else (.data//[]) end)|map(.slug)|index(\$s)' >/dev/null"; }
+    && run_case "ip in list" -- bash -c "zcp ip list -o json | jq -e --arg s '$s' '(if type==\"array\" then . else (.data//[]) end)|map(.slug)|index(\$s)' >/dev/null"
+  # Exercise 'ip release' on a dedicated IP. The fixture IP (FX_IP) is reused by
+  # the firewall/portforward cases and torn down via cancel, so allocate a
+  # separate one here. defer cancel is a safety net if the release case fails.
+  local net out rel
+  fx_network; net="$FX_NETWORK"
+  if [[ -n "$net" ]] && capture out -- zcp ip allocate --network "$net" --plan "$(det_ip_plan)" --billing-cycle "$(det_billing_cycle)" -o json; then
+    rel="$(_jq_slug <<<"$out")"
+    if [[ -n "$rel" ]]; then
+      defer cancel "$rel" "IP Address"
+      run_case "ip release" -- zcp ip release "$rel" --yes
+    else
+      _mark_skip "ip release (allocate returned no slug)"
+    fi
+  else
+    _mark_skip "ip release (allocate failed)"
+  fi
+}
 
 lc_instance() {
   local s; fx_vm; s="$FX_VM"
