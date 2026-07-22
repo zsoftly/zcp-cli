@@ -195,24 +195,29 @@ func newIPReleaseCmd() *cobra.Command {
 
 func newIPStaticNATEnableCmd() *cobra.Command {
 	var vmSlug string
+	var networkSlug string
 
 	cmd := &cobra.Command{
 		Use:     "enable <ip-slug>",
 		Short:   "Enable static NAT on an IP address",
 		Args:    exactArgs(1),
-		Example: `  zcp ip static-nat enable 1036521143 --instance my-vm`,
+		Example: `  zcp ip static-nat enable 1036521143 --instance my-vm --network my-network`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if vmSlug == "" {
 				return fmt.Errorf("--instance is required")
 			}
-			return runIPStaticNATEnable(cmd, args[0], vmSlug)
+			if networkSlug == "" {
+				return fmt.Errorf("--network is required")
+			}
+			return runIPStaticNATEnable(cmd, args[0], vmSlug, networkSlug)
 		},
 	}
 	cmd.Flags().StringVar(&vmSlug, "instance", "", "VM slug to associate (required)")
+	cmd.Flags().StringVar(&networkSlug, "network", "", "Network slug to associate (required)")
 	return cmd
 }
 
-func runIPStaticNATEnable(cmd *cobra.Command, ipSlug, vmSlug string) error {
+func runIPStaticNATEnable(cmd *cobra.Command, ipSlug, vmSlug, networkSlug string) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -222,19 +227,13 @@ func runIPStaticNATEnable(cmd *cobra.Command, ipSlug, vmSlug string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	ip, err := svc.EnableStaticNAT(ctx, ipSlug, vmSlug)
+	ip, err := svc.EnableStaticNAT(ctx, ipSlug, vmSlug, networkSlug)
 	if err != nil {
 		return fmt.Errorf("ip static-nat enable: %w", err)
 	}
 
-	headers := []string{"FIELD", "VALUE"}
-	rows := [][]string{
-		{"Slug", ip.Slug},
-		{"IP Address", ip.IPAddress},
-		{"Strategy", ip.Strategy},
-		{"VM", ip.VirtualMachineName},
-		{"Network ID", ip.NetworkID},
-	}
+	headers := []string{"STATUS", "MESSAGE"}
+	rows := [][]string{{ip.Status, ip.Message}}
 	return printer.PrintTable(headers, rows)
 }
 

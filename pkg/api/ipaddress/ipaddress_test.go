@@ -181,18 +181,21 @@ func TestIPEnableStaticNAT(t *testing.T) {
 	defer srv.Close()
 
 	svc := ipaddress.NewService(newClient(srv.URL))
-	result, err := svc.EnableStaticNAT(context.Background(), "1030011", "my-vm")
+	result, err := svc.EnableStaticNAT(context.Background(), "1030011", "my-vm", "my-network")
 	if err != nil {
 		t.Fatalf("EnableStaticNAT() error = %v", err)
 	}
 	if gotPath != "/ipaddresses/1030011/static-nat" {
 		t.Errorf("path = %q, want %q", gotPath, "/ipaddresses/1030011/static-nat")
 	}
-	if result.Strategy != "STATIC-NAT" {
-		t.Errorf("result.Strategy = %q, want %q", result.Strategy, "STATIC-NAT")
+	if result.Status != "Success" {
+		t.Errorf("result.Status = %q, want %q", result.Status, "Success")
 	}
 	if gotBody["virtual_machine"] != "my-vm" {
 		t.Errorf("body virtual_machine = %v, want %q", gotBody["virtual_machine"], "my-vm")
+	}
+	if gotBody["network"] != "my-network" {
+		t.Errorf("body network = %v, want %q", gotBody["network"], "my-network")
 	}
 }
 
