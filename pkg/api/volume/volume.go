@@ -172,24 +172,24 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Volume, error
 }
 
 // Attach attaches a volume to a virtual machine.
-func (s *Service) Attach(ctx context.Context, volumeSlug, vmSlug string) (*Volume, error) {
+func (s *Service) Attach(ctx context.Context, volumeSlug, vmSlug string) (*singleResponse, error) {
 	body := AttachRequest{VirtualMachine: vmSlug}
 	var resp singleResponse
 	path := fmt.Sprintf("/blockstorages/%s/attach", volumeSlug)
 	if err := s.client.Post(ctx, path, body, &resp); err != nil {
 		return nil, fmt.Errorf("attaching block storage %s to VM %s: %w", volumeSlug, vmSlug, err)
 	}
-	return &resp.Data, nil
+	return &resp, nil
 }
 
 // Detach detaches a volume from its virtual machine.
-func (s *Service) Detach(ctx context.Context, volumeSlug string) (*Volume, error) {
+func (s *Service) Detach(ctx context.Context, volumeSlug string) (*singleResponse, error) {
 	var resp singleResponse
 	path := fmt.Sprintf("/blockstorages/%s/detach", volumeSlug)
 	if err := s.client.Post(ctx, path, nil, &resp); err != nil {
 		return nil, fmt.Errorf("detaching block storage %s: %w", volumeSlug, err)
 	}
-	return &resp.Data, nil
+	return &resp, nil
 }
 
 // Delete permanently deletes a block storage volume. The volume must be detached first.
