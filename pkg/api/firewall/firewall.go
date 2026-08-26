@@ -10,18 +10,19 @@ import (
 
 // FirewallRule represents a ZCP firewall rule from the STKCNSL API.
 type FirewallRule struct {
-	ID                  string      `json:"id"`
-	RuleID              string      `json:"rule_id"`
-	Protocol            string      `json:"protocol"`
-	StartPort           interface{} `json:"start_port"`
-	EndPort             interface{} `json:"end_port"`
-	CIDRList            string      `json:"cidr_list"`
-	DestinationCIDRList string      `json:"destination_cidr_list"`
-	ICMPType            string      `json:"icmp_type"`
-	ICMPCode            string      `json:"icmp_code"`
-	State               string      `json:"state"`
-	CreatedAt           string      `json:"created_at"`
-	UpdatedAt           string      `json:"updated_at"`
+	ID                  string        `json:"id"`
+	RuleID              string        `json:"rule_id"`
+	Protocol            string        `json:"protocol"`
+	StartPort           interface{}   `json:"start_port"`
+	EndPort             interface{}   `json:"end_port"`
+	CIDRList            string        `json:"cidr_list"`
+	DestinationCIDRList string        `json:"destination_cidr_list"`
+	ICMPType            string        `json:"icmp_type"`
+	ICMPCode            string        `json:"icmp_code"`
+	State               string        `json:"state"`
+	CreatedAt           string        `json:"created_at"`
+	UpdatedAt           string        `json:"updated_at"`
+	Original            *FirewallRule `json:"_original,omitempty"`
 }
 
 // CreateRequest holds parameters for creating a firewall rule.
