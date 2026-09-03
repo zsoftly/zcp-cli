@@ -268,6 +268,7 @@ type CreateRequest struct {
 	SSHKey               *string     `json:"ssh_key"`
 	AuthMethod           string      `json:"authMethod,omitempty"`
 	Plan                 string      `json:"plan"`
+	IsCustomPlan         bool        `json:"is_custom_plan"`
 	CustomPlan           *CustomPlan `json:"custom_plan"`
 	OSFamily             string      `json:"os_family,omitempty"`
 	TemplateType         string      `json:"template_type,omitempty"`

@@ -52,6 +52,8 @@ func TestCreate(t *testing.T) {
 		Name:           "test-vm",
 		BillingCycle:   "hourly",
 		IsPublic:       true,
+		IsCustomPlan:   true,
+		CustomPlan:     &instance.CustomPlan{CPU: "2", Memory: "4", Storage: "10"},
 		NetworkType:    "Vpc",
 		Networks:       []string{"Vpc-1", "Vpc-2"},
 		VrPlan:         "vpc-net",
@@ -75,6 +77,13 @@ func TestCreate(t *testing.T) {
 	}
 	if gotBody["billing_cycle"] != "hourly" {
 		t.Errorf("billing_cycle = %v, want %q", gotBody["billing_cycle"], "hourly")
+	}
+	if gotBody["is_custom_plan"] != true {
+		t.Errorf("is_custom_plan = %v, want true", gotBody["is_custom_plan"])
+	}
+	customPlan, ok := gotBody["custom_plan"].(map[string]interface{})
+	if !ok || customPlan["cpu"] != "2" || customPlan["memory"] != "4" || customPlan["storage"] != "10" {
+		t.Errorf("custom_plan = %v, want cpu=2 memory=4 storage=10", gotBody["custom_plan"])
 	}
 	if gotBody["network_type"] != "Vpc" {
 		t.Errorf("network_type = %v, want %q", gotBody["network_type"], "Vpc")

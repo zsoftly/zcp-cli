@@ -412,8 +412,15 @@ func newInstanceCreateCmd() *cobra.Command {
 			if template == "" {
 				return fmt.Errorf("--template is required")
 			}
-			if plan == "" {
-				return fmt.Errorf("--plan is required")
+			customFieldsSet := cmd.Flags().Changed("cpu") || cmd.Flags().Changed("memory") || cmd.Flags().Changed("disk")
+			if plan == "" && !customFieldsSet {
+				return fmt.Errorf("--plan is required for a fixed plan; omit it only with --cpu, --memory, and --disk for a custom plan")
+			}
+			if plan != "" && customFieldsSet {
+				return fmt.Errorf("--plan cannot be combined with --cpu, --memory, or --disk; omit --plan for a custom plan")
+			}
+			if plan == "" && (!cmd.Flags().Changed("cpu") || !cmd.Flags().Changed("memory") || !cmd.Flags().Changed("disk")) {
+				return fmt.Errorf("custom plans require --cpu, --memory, and --disk")
 			}
 			if billingCycle == "" {
 				return fmt.Errorf("--billing-cycle is required")
@@ -532,6 +539,7 @@ func newInstanceCreateCmd() *cobra.Command {
 				AuthMethod:       authMethod,
 				Password:         passwordPtr,
 				Plan:             plan,
+				IsCustomPlan:     customPlan != nil,
 				CustomPlan:       customPlan,
 				OSFamily:         "Linux",
 				TemplateType:     "Operating System",
@@ -553,7 +561,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (required)")
 	cmd.Flags().StringVar(&template, "template", "", "Template slug (required)")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug (required, e.g. ca2sxs- see: zcp plan vm)")
+	cmd.Flags().StringVar(&plan, "plan", "", "Fixed plan slug (omit with --cpu, --memory, and --disk for a custom plan)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug: hourly, monthly, etc. (required)")
 	cmd.Flags().StringVar(&networkType, "network-type", "Isolated", "Network type: Isolated, L2 or Vpc (required)")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Name of an existing SSH key to attach for login (optional; see 'zcp ssh-key list')")
@@ -568,7 +576,7 @@ func newInstanceCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&userData, "user-data", "", "Startup script content (cloud-init / bash)")
 	cmd.Flags().StringVar(&userDataFile, "user-data-file", "", "Path to a file containing the startup script")
 	cmd.Flags().IntVar(&cpu, "cpu", 0, "Number of vCPUs for a custom plan (e.g. 2)")
-	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in MB for a custom plan (e.g. 2048)")
+	cmd.Flags().IntVar(&memory, "memory", 0, "RAM in GB for a custom plan (e.g. 4)")
 	cmd.Flags().IntVar(&disk, "disk", 0, "Root disk size in GB for a custom plan (e.g. 50)")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Wait for the instance to reach Running state")
 	cmd.Flags().BoolVar(&isPublic, "is-public", true, "Assign a public IP address")
