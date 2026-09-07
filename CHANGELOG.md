@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Changed
 
+- **Go toolchain `1.26.6` -> `1.26.8`.** The `go.mod` `go` directive moves from `1.25.0` to `1.26.0` because `golang.org/x/crypto` v0.56.0 requires it. CI workflows and the documented requirement were updated to match.
 - **`backup create` and `vm-backup create` now validate `--interval` client-side.** The API only accepts `dailyAt` and `hourlyAt`. It rejected every other value, including the previous `vm-backup create` default of `daily`, with "The selected interval is invalid." Both commands now catch an unsupported value before sending the request and list the accepted ones.
 - **`backup list` shows the volume slug, not a blank ID.** The VOLUME column (renamed from VOLUME ID) now reads the nested `blockstorage` object the API returns for list responses. It also gained AT and SCHEDULED AT columns next to INTERVAL. In JSON output the key changes from `volume_id` to `volume`, and `at` and `scheduled_at` are new.
 - **`backup create` shows the volume slug you passed, not a blank ID.** The create response has no nested `blockstorage` object, so the VOLUME column echoes the `--volume` flag instead. It also gained an AT column next to INTERVAL.
@@ -20,6 +21,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
+- **`autoscale policy delete` and `autoscale condition delete` print the numeric ID in their not-found message.** The message used `%q` with an integer, which rendered the ID as a quoted character instead of a number. Caught by `go vet` under Go 1.26.8.
 - **`instance ssh` now prefers the public IP.** Previously it always connected over the private address. Its public-IP fallback read the VM's top-level `public_ip` field, which the API leaves null even when a public IP is attached. It now checks the `ipaddresses` list the same way `instance get` does. It connects to the public IP when one is attached and falls back to the private IP otherwise. An explicit `--user root` is now honoured instead of being replaced by the VM's reported username.
 - **`backup list` no longer fails to decode its own API response.** The API returns the schedule's `at` field as a quoted string ("3") in list responses, but as a number in create responses. The CLI only handled the number and errored with "cannot unmarshal string into Go struct field Backup.data.at". It now accepts either form. This also fixes reads for the `zcp_volume_backup` Terraform resource, which uses this package.
 - **`vm-backup delete` never worked.** The route `virtual-machines/backups/{slug}` only supports PUT, so the API always rejected the direct DELETE request the command sent. It now submits a service-cancellation request instead, the same workflow `instance delete` uses, with service name `Backups`.
@@ -27,6 +29,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Security
 
+- **`golang.org/x/crypto` `v0.55.0` -> `v0.56.0`.** Fixes GO-2026-6354 and GO-2026-6355, two denial-of-service bugs in the `ssh` package that a malicious peer could trigger. The shipped binary does not use that package (only the build-tagged integration test does). `govulncheck` now reports no reachable vulnerabilities; the one remaining module-level notice is the informational GO-2026-5932 about `x/crypto/openpgp`, which nothing here imports.
 - **`--debug` output no longer leaks the account's API token.** Some list endpoints echo the account's full bearer token in a nested `access_key_token` field. Debug output now redacts that field, related credential fields such as `token` and `password`, and the configured bearer token wherever it appears in a response body. Error messages built from response bodies the CLI cannot parse are redacted the same way, so an unparseable error body cannot echo a credential. Redaction also covers other common secret field names such as `client_secret` and `private_key`.
 
 ## [v0.0.27] - 2026-08-31

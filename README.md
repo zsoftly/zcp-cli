@@ -3,7 +3,7 @@
 The official command-line interface for the ZSoftly Cloud Platform
 
 [![CI](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml/badge.svg)](https://github.com/zsoftly/zcp-cli/actions/workflows/build.yml)
-![Go](https://img.shields.io/badge/Go-1.26.6-blue)
+![Go](https://img.shields.io/badge/Go-1.26.8-blue)
 
 ---
 
@@ -49,7 +49,7 @@ make build
 # Binary is written to bin/zcp
 ```
 
-Requirements: Go 1.26.6+, GNU Make.
+Requirements: Go 1.26.8+, GNU Make.
 
 ---
 
@@ -159,7 +159,7 @@ make lint         # Run staticcheck (must be installed separately)
 make install      # Install zcp to /usr/local/bin
 ```
 
-Requirements: Go 1.26.6, GNU Make, Git. See **[docs/development.md](docs/development.md)** for the full development guide.
+Requirements: Go 1.26.8, GNU Make, Git. See **[docs/development.md](docs/development.md)** for the full development guide.
 
 ---
 
