@@ -595,7 +595,7 @@ func (s *Service) PurchaseAddon(ctx context.Context, req PurchaseAddonRequest) (
 
 // Delete performs a direct destroy of a virtual machine via DELETE /virtual-machines/{slug}.
 // If expunge is true, ?expunge=true is sent to force immediate purge from the hypervisor
-// rather than leaving the VM in a soft-deleted/Destroyed state pending CloudStack expunge.
+// rather than leaving the VM in a soft-deleted/Destroyed state pending platform expunge.
 //
 // NOTE: this endpoint does NOT release the VM's auto-assigned public IP — the delete_public_ip
 // query param is accepted but ignored by the CMP, leaving the IP Allocated/billable. To delete
@@ -619,7 +619,7 @@ func (s *Service) Delete(ctx context.Context, slug string, expunge, deletePublic
 }
 
 // VMMeta is the live, hypervisor-synced view of a VM from GET /virtual-machines/{slug}/meta.
-// This endpoint performs a real-time reconcile against the underlying platform (CloudStack/APC)
+// This endpoint performs a real-time reconcile against the underlying platform
 // and updates the stored state before returning, so it reports the true state even when the
 // cached list/show endpoints lag — a Running VM can otherwise stay "Starting" in list/show
 // until the platform's own reconciliation catches up.

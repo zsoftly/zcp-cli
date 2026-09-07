@@ -180,6 +180,9 @@ func (s *Service) List(ctx context.Context, region, project string) ([]Volume, e
 		if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
 			return nil, fmt.Errorf("listing volumes: %w", err)
 		}
+		if resp.CurrentPage < 0 {
+			return nil, fmt.Errorf("listing volumes: API returned invalid negative page %d", resp.CurrentPage)
+		}
 		if page > 1 && resp.CurrentPage == 0 {
 			return nil, fmt.Errorf("listing volumes: requested page %d but the API did not return pagination metadata", page)
 		}
@@ -191,6 +194,9 @@ func (s *Service) List(ctx context.Context, region, project string) ([]Volume, e
 		// A missing total is treated as a non-paginated response. With a reported
 		// total, an empty page before the collection is complete is malformed: do
 		// not return a partial volume list.
+		if resp.Total < 0 {
+			return nil, fmt.Errorf("listing volumes: API returned invalid negative total %d", resp.Total)
+		}
 		if resp.Total == 0 {
 			return all, nil
 		}

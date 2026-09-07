@@ -131,7 +131,7 @@ func runK8sClusterGet(cmd *cobra.Command, slug string) error {
 	controlNodes := strconv.Itoa(c.ControlNodes)
 	endpoint := ""
 
-	// Prefer the CloudStack-side meta fields — they populate after the cluster is Running.
+	// Prefer the platform-side meta fields — they populate after the cluster is Running.
 	if m := c.Meta; m != nil {
 		if m.KubernetesVersionName != "" {
 			version = m.KubernetesVersionName

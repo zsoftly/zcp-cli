@@ -137,9 +137,9 @@ type CreateRequest struct {
 	NetworkPlan   string `json:"network_plan,omitempty"`
 }
 
-// Detail holds the provider-side state of a network as returned by
+// Detail holds the platform-side state of a network as returned by
 // GET /networks/{slug}. The interesting fields live under "meta", which is
-// the raw CloudStack network view.
+// the raw platform network view.
 type Detail struct {
 	ID        string `json:"id"`
 	Slug      string `json:"slug"`
@@ -328,7 +328,7 @@ func (s *Service) DeleteEgressRule(ctx context.Context, networkSlug string, rule
 }
 
 // Delete removes an isolated network. The network must have no VMs attached.
-// Its SOURCE-NAT IP is released automatically by CloudStack on deletion.
+// Its SOURCE-NAT IP is released automatically by the platform on deletion.
 func (s *Service) Delete(ctx context.Context, slug string) error {
 	if err := s.client.Delete(ctx, "/networks/"+slug, nil); err != nil {
 		return fmt.Errorf("deleting network %s: %w", slug, err)

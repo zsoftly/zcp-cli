@@ -278,7 +278,7 @@ func TestVPCDelete(t *testing.T) {
 }
 
 // TestVPCGetDetailEndpoint verifies Get uses GET /vpcs/{slug} and maps the
-// CloudStack meta block (state, cidr, zone) that the list endpoint omits.
+// platform meta block (state, cidr, zone) that the list endpoint omits.
 func TestVPCGetDetailEndpoint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/vpcs/my-vpc" {

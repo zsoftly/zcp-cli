@@ -17,7 +17,7 @@ type KubeconfigData struct {
 	ConfigData string `json:"configdata"`
 }
 
-// ClusterMeta holds the CloudStack-side details embedded in the API response.
+// ClusterMeta holds the platform-side details embedded in the API response.
 type ClusterMeta struct {
 	ControlNodes          string          `json:"control_nodes"`
 	Size                  string          `json:"size"`

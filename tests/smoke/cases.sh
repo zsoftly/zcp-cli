@@ -365,7 +365,7 @@ lc_egress() {
   capture out -- zcp egress create --network "$net" --protocol tcp --cidr "0.0.0.0/0" --start-port 80 --end-port 80 -o json
   # egress rules have IDs, not slugs; create prints FIELD/VALUE rows
   s="$(jq -r '[.[]?|select(.field=="ID")|.value|select(.!="")][0] // empty' <<<"$out" 2>/dev/null)"
-  # rule creation is async — give CloudStack a moment before the list fallback
+  # rule creation is async — give the platform a moment before the list fallback
   [[ -z "$s" ]] && { sleep 5; s="$(zcp egress list --network "$net" -o json 2>/dev/null | jq -r '.[0].id // empty')"; }
   _lc_result "egress rule" "$s" && defer egress "$s" "$net"
 }
