@@ -5,7 +5,42 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.28] - 2026-09-07
+
+### Added
+
+- **`instance ssh` supports `--use-public` and `--use-private`.** These flags force the connection over the VM's public or private IP address. The two flags are mutually exclusive.
+- **SDK additions for library consumers.** `response.ParseFlexInt`, `backup.Backup.Blockstorage` with `VolumeSlug()`, `vmbackup.VMBackup.VirtualMachine` with `VMSlug()`, `vmbackup.ServiceName`, `firewall.FirewallRule.EffectiveState()`, and `dns.Domain.StatusKnown`. `apierrors.IsResourceNotFound` also recognises the API's "The selected <resource> not found." message.
+
+### Changed
+
+- **`ip allocate --vpc` help text notes the precondition.** The API rejects an allocation into a VPC that has no network yet with "We cannot acquire IP Address when there are no networks in vpc." The flag help and the command reference now say so. _Relates to #57._
+- **Go toolchain `1.26.6` -> `1.26.8`.** The `go.mod` `go` directive moves from `1.25.0` to `1.26.0` because `golang.org/x/crypto` v0.56.0 requires it. CI workflows and the documented requirement were updated to match.
+- **`backup create` and `vm-backup create` now validate `--interval` client-side.** The API only accepts `dailyAt` and `hourlyAt`. It rejected every other value, including the previous `vm-backup create` default of `daily`, with "The selected interval is invalid." Both commands now catch an unsupported value before sending the request and list the accepted ones.
+- **`backup list` shows the volume slug, not a blank ID.** The VOLUME column (renamed from VOLUME ID) now reads the nested `blockstorage` object the API returns for list responses. It also gained AT and SCHEDULED AT columns next to INTERVAL. In JSON output the key changes from `volume_id` to `volume`, and `at` and `scheduled_at` are new.
+- **`backup create` shows the volume slug you passed, not a blank ID.** The create response has no nested `blockstorage` object, so the VOLUME column echoes the `--volume` flag instead. It also gained an AT column next to INTERVAL.
+- **`vm-backup list` columns changed.** ID and STATE are gone. The API's list items carry no top-level VM ID, and `state` was always blank, so both columns were dropped and the `id` key no longer appears in `-o json`. VM now shows the VM slug from the nested `virtual_machine` object. Three columns were added: INTERVAL, AT, and SCHEDULED AT.
+- **`object-storage bucket encryption enable` now refuses to run and explains why.** The region's Ceph RADOS Gateway has no encryption key backend configured. It accepts the enable request and then rejects every upload to the bucket with a 400 InvalidArgument error until encryption is disabled again. The command now fails fast with an explanation instead of reporting success. `status` and `disable` still work, so an existing setting can be checked or cleared. _Relates to #54._
+
+### Fixed
+
+- **`dns show` no longer reports a domain as `false` when the API did not say so.** The show endpoint returns no `status` field, unlike `dns list`, so the CLI printed a fabricated `false`. It now prints `-` when the endpoint does not report a status. _Fixes #51._
+- **`firewall list` shows the rule state.** The list endpoint leaves the top-level `state` field empty and reports it only inside a nested `_original` object, so the STATE column was always blank. The column now reads the nested value, and a rule without that object shows an empty cell instead of failing. _Contributed by @cokerrd (#53, fixes #52)._
+- **`autoscale policy delete` and `autoscale condition delete` print the numeric ID in their not-found message.** The message used `%q` with an integer, which rendered the ID as a quoted character instead of a number. Caught by `go vet` under Go 1.26.8.
+- **The `integration`-tagged test suite compiles again.** It had not compiled since June, when the instance, volume, snapshot, network and plan listings gained region and project arguments and `volume.Attach` changed its return type. The suite now passes the detected region and project through every listing. Its read-only phase was run against the live API to confirm.
+- **`instance ssh` now prefers the public IP.** Previously it always connected over the private address. Its public-IP fallback read the VM's top-level `public_ip` field, which the API leaves null even when a public IP is attached. It now checks the `ipaddresses` list the same way `instance get` does. It connects to the public IP when one is attached and falls back to the private IP otherwise. An explicit `--user root` is now honoured instead of being replaced by the VM's reported username.
+- **`backup list` no longer fails to decode its own API response.** The API returns the schedule's `at` field as a quoted string ("3") in list responses, but as a number in create responses. The CLI only handled the number and errored with "cannot unmarshal string into Go struct field Backup.data.at". It now accepts either form. This also fixes reads for the `zcp_volume_backup` Terraform resource, which uses this package.
+- **`vm-backup delete` never worked.** The route `virtual-machines/backups/{slug}` only supports PUT, so the API always rejected the direct DELETE request the command sent. It now submits a service-cancellation request instead, the same workflow `instance delete` uses, with service name `Backups`.
+- **`vm-backup create` no longer defaults `--interval` to a value the API rejects.** The default was `daily`, which the API always rejected. It is now `dailyAt`.
+
+### Security
+
+- **`golang.org/x/crypto` `v0.55.0` -> `v0.56.0`.** Fixes GO-2026-6354 and GO-2026-6355, two denial-of-service bugs in the `ssh` package that a malicious peer could trigger. The shipped binary does not use that package (only the build-tagged integration test does). `govulncheck` now reports no reachable vulnerabilities; the one remaining module-level notice is the informational GO-2026-5932 about `x/crypto/openpgp`, which nothing here imports.
+- **`--debug` output no longer leaks the account's API token.** Some list endpoints echo the account's full bearer token in a nested `access_key_token` field. Debug output now redacts that field, related credential fields such as `token` and `password`, and the configured bearer token wherever it appears in a response body. Error messages built from response bodies the CLI cannot parse are redacted the same way, so an unparseable error body cannot echo a credential. Redaction also covers other common secret field names such as `client_secret` and `private_key`.
+
 ## [v0.0.27] - 2026-08-31
+
+_This version was prepared but never tagged or published. Its changes ship in v0.0.28._
 
 ### Added
 

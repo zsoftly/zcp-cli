@@ -14,17 +14,40 @@ import (
 
 // Domain represents a DNS domain.
 type Domain struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Slug        string          `json:"slug"`
-	AccountID   string          `json:"account_id"`
-	ProjectID   string          `json:"project_id"`
-	DNSProvider string          `json:"dns_provider"`
-	Status      bool            `json:"status"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Slug        string `json:"slug"`
+	AccountID   string `json:"account_id"`
+	ProjectID   string `json:"project_id"`
+	DNSProvider string `json:"dns_provider"`
+	Status      bool   `json:"status"`
+	// StatusKnown reports whether the API response carried a "status" key.
+	// The list endpoint does; the show endpoint (GET /dns/domains/{slug})
+	// omits it entirely (verified live 2026-09-07), so Status would
+	// otherwise read as a fabricated false.
+	StatusKnown bool            `json:"-"`
 	CreatedAt   string          `json:"created_at"`
 	UpdatedAt   string          `json:"updated_at"`
 	Records     []Record        `json:"records,omitempty"`
 	Project     json.RawMessage `json:"project,omitempty"`
+}
+
+// domainAlias avoids infinite recursion in Domain.UnmarshalJSON.
+type domainAlias Domain
+
+// UnmarshalJSON decodes a Domain and records whether the payload included a
+// "status" key, so callers can tell "inactive" from "not reported".
+func (d *Domain) UnmarshalJSON(data []byte) error {
+	aux := struct {
+		Status *bool `json:"status"`
+		*domainAlias
+	}{domainAlias: (*domainAlias)(d)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	d.StatusKnown = aux.Status != nil
+	d.Status = aux.Status != nil && *aux.Status
+	return nil
 }
 
 // Record represents a single DNS record within a domain.

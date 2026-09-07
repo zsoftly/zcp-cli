@@ -652,7 +652,7 @@ func runPolicyDelete(cmd *cobra.Command, slug string, policyID int, yes bool) er
 
 	if err := svc.DeletePolicy(ctx, slug, policyID); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "Autoscale policy %q not found — already deleted.\n", policyID)
+			fmt.Fprintf(os.Stderr, "Autoscale policy %d not found — already deleted.\n", policyID)
 			return nil
 		}
 		return fmt.Errorf("autoscale policy delete: %w", err)
@@ -912,7 +912,7 @@ func runConditionDelete(cmd *cobra.Command, slug string, conditionID int, yes bo
 
 	if err := svc.DeleteCondition(ctx, slug, conditionID); err != nil {
 		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "Autoscale condition %q not found — already deleted.\n", conditionID)
+			fmt.Fprintf(os.Stderr, "Autoscale condition %d not found — already deleted.\n", conditionID)
 			return nil
 		}
 		return fmt.Errorf("autoscale condition delete: %w", err)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,15 +56,16 @@ func runVMBackupList(cmd *cobra.Command) error {
 		return fmt.Errorf("vm-backup list: %w", err)
 	}
 
-	headers := []string{"ID", "NAME", "SLUG", "STATE", "VM ID", "CREATED"}
+	headers := []string{"SLUG", "NAME", "VM", "INTERVAL", "AT", "SCHEDULED AT", "CREATED"}
 	rows := make([][]string, 0, len(backups))
 	for _, b := range backups {
 		rows = append(rows, []string{
-			b.ID,
-			b.Name,
 			b.Slug,
-			b.State,
-			b.VirtualMachineID,
+			b.Name,
+			b.VMSlug(),
+			b.Interval,
+			strconv.Itoa(b.At),
+			b.ScheduledAt,
 			b.CreatedAt,
 		})
 	}
@@ -93,9 +95,12 @@ func newVMBackupCreateCmd() *cobra.Command {
 		Use:   "create <vm-slug>",
 		Short: "Create a VM backup",
 		Args:  exactArgs(1),
-		Example: `  zcp vm-backup create my-vm --interval daily --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9
-  zcp vm-backup create my-vm --interval daily --immediate 1 --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9`,
+		Example: `  zcp vm-backup create my-vm --interval dailyAt --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9
+  zcp vm-backup create my-vm --interval dailyAt --immediate 1 --region yul-1 --billing-cycle hourly --plan backup-yul --pseudo-service vm-backup --project default-9`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := validateBackupInterval(interval); err != nil {
+				return err
+			}
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
 				return fmt.Errorf("could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider (see 'zcp cloud-provider list')")
@@ -141,7 +146,7 @@ func newVMBackupCreateCmd() *cobra.Command {
 			return runVMBackupCreate(cmd, args[0], req)
 		},
 	}
-	cmd.Flags().StringVar(&interval, "interval", "daily", "Backup interval (e.g. daily, weekly)")
+	cmd.Flags().StringVar(&interval, "interval", "dailyAt", "Backup interval: dailyAt or hourlyAt")
 	cmd.Flags().IntVar(&at, "at", 0, "Hour of day for scheduled backup (0-23)")
 	cmd.Flags().IntVar(&immediate, "immediate", 0, "Run backup immediately (1=yes, 0=no)")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
@@ -160,14 +165,22 @@ func newVMBackupDeleteCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "delete <backup-slug>",
-		Short: "Permanently delete a VM backup",
+		Short: "Delete a VM backup schedule",
 		Args:  exactArgs(1),
+		Long: `Delete a VM backup schedule.
+
+This submits an immediate service-cancellation request via
+POST /billing/service-cancel-requests/{slug}, the same workflow 'instance
+delete' uses, because the direct DELETE endpoint for VM backups only
+supports PUT and always rejects deletion. Deletion runs asynchronously in
+the background: a successful response means the request was accepted, not
+that the schedule is already gone.`,
 		Example: `  zcp vm-backup delete vmb-001001-0001
   zcp vm-backup delete vmb-001001-0001 --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
 			if !yes && !autoApproved(cmd) {
-				fmt.Fprintf(os.Stderr, "Delete VM backup %q? This cannot be undone. [y/N]: ", slug)
+				fmt.Fprintf(os.Stderr, "Delete VM backup schedule %q? This cannot be undone. [y/N]: ", slug)
 				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
 				answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
@@ -176,26 +189,31 @@ func newVMBackupDeleteCmd() *cobra.Command {
 					return nil
 				}
 			}
-			_, client, _, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-			svc := vmbackup.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-			if err := svc.Delete(ctx, slug); err != nil {
-				if apierrors.IsResourceNotFound(err) {
-					fmt.Fprintf(os.Stderr, "VM backup %q not found — already deleted.\n", slug)
-					return nil
-				}
-				return fmt.Errorf("vm-backup delete: %w", err)
-			}
-			fmt.Fprintf(os.Stdout, "VM backup %q deleted.\n", slug)
-			return nil
+			return runVMBackupDelete(cmd, slug)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
+}
+
+func runVMBackupDelete(cmd *cobra.Command, slug string) error {
+	_, client, _, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+	svc := vmbackup.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	if err := svc.Delete(ctx, slug); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "VM backup %q not found. Already deleted.\n", slug)
+			return nil
+		}
+		return fmt.Errorf("vm-backup delete: %w", err)
+	}
+	fmt.Fprintf(os.Stdout, "Deletion requested for VM backup %q. The schedule is being removed in the background.\n", slug)
+	return nil
 }
 
 func runVMBackupCreate(cmd *cobra.Command, vmSlug string, req vmbackup.CreateRequest) error {
@@ -213,6 +231,7 @@ func runVMBackupCreate(cmd *cobra.Command, vmSlug string, req vmbackup.CreateReq
 		return fmt.Errorf("vm-backup create: %w", err)
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "VM backup created: %s — %s\n", resp.Status, resp.Message)
+	fmt.Fprintf(cmd.ErrOrStderr(), "VM backup created: %s. %s\n", resp.Status, resp.Message)
+	fmt.Fprintln(cmd.ErrOrStderr(), "Run 'zcp vm-backup list' to see the schedule slug.")
 	return nil
 }

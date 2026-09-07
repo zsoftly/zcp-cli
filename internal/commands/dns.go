@@ -63,7 +63,7 @@ func runDNSList(cmd *cobra.Command) error {
 		rows = append(rows, []string{
 			d.Slug,
 			d.Name,
-			strconv.FormatBool(d.Status),
+			domainStatusCell(&d),
 			d.CreatedAt,
 		})
 	}
@@ -82,6 +82,16 @@ func newDNSShowCmd() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// domainStatusCell renders a domain's status for display. The show endpoint
+// does not return a status field, so print "-" rather than a misleading
+// "false" (see issue #51); the list endpoint does return one.
+func domainStatusCell(d *dns.Domain) string {
+	if !d.StatusKnown {
+		return "-"
+	}
+	return strconv.FormatBool(d.Status)
 }
 
 func runDNSShow(cmd *cobra.Command, slug string) error {
@@ -104,7 +114,7 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 	detailRows := [][]string{
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
-		{"Status", strconv.FormatBool(domain.Status)},
+		{"Status", domainStatusCell(domain)},
 		{"Created", domain.CreatedAt},
 		{"Updated", domain.UpdatedAt},
 	}
@@ -205,7 +215,7 @@ func runDNSCreate(cmd *cobra.Command, req dns.CreateDomainRequest) error {
 	rows := [][]string{
 		{"Slug", domain.Slug},
 		{"Name", domain.Name},
-		{"Status", strconv.FormatBool(domain.Status)},
+		{"Status", domainStatusCell(domain)},
 		{"Created", domain.CreatedAt},
 	}
 	return printer.PrintTable(headers, rows)

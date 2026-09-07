@@ -76,7 +76,7 @@ func runFirewallList(cmd *cobra.Command, ipSlug string) error {
 			r.Protocol,
 			ports,
 			r.CIDRList,
-			r.State,
+			r.EffectiveState(),
 		})
 	}
 	return printer.PrintTable(headers, rows)

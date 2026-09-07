@@ -142,3 +142,31 @@ func TestFirewallDelete(t *testing.T) {
 		t.Errorf("path = %q, want %q", gotPath, "/ipaddresses/1030011/firewall-rules/fw-del-1")
 	}
 }
+
+func TestFirewallRuleEffectiveState(t *testing.T) {
+	// The live list endpoint leaves the top-level "state" out and reports it
+	// only under "_original" (verified 2026-09-07); other responses may carry
+	// it at the top level or not at all. EffectiveState must handle all three
+	// without panicking.
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"state only in _original", `{"id":"r1","protocol":"tcp","_original":{"id":"r1","state":"Active"}}`, "Active"},
+		{"top-level state wins", `{"id":"r1","state":"Pending","_original":{"id":"r1","state":"Active"}}`, "Pending"},
+		{"no _original", `{"id":"r1","protocol":"tcp"}`, ""},
+		{"null _original", `{"id":"r1","protocol":"tcp","_original":null}`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var r firewall.FirewallRule
+			if err := json.Unmarshal([]byte(tt.body), &r); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got := r.EffectiveState(); got != tt.want {
+				t.Errorf("EffectiveState() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

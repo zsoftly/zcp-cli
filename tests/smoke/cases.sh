@@ -416,17 +416,29 @@ lc_snapshot() {
 
 lc_backup() {
   local vol out s; fx_volume; vol="$FX_VOLUME"; [[ -z "$vol" ]] && { _mark_skip "backup (no volume fixture)"; return; }
-  capture out -- zcp backup create "$vol" --name "$(rname bk)" -o json 2>/dev/null
+  capture out -- zcp backup create --volume "$vol" --interval dailyAt --at 3 --immediate 0 \
+    --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
+    --billing-cycle "$(det_billing_cycle)" --plan "$(det_backup_plan)" -o json
   s="$(_jq_slug <<<"$out")"
-  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "backup → $s"; defer cancel "$s" "Block Storage Backup"
+  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "backup → $s"; defer backup "$s"
   else _mark_skip "backup (create flags vary by env)"; fi
 }
 
 lc_vmbackup() {
   local vm out s; fx_vm; vm="$FX_VM"; [[ -z "$vm" ]] && { _mark_skip "vm-backup (no VM fixture)"; return; }
-  capture out -- zcp vm-backup create "$vm" --name "$(rname vmbk)" -o json 2>/dev/null
-  s="$(_jq_slug <<<"$out")"
-  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "vm-backup → $s"; defer cancel "$s" "Virtual Machine Backup"
+  capture out -- zcp vm-backup create "$vm" --at 3 --immediate 0 \
+    --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
+    --billing-cycle "$(det_billing_cycle)" --plan "$(det_backup_plan)" \
+    --pseudo-service "Virtual Machine Backup"
+  # The create response carries no slug, so resolve it from the list by the
+  # VM it was scheduled for.
+  # CLI json keys derive from the table headers (vm, slug, created); the raw API
+  # nests the VM under virtual_machine. Accept both and take the newest match.
+  s="$(zcp vm-backup list -o json 2>/dev/null | jq -r --arg v "$vm" \
+    '[(if type=="array" then .[] else (.data // [])[] end)
+      | select((.vm // .virtual_machine.slug // .virtual_machine_id)==$v)]
+     | sort_by(.created // .created_at) | last | .slug // empty')"
+  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "vm-backup → $s"; defer vm-backup "$s"
   else _mark_skip "vm-backup (create flags vary by env)"; fi
 }
 

@@ -1,75 +1,130 @@
-# zcp v0.0.27 Release Notes
+# zcp v0.0.28 Release Notes
 
-> **Status: scheduled for 31 August 2026. Not yet released.**
-> This build is in QA. Test against the items below and report findings before
-> the tag is cut. Remove this block as part of tagging, because the release
-> workflow publishes this file as the GitHub Release body.
+Security fixes, working backup commands, a public-IP-first `instance ssh`, and
+several output fixes. This release also carries everything prepared for v0.0.27,
+which was never tagged or published. Upgrading from v0.0.26 picks up both sets
+of changes.
 
-A security update for the Go toolchain and dependencies, VPC support for
-instance creation, and clearer output from several commands.
+## Security
 
-## Security update
+**`--debug` output no longer leaks your API token.** Some list endpoints echo
+the account's bearer token inside the response body. Debug output now redacts
+that field, other credential fields such as `password` and `client_secret`, and
+the configured token wherever it appears. So do error messages built from
+unparseable response bodies. If you have pasted `--debug` output into a ticket
+or a chat before this release, rotate the token.
 
-The Go toolchain moved from 1.26.5 to 1.26.6 and the dependencies were
-refreshed. This clears five vulnerabilities in the Go standard library that were
-reachable from the object storage commands, covering `net/url`, `crypto/tls`,
-`encoding/xml`, `encoding/asn1` and `net/http`, plus one in `golang.org/x/net`.
-A vulnerability scan of the result reports nothing reachable. No command
-behaviour changed. Upgrading is the only action needed.
+**Dependencies and toolchain.** `golang.org/x/crypto` moved to v0.56.0, which
+fixes two denial-of-service bugs in its SSH package (GO-2026-6354 and
+GO-2026-6355). The shipped binary does not use that package. This closes the
+advisories rather than a reachable hole. The Go toolchain moved from 1.26.5 to
+1.26.8 across two steps. The 1.26.6 step, prepared for v0.0.27, cleared five
+standard-library vulnerabilities reachable from the object storage commands and
+one in `golang.org/x/net`. A vulnerability scan of this build reports nothing
+reachable.
 
-## `instance create` supports VPC and existing networks
+## Backups work again
 
-`zcp instance create` previously always built a new network, and
-`--network-plan` was mandatory. It can now place an instance in a VPC, or attach
-networks you already have.
+**`backup list` decodes its own response.** The API returns the scheduled hour
+as a string in list responses and as a number in create responses. The CLI only
+accepted the number, so `backup list` failed in every region with a decode
+error. Both forms are accepted now. The Terraform provider shares this code. Its
+`zcp_volume_backup` read failure, which blocked `terraform plan`, clears once
+the provider picks up this release.
 
-`--network-type` accepts `Isolated` (the default), `L2` and `Vpc`. Anything else
-is rejected before the request is sent.
+**`vm-backup delete` works.** The API route for VM backup schedules rejects
+`DELETE`, so the command had never succeeded. It now submits a
+service-cancellation request, the same workflow `instance delete` uses. It
+reports that the removal is running in the background.
+
+**`--interval` is validated before the request.** The API accepts only `dailyAt`
+and `hourlyAt`. `backup create` and `vm-backup create` now reject any other
+value up front and list the accepted ones. `vm-backup create` no longer defaults
+to `daily`, which the API always rejected.
+
+**Clearer listings.** `backup list` shows the volume slug instead of a blank ID,
+plus AT and SCHEDULED AT columns. `vm-backup list` shows the VM slug and the
+same schedule columns. In JSON output, `backup list` renames `volume_id` to
+`volume`, and `vm-backup list` drops the always-empty `id` and `state` keys.
 
 ```bash
-# Build a new VPC network from a virtual router plan
+zcp backup create --volume root-1234 --interval dailyAt --at 1 \
+  --plan backup-yul --billing-cycle hourly --region yul-1 --project default-9
+zcp backup list
+zcp vm-backup delete backup-my-vm-dailyat --yes
+```
+
+## `instance ssh` prefers the public IP
+
+The command always connected over the private address. That hangs for anyone
+outside the VPC, even when a public IP was attached. It now uses the public IP
+when one exists and falls back to the private IP otherwise. The new
+`--use-public` and `--use-private` flags force that choice. An explicit
+`--user root` is honoured instead of being replaced by the VM's reported
+username.
+
+```bash
+zcp instance ssh my-vm                 # public IP when attached
+zcp instance ssh my-vm --use-private   # over the VPC or VPN
+zcp instance ssh my-vm --user ubuntu
+```
+
+## Output fixes
+
+- `firewall list` shows each rule's state. The column was blank because the API
+  reports the state only inside a nested object. Contributed by @cokerrd.
+- `dns show` prints `-` for status instead of a fabricated `false`. The show
+  endpoint does not return a status field. `dns list` still shows `true` or
+  `false`.
+- `autoscale policy delete` and `autoscale condition delete` print the numeric
+  ID in their not-found message instead of a quoted character.
+
+## From v0.0.27
+
+**`instance create` supports VPC and existing networks.** `--network-type`
+accepts `Isolated` (the default), `L2` and `Vpc`. Use `--vr-plan` to build a VPC
+network from a virtual router plan. Use `--networks` to attach networks you
+already have, and add `--default-network` when you attach more than one.
+`--network-plan` is required only for `Isolated` and `L2` when `--networks` is
+omitted. Contributed by @cokerrd.
+
+```bash
 zcp instance create --name my-vpc-vm --project default-9 --region yul-1 \
   --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly \
   --network-type Vpc --vr-plan <router-plan> --storage-category pro-nvme
-
-# Attach networks that already exist
-zcp instance create --name my-multi-net-vm --project default-9 --region yul-1 \
-  --template ubuntu-2604-lts-1 --plan ca2sl --billing-cycle hourly \
-  --network-type Vpc --networks net-a,net-b --default-network net-a \
-  --storage-category pro-nvme
 ```
 
-`--default-network` is required once you attach more than one network, and must
-name one of the networks in `--networks`. `--network-plan` is now required only
-for `Isolated` and `L2` when `--networks` is omitted, and is rejected for `Vpc`.
-`--vr-plan` is the reverse: required for `Vpc` unless `--networks` is given, and
-rejected for the other two.
-
-## `ip static-nat enable` needs a network
-
-`zcp ip static-nat enable` never worked. The API rejects a static NAT request
-that does not name a network, and the command had no way to supply one. It now
-takes `--network` alongside `--instance`, and reports the status and message the
-API returns.
+**`ip static-nat enable` needs a network.** The API rejects a static NAT request
+without one, so the command failed every time. It now takes `--network`
+alongside `--instance`. Scripts calling it without `--network` need updating.
+Contributed by @cokerrd.
 
 ```bash
 zcp ip static-nat enable 1036521143 --instance my-vm --network my-network
 ```
 
-This changes the flags the command requires. Any script calling it without
-`--network` needs updating, though the previous form only ever returned an
-error.
+**`volume attach` and `volume detach` say what happened.** Both printed a row of
+empty fields. They now show the API's status next to the slugs you passed.
+Contributed by @cokerrd.
 
-## `volume attach` and `volume detach` say what happened
+## For Terraform provider maintainers
 
-Both commands printed a row of empty fields on success. The API returns only a
-status and a message for these operations, with no volume object to tabulate.
-They now show that status next to the slugs you passed.
+The provider consumes `pkg/api` as a library. Signatures did not change, but
+behaviour did. `vmbackup.Service.Delete` now posts a cancellation request
+instead of `DELETE`. Success means the request was accepted, not that the
+schedule is gone. A missing slug returns a 403 instead of a 404. The backup and
+VM backup listings now walk every page, and both backup types decode the
+scheduled hour from a number or a string. The changelog lists the new helper
+methods.
 
-```bash
-zcp volume attach bs-001001-0042 --vm my-vm
-zcp volume detach bs-001001-0042
-```
+## Known limitation
+
+**`object-storage bucket encryption enable` is disabled.** The region's Ceph
+RADOS Gateway has no encryption key backend configured. Enabling SSE-S3
+default encryption makes every subsequent upload to the bucket fail until
+encryption is disabled again. The command now refuses to run and explains
+why. `status` and `disable` still work, so you can check or clear an
+existing setting. See #54.
 
 ---
 
@@ -97,7 +152,7 @@ place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v0.0.27
+zcp version   # zcp version v0.0.28
 ```
 
 First-time setup after installing:

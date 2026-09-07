@@ -265,7 +265,18 @@ func TestVMBackupAtOutOfRange(t *testing.T) {
 }
 
 func TestVMBackupAtValidValues(t *testing.T) {
-	// at=12, immediate=1 — should pass validation, fail later at config/API
+	// at=12, immediate=1 should pass validation and reach the API. A stub
+	// server stands in for the API so this test never touches the network.
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","message":"ok","data":null}`)
+	}))
+	defer srv.Close()
+
+	t.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+
 	cmd := NewVMBackupCmd()
 	root := newTestRoot()
 	root.AddCommand(cmd)
@@ -275,15 +286,15 @@ func TestVMBackupAtValidValues(t *testing.T) {
 	root.SetArgs([]string{"vm-backup", "create", "my-vm",
 		"--at", "12", "--immediate", "1",
 		"--cloud-provider", "x", "--region", "x", "--billing-cycle", "x",
-		"--plan", "x", "--pseudo-service", "x", "--project", "x"})
+		"--plan", "x", "--pseudo-service", "x", "--project", "x",
+		"--api-url", srv.URL})
 
 	err := root.Execute()
 	if err != nil {
-		// Config/API errors are expected, but NOT validation errors
-		msg := err.Error()
-		if strings.Contains(msg, "--at must be") || strings.Contains(msg, "--immediate must be") {
-			t.Errorf("valid values should pass validation, got: %v", err)
-		}
+		t.Fatalf("valid values should pass validation and reach the stub, got: %v", err)
+	}
+	if gotPath != "/virtual-machines/my-vm/backups" {
+		t.Errorf("path = %q, want %q", gotPath, "/virtual-machines/my-vm/backups")
 	}
 }
 

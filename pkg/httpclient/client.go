@@ -194,12 +194,12 @@ func (c *Client) doOnce(ctx context.Context, method, path string, query url.Valu
 	if c.opts.Debug {
 		fmt.Fprintf(c.opts.DebugOut, "[DEBUG] %s %s -> %d\n", method, fullURL, resp.StatusCode)
 		if len(respBody) > 0 && len(respBody) < 4096 {
-			fmt.Fprintf(c.opts.DebugOut, "[DEBUG] response: %s\n", string(respBody))
+			fmt.Fprintf(c.opts.DebugOut, "[DEBUG] response: %s\n", string(c.redactSecrets(respBody)))
 		}
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return apierrors.ParseResponse(resp.StatusCode, respBody)
+		return apierrors.ParseResponse(resp.StatusCode, c.redactSecrets(respBody))
 	}
 
 	if result != nil && len(respBody) > 0 {

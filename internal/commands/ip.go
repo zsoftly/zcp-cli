@@ -114,7 +114,7 @@ func newIPAllocateCmd() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&vpc, "vpc", "", "VPC slug")
+	cmd.Flags().StringVar(&vpc, "vpc", "", "VPC slug (the VPC must already have at least one network, or the API rejects the request)")
 	cmd.Flags().StringVar(&network, "network", "", "Network slug")
 	cmd.Flags().StringVar(&plan, "plan", "", "IP plan slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug (required, e.g. hourly, monthly)")

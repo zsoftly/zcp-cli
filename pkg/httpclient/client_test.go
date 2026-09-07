@@ -1,11 +1,13 @@
 package httpclient_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,6 +115,41 @@ func TestGetHTTPError(t *testing.T) {
 	err := client.Get(context.Background(), "/protected", url.Values{}, nil)
 	if err == nil {
 		t.Fatal("expected error for 401, got nil")
+	}
+}
+
+func TestDebugOutputRedactsAccessKeyToken(t *testing.T) {
+	const bearerToken = "tok-SECRET-123"
+	const respBody = `{"status":"Success","data":[{"slug":"x","account":{"id":"1","access_key_token":"tok-SECRET-123"}}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(respBody))
+	}))
+	defer srv.Close()
+
+	var buf bytes.Buffer
+	client := httpclient.New(httpclient.Options{
+		BaseURL:     srv.URL,
+		BearerToken: bearerToken,
+		Timeout:     5 * time.Second,
+		Debug:       true,
+		DebugOut:    &buf,
+	})
+
+	if err := client.Get(context.Background(), "/object-storages", url.Values{}, nil); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[DEBUG] response:") {
+		t.Fatalf("debug output missing response line: %q", out)
+	}
+	if !strings.Contains(out, `"access_key_token":"[REDACTED]"`) && !strings.Contains(out, `"access_key_token": "[REDACTED]"`) {
+		t.Errorf("debug output does not show redacted access_key_token: %q", out)
+	}
+	if strings.Contains(out, bearerToken) {
+		t.Errorf("debug output leaked bearer token: %q", out)
 	}
 }
 

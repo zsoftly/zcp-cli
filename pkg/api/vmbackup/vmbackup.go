@@ -7,8 +7,19 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/zsoftly/zcp-cli/pkg/api/billing"
+	"github.com/zsoftly/zcp-cli/pkg/api/response"
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
+
+// ServiceName is the service name the service-cancellation endpoint accepts
+// for VM backup schedules. Verified live 2026-09-06: cancelling with
+// "Virtual Machine Backup" is rejected ("The provided service is invalid."),
+// but "Backups" succeeds (the response echoes back
+// "service":"VirtualMachineBackup"). The project services summary
+// (/projects/dashboard/{slug}/services) also counts VM backup schedules
+// under the key "Backups".
+const ServiceName = "Backups"
 
 // ---------- Response envelope ----------
 
@@ -19,6 +30,7 @@ type Envelope struct {
 	Timezone    string          `json:"timezone"`
 	CurrentPage int             `json:"current_page"`
 	Data        json.RawMessage `json:"data"`
+	LastPage    int             `json:"last_page"`
 	Total       int             `json:"total"`
 }
 
@@ -31,6 +43,13 @@ type ActionResponse struct {
 }
 
 // ---------- Types ----------
+
+// VMRef is the virtual machine nested in a VM backup listing item.
+type VMRef struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
 
 // VMBackup represents a STKCNSL VM backup.
 type VMBackup struct {
@@ -45,12 +64,52 @@ type VMBackup struct {
 	CloudProviderID      string  `json:"cloud_provider_id"`
 	CloudProviderSetupID string  `json:"cloud_provider_setup_id"`
 	VirtualMachineID     string  `json:"virtual_machine_id"`
+	VirtualMachine       *VMRef  `json:"virtual_machine"`
 	State                string  `json:"state"`
+	Interval             string  `json:"interval"`
+	At                   int     `json:"at"`
+	ScheduledAt          string  `json:"scheduled_at"`
 	ServiceName          string  `json:"service_name"`
 	AllTimeConsumption   float64 `json:"all_time_consumption"`
 	CreatedAt            string  `json:"created_at"`
 	UpdatedAt            string  `json:"updated_at"`
 	DeletedAt            *string `json:"deleted_at"`
+}
+
+// VMSlug returns the slug of the virtual machine this backup schedule
+// belongs to. List responses nest it under "virtual_machine" with no
+// top-level virtual_machine_id; fall back to VirtualMachineID so callers get
+// a usable value either way.
+func (v *VMBackup) VMSlug() string {
+	if v.VirtualMachine != nil && v.VirtualMachine.Slug != "" {
+		return v.VirtualMachine.Slug
+	}
+	return v.VirtualMachineID
+}
+
+// vmBackupAlias avoids infinite recursion when VMBackup.UnmarshalJSON
+// re-decodes the payload through json.Unmarshal.
+type vmBackupAlias VMBackup
+
+// UnmarshalJSON decodes a VMBackup, tolerating the "at" field being either a
+// JSON number or a quoted numeric string (list responses return "3"). A null
+// or empty "at" decodes to 0.
+func (v *VMBackup) UnmarshalJSON(data []byte) error {
+	aux := struct {
+		At json.RawMessage `json:"at"`
+		*vmBackupAlias
+	}{
+		vmBackupAlias: (*vmBackupAlias)(v),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	at, err := response.ParseFlexInt(aux.At)
+	if err != nil {
+		return fmt.Errorf("vmbackup: field \"at\": %w", err)
+	}
+	v.At = at
+	return nil
 }
 
 // ---------- Request types ----------
@@ -82,24 +141,50 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns all VM backups.
+// maxListPages bounds the paginated List loop so a server that misreports
+// last_page can't loop forever.
+const maxListPages = 1000
+
+// List returns all VM backups, walking every page of the listing.
 func (s *Service) List(ctx context.Context, region, project string) ([]VMBackup, error) {
-	var env Envelope
-	q := url.Values{}
-	if region != "" {
-		q.Set("filter[region]", region)
+	var all []VMBackup
+	page := 1
+	for ; page <= maxListPages; page++ {
+		q := url.Values{}
+		if region != "" {
+			q.Set("filter[region]", region)
+		}
+		if project != "" {
+			q.Set("filter[project]", project)
+		}
+		if page > 1 {
+			q.Set("page", fmt.Sprintf("%d", page))
+		}
+
+		var env Envelope
+		if err := s.client.Get(ctx, "/virtual-machines/backups", q, &env); err != nil {
+			return nil, fmt.Errorf("listing VM backups: %w", err)
+		}
+		var backups []VMBackup
+		if err := json.Unmarshal(env.Data, &backups); err != nil {
+			return nil, fmt.Errorf("decoding VM backups: %w", err)
+		}
+		// A server that ignores ?page and repeats an earlier page would
+		// otherwise yield duplicate rows; surface that instead of returning
+		// them. A zero current_page (field absent) is tolerated.
+		if env.CurrentPage > 0 && env.CurrentPage != page {
+			return nil, fmt.Errorf("listing VM backups: requested page %d but the API returned page %d", page, env.CurrentPage)
+		}
+		all = append(all, backups...)
+
+		// The loop counter, not the server-echoed current_page, drives
+		// pagination: a server that ignores ?page and always echoes
+		// current_page=1 would otherwise never advance past the first page.
+		if len(backups) == 0 || env.LastPage <= 0 || page >= env.LastPage {
+			return all, nil
+		}
 	}
-	if project != "" {
-		q.Set("filter[project]", project)
-	}
-	if err := s.client.Get(ctx, "/virtual-machines/backups", q, &env); err != nil {
-		return nil, fmt.Errorf("listing VM backups: %w", err)
-	}
-	var backups []VMBackup
-	if err := json.Unmarshal(env.Data, &backups); err != nil {
-		return nil, fmt.Errorf("decoding VM backups: %w", err)
-	}
-	return backups, nil
+	return nil, fmt.Errorf("listing VM backups: exceeded %d pages without reaching the last page", maxListPages)
 }
 
 // Create creates a new VM backup on the given VM slug.
@@ -111,9 +196,22 @@ func (s *Service) Create(ctx context.Context, vmSlug string, req CreateRequest) 
 	return &resp, nil
 }
 
-// Delete permanently deletes a VM backup.
+// Delete requests deletion of a VM backup schedule.
+//
+// The route api/virtual-machines/backups/{slug} rejects DELETE ("Supported
+// methods: PUT", verified live 2026-09-06), so a direct DELETE request can
+// never succeed. Deletion instead goes through the unified service-
+// cancellation workflow the CMP Web UI uses (the same one instance delete
+// relies on): POST /billing/service-cancel-requests/{slug} with
+// service_name "Backups" (verified live 2026-09-06).
 func (s *Service) Delete(ctx context.Context, slug string) error {
-	if err := s.client.Delete(ctx, "/virtual-machines/backups/"+slug, nil); err != nil {
+	req := billing.CancelServiceRequest{
+		ServiceName: ServiceName,
+		Reason:      "not_needed_anymore",
+		Type:        "Immediate",
+		Status:      "Pending",
+	}
+	if err := billing.NewService(s.client).CancelService(ctx, slug, req); err != nil {
 		return fmt.Errorf("deleting VM backup %s: %w", slug, err)
 	}
 	return nil

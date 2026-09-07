@@ -160,9 +160,12 @@ zcp instance tag-delete <slug> --key env
 # Addons
 zcp instance addons <slug>
 
-# Open an SSH session directly from the CLI
+# Open an SSH session directly from the CLI (prefers the public IP, falls back to the private IP)
+# Stock Ubuntu images need --user ubuntu unless the API reports a username
 zcp instance ssh <slug>
 zcp instance ssh <slug> --user ubuntu
+zcp instance ssh <slug> --use-private       # force the private IP (VPC/VPN)
+zcp instance ssh <slug> --use-public        # force the public IP
 zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
 
 # Delete an instance permanently (releases the auto-assigned public IP by default)
@@ -245,6 +248,8 @@ zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
 # Public IP addresses. Plan slugs come from `zcp plan ip`
 zcp ip list
 zcp ip allocate --network <slug> --plan <ip-plan> --billing-cycle hourly
+# Allocating into a VPC needs at least one network in that VPC first, or the API rejects it
+zcp ip allocate --vpc <vpc-slug> --plan <ip-plan> --billing-cycle hourly
 zcp ip release <slug>
 zcp ip static-nat enable <ip-slug> --instance <vm-slug> --network <network-slug>
 
@@ -432,17 +437,20 @@ zcp dns delete <domain-slug>
 
 ```bash
 # Block storage (volume) backups. Plans are region-specific: zcp plan backup
+# --interval accepts dailyAt or hourlyAt only. The API rejects any other value.
 zcp backup list
 zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 \
   --plan backup-yul --billing-cycle hourly --region yul-1 --project default-9
 zcp backup delete <slug>
 
-# VM backups
+# VM backups. --interval accepts dailyAt or hourlyAt only. The API rejects any other value.
 zcp vm-backup list
-zcp vm-backup create <vm-slug> --interval daily --plan backup-yul \
+zcp vm-backup create <vm-slug> --interval dailyAt --plan backup-yul \
   --pseudo-service vm-backup --billing-cycle hourly --region yul-1 --project default-9
 zcp vm-backup delete <slug>
 ```
+
+`vm-backup delete` submits a service-cancellation request, the same workflow `instance delete` uses, since the VM backup API route does not support direct deletion.
 
 ---
 
@@ -605,6 +613,10 @@ zcp object-storage bucket tag set <slug> <bucket-slug> --tag env=prod --tag team
 zcp object-storage bucket tag delete <slug> <bucket-slug>
 
 # Default encryption (SSE-S3)
+# `enable` is not currently supported: the region's gateway has no encryption
+# key backend, and enabling SSE-S3 makes every upload to the bucket fail
+# until it is disabled again. `status` and `disable` remain available so you
+# can check or clear an existing setting.
 zcp object-storage bucket encryption status <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug>
 zcp object-storage bucket encryption disable <slug> <bucket-slug>

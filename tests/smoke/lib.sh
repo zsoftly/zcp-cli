@@ -133,6 +133,8 @@ destroy_one() {
     # VM's auto-assigned public IP); it supersedes the raw `cancel` path for VMs.
     vm)             zcp instance delete "$slug" -y         >/dev/null 2>&1 ;;
     vm-snapshot)    zcp vm-snapshot delete "$slug" -y      >/dev/null 2>&1 ;;
+    backup)         zcp backup delete "$slug" -y           >/dev/null 2>&1 ;;
+    vm-backup)      zcp vm-backup delete "$slug" -y        >/dev/null 2>&1 ;;
     object-storage) zcp object-storage delete "$slug" -y   >/dev/null 2>&1 ;;
     template-acct)  zcp template account-delete "$slug" -y >/dev/null 2>&1 ;;
     # cancel-service teardown: extra holds the billing "service" label.
@@ -254,6 +256,15 @@ det_network_category() {
 det_network_plan() {
   if [[ -n "${ZCP_SMOKE_NETWORK_PLAN:-}" ]]; then printf '%s' "$ZCP_SMOKE_NETWORK_PLAN"; return; fi
   local r; r="$(det_region)"; printf 'inet-%s' "${r%%-*}"
+}
+
+# det_backup_plan — the backup plan slug for `backup create --plan` / `vm-backup
+# create --plan` (e.g. backup-yul). Plans are region-suffixed (verified live:
+# /plans/service/Backups?region=yul-1 returns backup-yul and backup-yow).
+# Defaults to backup-<region-prefix>.
+det_backup_plan() {
+  if [[ -n "${ZCP_SMOKE_BACKUP_PLAN:-}" ]]; then printf '%s' "$ZCP_SMOKE_BACKUP_PLAN"; return; fi
+  local r; r="$(det_region)"; printf 'backup-%s' "${r%%-*}"
 }
 
 # ─── JSON shape helpers ──────────────────────────────────────────────────────

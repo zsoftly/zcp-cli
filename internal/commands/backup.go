@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,24 @@ import (
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/api/backup"
 )
+
+// validBackupIntervals are the only interval values the API accepts for both
+// block storage and VM backups. Every other value (daily, weekly, monthly,
+// hourly, weeklyAt, monthlyAt) is rejected server-side with "The selected
+// interval is invalid." (verified live 2026-09-06), so the CLI validates
+// client-side rather than round-tripping to the API to find out.
+var validBackupIntervals = []string{"dailyAt", "hourlyAt"}
+
+// validateBackupInterval rejects any --interval value the API does not
+// accept, listing the accepted values in the error.
+func validateBackupInterval(v string) error {
+	for _, ok := range validBackupIntervals {
+		if v == ok {
+			return nil
+		}
+	}
+	return fmt.Errorf("--interval must be one of: %s (got %q)", strings.Join(validBackupIntervals, ", "), v)
+}
 
 // NewBackupCmd returns the 'backup' cobra command for block storage backups.
 func NewBackupCmd() *cobra.Command {
@@ -46,14 +65,16 @@ func newBackupListCmd() *cobra.Command {
 				return fmt.Errorf("backup list: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME", "INTERVAL", "AT", "SCHEDULED AT", "CREATED"}
 			rows := make([][]string, 0, len(backups))
 			for _, b := range backups {
 				rows = append(rows, []string{
 					b.Slug,
 					b.Name,
-					b.BlockstorageID,
+					b.VolumeSlug(),
 					b.Interval,
+					strconv.Itoa(b.At),
+					b.ScheduledAt,
 					b.CreatedAt,
 				})
 			}
@@ -80,6 +101,9 @@ func newBackupCreateCmd() *cobra.Command {
 			}
 			if interval == "" {
 				return fmt.Errorf("--interval is required")
+			}
+			if err := validateBackupInterval(interval); err != nil {
+				return err
 			}
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
@@ -127,19 +151,22 @@ func newBackupCreateCmd() *cobra.Command {
 				return fmt.Errorf("backup create: %w", err)
 			}
 
-			headers := []string{"SLUG", "NAME", "VOLUME ID", "INTERVAL", "CREATED"}
+			headers := []string{"SLUG", "NAME", "VOLUME", "INTERVAL", "AT", "CREATED"}
 			rows := [][]string{{
 				bak.Slug,
 				bak.Name,
-				bak.BlockstorageID,
+				// The create response carries only blockstorage_id (a UUID) and no
+				// nested volume object, so show the slug the caller passed instead.
+				blockstorageSlug,
 				bak.Interval,
+				strconv.Itoa(bak.At),
 				bak.CreatedAt,
 			}}
 			return printer.PrintTable(headers, rows)
 		},
 	}
 	cmd.Flags().StringVar(&blockstorageSlug, "volume", "", "Block storage volume slug (required)")
-	cmd.Flags().StringVar(&interval, "interval", "", "Backup interval, e.g. dailyAt (required)")
+	cmd.Flags().StringVar(&interval, "interval", "", "Backup interval: dailyAt or hourlyAt (required)")
 	cmd.Flags().IntVar(&at, "at", 1, "Hour at which the backup triggers (e.g. 1 for 1 AM)")
 	cmd.Flags().IntVar(&immediate, "immediate", 0, "Run backup immediately: 1 for yes, 0 for no")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")

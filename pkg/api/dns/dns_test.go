@@ -428,3 +428,33 @@ func TestCanonicalRecordFQDN(t *testing.T) {
 		}
 	}
 }
+
+func TestDomainStatusKnown(t *testing.T) {
+	// The list endpoint returns "status"; the show endpoint omits it
+	// (verified live 2026-09-07). Decoding must distinguish the two.
+	tests := []struct {
+		name      string
+		body      string
+		wantKnown bool
+		wantOn    bool
+	}{
+		{"list item with status true", `{"slug":"d","name":"d.example","status":true}`, true, true},
+		{"list item with status false", `{"slug":"d","name":"d.example","status":false}`, true, false},
+		{"show item without status", `{"slug":"d","name":"d.example","records":[]}`, false, false},
+		{"status null", `{"slug":"d","name":"d.example","status":null}`, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var d dns.Domain
+			if err := json.Unmarshal([]byte(tt.body), &d); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if d.StatusKnown != tt.wantKnown || d.Status != tt.wantOn {
+				t.Errorf("StatusKnown=%v Status=%v, want %v/%v", d.StatusKnown, d.Status, tt.wantKnown, tt.wantOn)
+			}
+			if d.Slug != "d" || d.Name != "d.example" {
+				t.Errorf("other fields not decoded: %+v", d)
+			}
+		})
+	}
+}
