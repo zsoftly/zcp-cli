@@ -238,13 +238,13 @@ func detectTemplate(t *testing.T, client *httpclient.Client, regionSlug string) 
 	return ""
 }
 
-func detectVMPlan(t *testing.T, client *httpclient.Client) string {
+func detectVMPlan(t *testing.T, client *httpclient.Client, regionSlug string) string {
 	if v := os.Getenv("ZCP_TEST_PLAN"); v != "" {
 		return v
 	}
 	ctx := testContext(t, 30*time.Second)
 	svc := plan.NewService(client)
-	plans, err := svc.List(ctx, plan.ServiceVM)
+	plans, err := svc.List(ctx, plan.ServiceVM, regionSlug)
 	if err != nil {
 		t.Fatalf("listing VM plans: %v", err)
 	}
@@ -272,13 +272,13 @@ func detectVMPlan(t *testing.T, client *httpclient.Client) string {
 	return ""
 }
 
-func detectStoragePlan(t *testing.T, client *httpclient.Client) string {
+func detectStoragePlan(t *testing.T, client *httpclient.Client, regionSlug string) string {
 	if v := os.Getenv("ZCP_TEST_STORAGE_PLAN"); v != "" {
 		return v
 	}
 	ctx := testContext(t, 30*time.Second)
 	svc := plan.NewService(client)
-	plans, err := svc.List(ctx, plan.ServiceBlockStorage)
+	plans, err := svc.List(ctx, plan.ServiceBlockStorage, regionSlug)
 	if err != nil {
 		t.Fatalf("listing block storage plans: %v", err)
 	}
@@ -301,13 +301,13 @@ func detectStoragePlan(t *testing.T, client *httpclient.Client) string {
 	return ""
 }
 
-func detectNetworkSlug(t *testing.T, client *httpclient.Client) string {
+func detectNetworkSlug(t *testing.T, client *httpclient.Client, regionSlug, projectSlug string) string {
 	if v := os.Getenv("ZCP_TEST_NETWORK_SLUG"); v != "" {
 		return v
 	}
 	ctx := testContext(t, 30*time.Second)
 	svc := network.NewService(client)
-	nets, err := svc.List(ctx)
+	nets, err := svc.List(ctx, regionSlug, projectSlug)
 	if err != nil {
 		t.Fatalf("listing networks: %v", err)
 	}
@@ -411,9 +411,9 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	regionSlug, cloudProviderSlug := detectRegion(t, client)
 	projectSlug := detectProject(t, client)
 	templateSlug := detectTemplate(t, client, regionSlug)
-	vmPlanSlug := detectVMPlan(t, client)
-	storagePlanSlug := detectStoragePlan(t, client)
-	networkSlug := detectNetworkSlug(t, client)
+	vmPlanSlug := detectVMPlan(t, client, regionSlug)
+	storagePlanSlug := detectStoragePlan(t, client, regionSlug)
+	networkSlug := detectNetworkSlug(t, client, regionSlug, projectSlug)
 	billingCycle := env("ZCP_TEST_BILLING_CYCLE", "hourly")
 	storageCategory := env("ZCP_TEST_STORAGE_CAT", "ssd")
 	vmName := testID() + "-vm"
@@ -489,7 +489,7 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	// ── Step 2: Verify Instance in List ─────────────────────────────────
 	t.Log("=== Step 2: Verify Instance in List ===")
 	listCtx := testContext(t, 30*time.Second)
-	vms, err := instanceSvc.List(listCtx)
+	vms, err := instanceSvc.List(listCtx, regionSlug, projectSlug)
 	if err != nil {
 		t.Fatalf("listing instances: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	t.Log("  waiting for volume to appear in list...")
 	for i := 0; i < 12; i++ {
 		time.Sleep(10 * time.Second)
-		vols, err := volumeSvc.List(volCtx)
+		vols, err := volumeSvc.List(volCtx, regionSlug, projectSlug)
 		if err != nil {
 			t.Fatalf("listing volumes while waiting: %v", err)
 		}
@@ -600,11 +600,11 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	// ── Step 8: Attach Volume to Instance ───────────────────────────────
 	t.Log("=== Step 8: Attach Volume to Instance ===")
 	attachCtx := testContext(t, 2*time.Minute)
-	vol, err = volumeSvc.Attach(attachCtx, volSlug, vmSlug)
+	resp, err := volumeSvc.Attach(attachCtx, volSlug, vmSlug)
 	if err != nil {
 		t.Fatalf("attaching volume: %v", err)
 	}
-	t.Logf("  attached volume %s to instance %s", volSlug, vmSlug)
+	t.Logf("  attached volume %s to instance %s: status=%s message=%s", volSlug, vmSlug, resp.Status, resp.Message)
 
 	// Wait for attachment to settle
 	time.Sleep(15 * time.Second)
@@ -613,7 +613,7 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	t.Log("=== Step 9: Verify Volume Attachment ===")
 	time.Sleep(10 * time.Second) // additional settle time for attachment
 	volListCtx := testContext(t, 30*time.Second)
-	vols, err := volumeSvc.List(volListCtx)
+	vols, err := volumeSvc.List(volListCtx, regionSlug, projectSlug)
 	if err != nil {
 		t.Fatalf("listing volumes: %v", err)
 	}
@@ -635,7 +635,7 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 
 	// Find the ROOT volume for snapshotting
 	rootVolSlug := ""
-	allVols, err := volumeSvc.List(snapCtx)
+	allVols, err := volumeSvc.List(snapCtx, regionSlug, projectSlug)
 	if err != nil {
 		t.Fatalf("listing volumes for snapshot: %v", err)
 	}
@@ -670,7 +670,7 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 	t.Log("  waiting for snapshot to appear...")
 	for i := 0; i < 12; i++ {
 		time.Sleep(10 * time.Second)
-		snaps, err := snapshotSvc.List(snapCtx)
+		snaps, err := snapshotSvc.List(snapCtx, regionSlug, projectSlug)
 		if err != nil {
 			t.Fatalf("listing snapshots while waiting: %v", err)
 		}
@@ -784,13 +784,16 @@ func TestPhase3_InstanceLifecycle(t *testing.T) {
 func TestPhase4_ReadOnlySmoke(t *testing.T) {
 	client := setupClient(t)
 
+	regionSlug, _ := detectRegion(t, client)
+	projectSlug := detectProject(t, client)
+
 	tests := []struct {
 		name string
 		fn   func(t *testing.T)
 	}{
 		{"InstanceList", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			vms, err := instance.NewService(client).List(ctx)
+			vms, err := instance.NewService(client).List(ctx, regionSlug, projectSlug)
 			if err != nil {
 				t.Fatalf("instance list: %v", err)
 			}
@@ -798,7 +801,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"VolumeList", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			vols, err := volume.NewService(client).List(ctx)
+			vols, err := volume.NewService(client).List(ctx, regionSlug, projectSlug)
 			if err != nil {
 				t.Fatalf("volume list: %v", err)
 			}
@@ -806,7 +809,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"SnapshotList", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			snaps, err := snapshot.NewService(client).List(ctx)
+			snaps, err := snapshot.NewService(client).List(ctx, regionSlug, projectSlug)
 			if err != nil {
 				t.Fatalf("snapshot list: %v", err)
 			}
@@ -814,7 +817,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"TemplateList", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			tmpls, err := template.NewService(client).List(ctx, "")
+			tmpls, err := template.NewService(client).List(ctx, regionSlug)
 			if err != nil {
 				t.Fatalf("template list: %v", err)
 			}
@@ -822,7 +825,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"VMPlans", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			plans, err := plan.NewService(client).List(ctx, plan.ServiceVM)
+			plans, err := plan.NewService(client).List(ctx, plan.ServiceVM, regionSlug)
 			if err != nil {
 				t.Fatalf("VM plans: %v", err)
 			}
@@ -830,7 +833,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"BlockStoragePlans", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage)
+			plans, err := plan.NewService(client).List(ctx, plan.ServiceBlockStorage, regionSlug)
 			if err != nil {
 				t.Fatalf("block storage plans: %v", err)
 			}
@@ -838,7 +841,7 @@ func TestPhase4_ReadOnlySmoke(t *testing.T) {
 		}},
 		{"NetworkList", func(t *testing.T) {
 			ctx := testContext(t, 30*time.Second)
-			nets, err := network.NewService(client).List(ctx)
+			nets, err := network.NewService(client).List(ctx, regionSlug, projectSlug)
 			if err != nil {
 				t.Fatalf("network list: %v", err)
 			}
