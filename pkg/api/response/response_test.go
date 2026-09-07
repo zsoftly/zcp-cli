@@ -29,6 +29,9 @@ func TestParseFlexInt(t *testing.T) {
 		{name: "large integer exact", raw: `9007199254740993`, want: 9007199254740993},
 		{name: "quoted large integer exact", raw: `"9007199254740993"`, want: 9007199254740993},
 		{name: "exponent form", raw: `3e0`, want: 3},
+		{name: "decimal form keeps exact large integer", raw: `9007199254740993.0`, want: 9007199254740993},
+		{name: "quoted decimal form keeps exact large integer", raw: `"9007199254740993.0"`, want: 9007199254740993},
+		{name: "exponent form large exact", raw: `9007199254740993e0`, want: 9007199254740993},
 		{name: "integer out of range", raw: `99999999999999999999`, wantErr: true},
 		{name: "float out of range", raw: `1e30`, wantErr: true},
 	}

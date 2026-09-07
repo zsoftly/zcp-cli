@@ -1609,7 +1609,7 @@ Requirements:
 			return runInstanceSSH(cmd, args[0], user, identityFile, port, usePublic, usePrivate)
 		},
 	}
-	cmd.Flags().StringVar(&user, "user", "root", "SSH username")
+	cmd.Flags().StringVar(&user, "user", "", "SSH username (default: the VM's username as reported by the API, else root)")
 	cmd.Flags().StringVarP(&identityFile, "identity-file", "i", "", "Path to SSH private key file")
 	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
 	cmd.Flags().BoolVar(&usePublic, "use-public", false, "Force connecting over the VM's public IP address (mutually exclusive with --use-private)")

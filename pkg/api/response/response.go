@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -75,15 +76,19 @@ func parseIntegralFloat(s string) (int, error) {
 		}
 		return int(n), nil
 	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	// Decimal and exponent forms are parsed with arbitrary precision so a
+	// value such as 9007199254740993.0 keeps its exact integer instead of
+	// being rounded through float64.
+	bf, ok := new(big.Float).SetPrec(256).SetString(s)
+	if !ok || bf.IsInf() {
 		return 0, fmt.Errorf("non-numeric value %q", s)
 	}
-	if f != math.Trunc(f) {
+	if !bf.IsInt() {
 		return 0, fmt.Errorf("non-integral value %q", s)
 	}
-	if f < math.MinInt || f > math.MaxInt || math.IsInf(f, 0) {
+	n, acc := bf.Int64()
+	if acc != big.Exact || n < math.MinInt || n > math.MaxInt {
 		return 0, fmt.Errorf("value %q out of range", s)
 	}
-	return int(f), nil
+	return int(n), nil
 }
