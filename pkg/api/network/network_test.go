@@ -557,7 +557,7 @@ func TestNetworkCreateIsolatedSendsPlan(t *testing.T) {
 }
 
 // TestNetworkGetDetail verifies GET /networks/{slug} parsing, including the
-// CloudStack meta block that holds CIDR, state, and VPC membership.
+// platform meta block that holds CIDR, state, and VPC membership.
 func TestNetworkGetDetail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/networks/web-tier" {

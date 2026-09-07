@@ -49,7 +49,7 @@ func runCloudProviderList(cmd *cobra.Command) error {
 	}
 
 	// DISPLAY NAME is intentionally omitted: it can surface backend technology
-	// names (e.g. "Cloud Stack", "Ceph"). SLUG is the value used by
+	// names. SLUG is the value used by
 	// --cloud-provider, so it is kept; the human label is not exposed.
 	headers := []string{"ID", "NAME", "SLUG", "STATUS", "MULTI-REGION", "CREATED"}
 	rows := make([][]string, 0, len(providers))

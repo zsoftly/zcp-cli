@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -74,6 +75,185 @@ func TestVolumeList(t *testing.T) {
 	}
 	if volumes[0].VolumeType != "ROOT" {
 		t.Errorf("volumes[0].VolumeType = %q, want %q", volumes[0].VolumeType, "ROOT")
+	}
+}
+
+func TestVolumeListPagination(t *testing.T) {
+	pages := map[string][]volume.Volume{
+		"1": {{ID: "vol-1", Slug: "vol-1"}},
+		"2": {{ID: "vol-2", Slug: "vol-2"}},
+	}
+	var requestedPages []string
+	var requestedPagesMu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		requestedPagesMu.Lock()
+		requestedPages = append(requestedPages, page)
+		requestedPagesMu.Unlock()
+		if got := r.URL.Query().Get("filter[region]"); got != "ca-central" {
+			t.Errorf("region filter = %q, want ca-central", got)
+		}
+		if got := r.URL.Query().Get("filter[project]"); got != "project-a" {
+			t.Errorf("project filter = %q, want project-a", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status:      "Success",
+			CurrentPage: map[string]int{"1": 1, "2": 2}[page],
+			Data:        pages[page],
+			Total:       2,
+		}); err != nil {
+			t.Errorf("encoding page %s response: %v", page, err)
+			return
+		}
+	}))
+	defer srv.Close()
+
+	volumes, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "ca-central", "project-a")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := len(volumes), 2; got != want {
+		t.Fatalf("List() returned %d volumes, want %d", got, want)
+	}
+	if got, want := volumes[1].Slug, "vol-2"; got != want {
+		t.Errorf("volumes[1].Slug = %q, want %q", got, want)
+	}
+	requestedPagesMu.Lock()
+	got := append([]string(nil), requestedPages...)
+	requestedPagesMu.Unlock()
+	if want := []string{"1", "2"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("requested pages = %v, want %v", got, want)
+	}
+}
+
+func TestVolumeListPaginationRejectsIgnoredPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status:      "Success",
+			CurrentPage: 1,
+			Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+			Total:       2,
+		}); err != nil {
+			t.Errorf("encoding response: %v", err)
+			return
+		}
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error when the API ignores page 2")
+	}
+}
+
+func TestVolumeListPaginationRejectsMissingCurrentPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		if page == "" {
+			if err := json.NewEncoder(w).Encode(listResponse{
+				Status:      "Success",
+				CurrentPage: 1,
+				Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+				Total:       2,
+			}); err != nil {
+				t.Errorf("encoding page 1 response: %v", err)
+			}
+			return
+		}
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status: "Success",
+			Data:   []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+			Total:  2,
+		}); err != nil {
+			t.Errorf("encoding page %s response: %v", page, err)
+		}
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error when the API omits current_page for page 2")
+	}
+}
+
+func TestVolumeListPaginationRejectsNegativeCurrentPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status:      "Success",
+			CurrentPage: -1,
+			Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+			Total:       1,
+		}); err != nil {
+			t.Errorf("encoding response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error for a negative current_page")
+	}
+}
+
+func TestVolumeListPaginationRejectsNegativeTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status:      "Success",
+			CurrentPage: 1,
+			Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+			Total:       -1,
+		}); err != nil {
+			t.Errorf("encoding response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error for a negative total")
+	}
+}
+
+func TestVolumeListPaginationRejectsEmptyPageBeforeTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if page == "1" {
+			if err := json.NewEncoder(w).Encode(listResponse{
+				Status:      "Success",
+				CurrentPage: 1,
+				Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+				Total:       2,
+			}); err != nil {
+				t.Errorf("encoding page 1 response: %v", err)
+			}
+			return
+		}
+		if err := json.NewEncoder(w).Encode(listResponse{
+			Status:      "Success",
+			CurrentPage: 2,
+			Data:        []volume.Volume{},
+			Total:       2,
+		}); err != nil {
+			t.Errorf("encoding page %s response: %v", page, err)
+		}
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error for an empty page before the reported total")
 	}
 }
 

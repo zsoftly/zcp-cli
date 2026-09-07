@@ -5,6 +5,13 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.0.29] - 2026-09-07
+
+### Fixed
+
+- **Volume listings now retrieve every page.** Volume lookups no longer miss volumes beyond the API's first results page.
+- **VPC subnet limit failures now explain the next step.** When a VPC reaches the platform’s default limit of eight subnets, `network create --vpc` tells you to open a support ticket and rerun the command after the platform applies the quota increase.
+
 ## [v0.0.28] - 2026-09-07
 
 ### Added
@@ -115,7 +122,7 @@ _This version was prepared but never tagged or published. Its changes ship in v0
 
 ### Fixed
 
-- **`instance create/start/stop --wait` now reports the real state — it polls the live `/meta` endpoint instead of the cached list/show.** The CMP's list and show endpoints can keep reporting `Starting` for many minutes after a VM is actually `Running` (the platform's background state reconciliation is unreliable; the state only refreshes on demand). `WaitForState` polled `GET /virtual-machines/{slug}` (cached), so `--wait` could hang until it timed out even though the VM was up. It now polls `GET /virtual-machines/{slug}/meta`, which performs a real-time reconcile against CloudStack/APC and returns the authoritative state (and reconciles the stored state as a side effect). Verified live: with `--wait`, `create` returned `Running` via `/meta` while the plain `instance list` still showed `Starting`. New SDK method `instance.Service.Meta(ctx, slug)` exposes this live view. (Workaround for the CMP background-sync bug; see the filed ticket.)
+- **`instance create/start/stop --wait` now reports the real state — it polls the live `/meta` endpoint instead of the cached list/show.** The CMP's list and show endpoints can keep reporting `Starting` for many minutes after a VM is actually `Running` (the platform's background state reconciliation is unreliable; the state only refreshes on demand). `WaitForState` polled `GET /virtual-machines/{slug}` (cached), so `--wait` could hang until it timed out even though the VM was up. It now polls `GET /virtual-machines/{slug}/meta`, which performs a real-time reconcile against the underlying platform and returns the authoritative state (and reconciles the stored state as a side effect). Verified live: with `--wait`, `create` returned `Running` via `/meta` while the plain `instance list` still showed `Starting`. New SDK method `instance.Service.Meta(ctx, slug)` exposes this live view. (Workaround for the CMP background-sync bug; see the filed ticket.)
 - **Corrected the misleading `instance delete --delete-public-ip` help/prompt: the flag is currently a no-op.** v0.0.20 advertised that deleting a VM releases its auto-assigned public IP, but this was never true against the live API — the plain `DELETE /virtual-machines/{slug}` endpoint ignores `delete_public_ip`, so the IP is left `Allocated` (and billable). The IP-releasing path is `PUT /virtual-machines/{slug}/destroy`, but that endpoint currently **rejects API-token auth** with `"The selected action is invalid"` even for a Running VM (it succeeds only from a logged-in portal session) — a CMP API bug that has been filed and is being fixed. Until that lands, the flag/prompt/help now say plainly that the IP is **not** auto-released and that you must free it manually with `zcp ip release <ip-slug>` after deleting. The real fix (routing `instance delete` through `PUT .../destroy`) is implemented and verified at the request level but held back until the API accepts token auth.
 
 ## [v0.0.22] - 2026-07-07
@@ -254,13 +261,13 @@ _This version was prepared but never tagged or published. Its changes ship in v0
 
   Running a group with no arguments still prints its help and exits `0`.
 
-- **`--cloud-provider` is now auto-detected** — the cloud provider slug is no longer something customers pass. `zcp auth validate` and `zcp profile add` detect the account's compute provider (the one whose service catalog includes "Virtual Machine" — `nimbo` in production) and persist it to the profile (`cloud_provider` field); create commands read it automatically. Verified against the production `/cloud-providers` catalog, which has three providers: `nimbo` (Cloud Stack, all compute/storage/networking), `ceph` (Object Storage), and `dns` (Dns Domain). Object storage and DNS default to their own providers (`ceph` and `dns`) automatically. The flag is hidden from help but still works as an override, and `ZCP_CLOUD_PROVIDER` is still honored. When the provider can't be determined, create commands now print `could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider …` instead of the old terse `--cloud-provider is required`. All three provider values were verified against the live API: every region maps 1:1 to a provider (`yow-1`/`yul-1`→`nimbo`, `default`→`dns`, `os-yow`/`os-yul`→`ceph`), and a real instance and volume both store `cloud_provider: nimbo`.
+- **`--cloud-provider` is now auto-detected** — the cloud provider slug is no longer something customers pass. `zcp auth validate` and `zcp profile add` detect the account's compute provider (the one whose service catalog includes "Virtual Machine" — `nimbo` in production) and persist it to the profile (`cloud_provider` field); create commands read it automatically. Verified against the production `/cloud-providers` catalog, which has three providers: `nimbo` (compute, storage, and networking), `ceph` (Object Storage), and `dns` (Dns Domain). Object storage and DNS default to their own providers (`ceph` and `dns`) automatically. The flag is hidden from help but still works as an override, and `ZCP_CLOUD_PROVIDER` is still honored. When the provider can't be determined, create commands now print `could not determine cloud provider — run 'zcp auth validate' to detect it, or pass --cloud-provider …` instead of the old terse `--cloud-provider is required`. All three provider values were verified against the live API: every region maps 1:1 to a provider (`yow-1`/`yul-1`→`nimbo`, `default`→`dns`, `os-yow`/`os-yul`→`ceph`), and a real instance and volume both store `cloud_provider: nimbo`.
 
 - **`dns create` is now hands-off and uses the correct region** — it defaults `--region` to `default` (the only region the `dns` provider serves) and ignores the compute-oriented `ZCP_REGION`, so `zcp dns create --name example.com --project default-9` works on its own. Previously the docs/examples paired DNS with `--region yow-1` and `--cloud-provider nimbo`, which belong to the compute provider and would mismatch. Object-storage examples likewise now use object-storage regions (`os-yul`/`os-yow`) instead of `yul-1`.
 
 ### Removed
 
-- **Backend technology is no longer shown in command output** — display-only columns that surfaced the underlying platform (e.g. "Cloud Stack", "Ceph", "Dns", "PowerDNS") have been removed: the `PROVIDER`/`COMING SOON` columns from `region list`, `SERVICE` from `backup list`, `snapshot list`, and `vm-backup list`, the `Service` row from `instance get`, `DISPLAY NAME` from `cloud-provider list`, and the `DNS PROVIDER` column / `DNS Provider` row from `dns list`, `dns show`, and `dns create`. The `--dns-provider` flag (which named the backend, e.g. `powerdns`) is likewise hidden from help, keeping its working default. These fields were informational only — resource creation uses the provider/region **slug**, which is retained. Billing/dashboard/project "SERVICE" columns are unaffected (they name billing categories like "Virtual Machine", not backend tech).
+- **Backend technology is no longer shown in command output** — display-only columns that surfaced internal platform labels have been removed: the `PROVIDER`/`COMING SOON` columns from `region list`, `SERVICE` from `backup list`, `snapshot list`, and `vm-backup list`, the `Service` row from `instance get`, `DISPLAY NAME` from `cloud-provider list`, and the `DNS PROVIDER` column / `DNS Provider` row from `dns list`, `dns show`, and `dns create`. The `--dns-provider` flag (which named the backend, e.g. `powerdns`) is likewise hidden from help, keeping its working default. These fields were informational only — resource creation uses the provider/region **slug**, which is retained. Billing/dashboard/project "SERVICE" columns are unaffected (they name billing categories like "Virtual Machine", not backend tech).
 
 ### Internal
 
@@ -289,13 +296,13 @@ All fixes below were confirmed against the live API (YUL region) before release.
 
 - **`zcp acl replace` / `zcp vpc acl-replace` — always failed with 403** — the request body used `aclSlug`; the live API requires `acl_id` with the ACL's ID. Both commands now send the correct field and accept names via `--vpc` resolution.
 - **Silent detached-network trap** — sending `type=Isolated` together with `vpc` passes API validation but silently ignores the VPC and creates a standalone isolated network. The CLI now always sends `type=Vpc` when `--vpc` is set and rejects a conflicting `--type`.
-- **`zcp vpc get` — CIDR/Status/Zone always blank** — the command filtered the list endpoint, which omits provider state. It now calls `GET /vpcs/{slug}` and maps the CloudStack `meta` block (state, cidr, zone_name, network_domain), falling back to the list for older deployments.
+- **`zcp vpc get` — CIDR/Status/Zone always blank** — the command filtered the list endpoint, which omits platform state. It now calls `GET /vpcs/{slug}` and maps the platform `meta` block (state, cidr, zone_name, network_domain), falling back to the list for older deployments.
 - **`zcp vpc create` — blank CIDR/Status in output** — the create response omits provider state; the command now fetches the detail view after creation.
 - **`zcp vpc create` — network-address quirk** — the API records the network address verbatim (e.g. `10.30.0.1/16` instead of `10.30.0.0/16`); the CLI now prints a warning when the given address is not the canonical network base.
 - **`zcp plan router` (and lb/k8s/ip/vm-snapshot/template/iso/backup/storage) — missing SLUG column** — `vpc create --plan` requires a plan slug but no plan table showed one. All plan tables now include SLUG.
 - **`zcp network create` — crash decoding create response** — the create endpoint returns `is_default` as `0/1` while the list endpoint returns `true/false`; the decoder now accepts both.
 - **`zcp acl list` / `zcp vpc acl-list` — SLUG/STATUS columns always blank** — the live API returns `id`, `name`, `description`; tables now show ID (needed for `acl replace`/`acl delete`).
-- **`zcp vpc delete` — false "may not have been deleted" warning** — deletion is an async CloudStack job, but the command checked existence once after 2s and reported failure (with a misleading "delete all network tiers first" hint) while the job was still completing. It now polls for up to 30s, reports success when the VPC is gone, and otherwise says the deletion may still be in progress or blocked, with the exact command to check.
+- **`zcp vpc delete` — false "may not have been deleted" warning** — deletion is an async platform job, but the command checked existence once after 2s and reported failure (with a misleading "delete all network tiers first" hint) while the job was still completing. It now polls for up to 30s, reports success when the VPC is gone, and otherwise says the deletion may still be in progress or blocked, with the exact command to check.
 - **`zcp network update --description` — failed with a 500** — the API requires `name` on every PUT; a description-only update now re-sends the current name automatically.
 - **Cryptic errors when deleting already-deleted resources** — the API reports missing resources as `403 "The provided <resource> is invalid."`; this is now recognized as not-found, so `vpc delete`, `acl delete`, and `acl delete-rule` print "already deleted" and exit 0 instead of surfacing a raw 403 (validation errors, which use "selected", are unaffected).
 - **`zcp profile delete` — ignored `-y`/`--auto-approve`** — the global auto-approve flag now skips the confirmation prompt (it previously only honored its own `--yes`).
@@ -304,7 +311,7 @@ All fixes below were confirmed against the live API (YUL region) before release.
 ### Known platform limitations (not CLI bugs)
 
 - An embedded `rules` array on ACL-list create is silently ignored — create the list first, then add rules one per request (`zcp acl create-rule`).
-- VPCs are limited to 3 subnets (CloudStack `vpc.max.networks`); the 4th create returns a generic 403.
+- VPCs are limited to 3 subnets by the provider; the 4th create returns a generic 403.
 - VPC `description` is not persisted by the API.
 
 ---
@@ -318,7 +325,7 @@ All fixes below were confirmed against the live API (YUL region) before release.
 - **`zcp vpc update` — returns empty fields** — PUT `/vpcs/{slug}` returns `data:null`; the command now falls back to a GET to return the updated VPC state
 - **`zcp network update` — crashes with JSON decode error** — PUT `/networks/{slug}` returns `data:[null]` (an array); the command was attempting to unmarshal an array into a struct, causing a fatal error; now falls back to a GET after any non-usable PUT response
 - **`zcp vpn customer-gateway create/update` — all VPN config fields blank** — `CustomerGateway` struct had wrong JSON tags for three fields: `ipsec_preshared_key` → `ipsecpsk`, `force_encapsulation` → `forceencap`, `dead_peer_detection` → `dpd`; and `SplitConnections` was typed as `bool` but the API returns it as a string; all corrected
-- **`zcp vpn customer-gateway create` — shows empty result** — create API returns a metadata-only response (no VPN config); the command now calls GET `/vpn-customer-gateways/{slug}` after creation and falls back gracefully to the partial slug/name when CloudStack provisioning is still in progress
+- **`zcp vpn customer-gateway create` — shows empty result** — create API returns a metadata-only response (no VPN config); the command now calls GET `/vpn-customer-gateways/{slug}` after creation and falls back gracefully to the partial slug/name when platform provisioning is still in progress
 - **`zcp vpn customer-gateway update` — all VPN fields blank** — PUT response is a metadata-only envelope (no VPN config fields); the command now always falls back to GET `/vpn-customer-gateways/{slug}` to return the full VPN configuration
 - **`zcp vpn customer-gateway update` — `--cloud-provider`/`--region`/`--project` missing** — the API requires these three fields on every PUT; the update command now accepts and validates `--cloud-provider`, `--region`, and `--project` flags (resolving from env vars as with create)
 - **`zcp vpn user list` — Username column always blank** — `User.UserName` had JSON tag `userName` (camelCase); corrected to `username` to match the API response
@@ -438,7 +445,7 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
 
 ### Added
 
-- **`object-storage`** — full Ceph/S3 object storage management: list, get, create, delete, resize storage instances; bucket management (list, get, create, delete); object management (list, get, upload, delete); `zcp object-storage credentials` for S3 access key display. Cloud provider defaults to `ceph` — do not pass `--cloud-provider nimbo` (that is the CloudStack compute provider, not Ceph)
+- **`object-storage`** — full Ceph/S3 object storage management: list, get, create, delete, resize storage instances; bucket management (list, get, create, delete); object management (list, get, upload, delete); `zcp object-storage credentials` for S3 access key display. Cloud provider defaults to `ceph` — do not pass `--cloud-provider nimbo` (that is the compute provider, not Ceph)
 - **`zcp instance delete`** — permanently delete virtual machines; `--force` flag for immediate expunge (skips the deferred expunge window)
 - **`zcp network delete`** — delete isolated networks with confirmation; also releases the associated SOURCE-NAT IP
 - **`zcp snapshot delete`** — permanently delete block storage snapshots
@@ -456,7 +463,7 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
 
 - **`zcp vm-backup create --pseudo-service`** — flag was misspelled `--psudo-service`; corrected to `--pseudo-service` (API JSON tag `psudo_service` preserved for wire compatibility)
 - **`zcp egress create`** — protocol values were sent as-typed; API requires uppercase; `tcp`/`udp` are now normalised to `TCP`/`UDP` before the request
-- **`zcp kubernetes get`** — was showing `Workers=0`, `Version=""` for Running clusters; now reads real values from CloudStack meta fields (`meta.size`, `meta.kubernetes_version_name`, `meta.ipaddress`, `meta.end_point`)
+- **`zcp kubernetes get`** — was showing `Workers=0`, `Version=""` for Running clusters; now reads real values from platform meta fields (`meta.size`, `meta.kubernetes_version_name`, `meta.ipaddress`, `meta.end_point`)
 - **`zcp kubernetes scale --wait`** — polling loop used `context.Background()` with no upper bound; now inherits `cmd.Context()` with a 10-minute deadline; non-`Scaling` terminal states (e.g. `Error`) return an error instead of looping forever
 - **`zcp kubernetes get-config --output`** — directory creation used `strings.LastIndex` which panicked when the path had no `/`; replaced with `filepath.Dir`
 - **`zcp kubernetes scale` idempotency** — `strconv.Atoi` parse error on `meta.size` silently zeroed `currentWorkers`, causing false "already at N" matches; now falls back to the top-level `node_size` field on parse failure
@@ -464,7 +471,7 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
 
 ### Changed
 
-- **`zcp kubernetes get`** — prefers CloudStack meta fields over top-level API fields for all display values (version, workers, control nodes, IP, endpoint)
+- **`zcp kubernetes get`** — prefers platform meta fields over top-level API fields for all display values (version, workers, control nodes, IP, endpoint)
 - **`zcp kubernetes create`** — `--storage-category` is now validated as required (API returns "quota not found" without it); enhanced with `--ssh-key`, `--auth-method`, `--username`, `--password` flags
 - **`zcp plan list`** — now shows storage category in the output table
 - **Project dashboard** — updated to consume structured service data returned by the API
@@ -523,7 +530,6 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
 
 - **VPC tier/subnet creation**: Confirmed working via `POST /networks` with `type=Vpc`, `gateway`, `netmask`, `acl_id`
 - **`--cloud-provider`, `--region`, `--project` flags**: Added to network, vpc, virtualrouter, dns, vpn, autoscale create commands
-- **`docs/roadmap.md`**: Feature roadmap documenting what works, what's coming, and what's blocked on platform
 
 ### Changed
 
@@ -620,7 +626,7 @@ CLI end users are **not affected** — the binary behaviour is unchanged.
   commands now verify the resource is actually gone after delete; warn if it still exists
 - **Volume list duplicates**: Deduplicate by UUID (Kong API returns duplicate entries)
 - **Snapshot error message**: `snapshot create` on a detached volume now gives a clear
-  message instead of raw CloudStack error
+  message instead of raw platform error
 - **Firewall list on empty accounts**: Returns empty table instead of API error when
   account has no IP addresses
 

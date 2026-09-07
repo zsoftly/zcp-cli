@@ -337,7 +337,7 @@ func runVPCDelete(cmd *cobra.Command, slug string, yes bool) error {
 		return fmt.Errorf("vpc delete: %w", err)
 	}
 
-	// Deletion runs as an async CloudStack job — poll for up to ~30s before
+	// Deletion runs as an async platform job — poll for up to ~30s before
 	// drawing any conclusion, with a fresh short context per check so the
 	// command's own timeout can't cut a poll short and fake a result. Only a
 	// confirmed not-found counts as success; transient transport or server

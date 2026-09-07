@@ -130,8 +130,8 @@ func (s *Service) List(ctx context.Context, zoneSlug, region, project string) ([
 	return vpcs, nil
 }
 
-// vpcDetail is the GET /vpcs/{slug} response shape. The provider-side state
-// (CIDR, state, zone) lives under "meta", which is the raw CloudStack view;
+// vpcDetail is the GET /vpcs/{slug} response shape. The platform-side state
+// (CIDR, state, zone) lives under "meta", which is the raw platform view;
 // the list endpoint does not include it.
 type vpcDetail struct {
 	Slug        string `json:"slug"`

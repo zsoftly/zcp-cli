@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/internal/config"
+	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
@@ -1258,6 +1260,70 @@ func TestNetworkCreateRejectsUnknownType(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--type must be Isolated or L2") {
 		t.Errorf("error = %q, want '--type must be Isolated or L2'", err)
+	}
+}
+
+func TestNetworkCreateVPCSubnetLimitGuidance(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"status":"Error","message":"Something went wrong"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc", "--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected VPC subnet limit error")
+	}
+	if !strings.Contains(err.Error(), "platform default: 8 subnets per VPC") ||
+		!strings.Contains(err.Error(), "request a quota increase") ||
+		!strings.Contains(err.Error(), "rerun this command after the platform applies the increase") {
+		t.Errorf("error = %q, want VPC subnet limit guidance", err)
+	}
+	var apiErr *apierrors.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error does not preserve APIError: %v", err)
+	}
+	if apiErr.StatusCode != http.StatusForbidden || apiErr.Message != "Something went wrong" {
+		t.Errorf("APIError = %#v, want 403 Something went wrong", apiErr)
+	}
+}
+
+func TestNetworkCreateVPCNonQuota403RetainsAPIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/networks" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `{"status":"Error","message":"Access denied"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+
+	err := networkCreateExec(t,
+		"--name", "web-tier", "--vpc", "my-vpc", "--gateway", "10.30.1.1", "--netmask", "255.255.255.0", "--billing-cycle", "hourly",
+		"--cloud-provider", "nimbo", "--region", "yul-1", "--project", "default-9", "--api-url", srv.URL)
+	if err == nil {
+		t.Fatal("expected API error")
+	}
+	if strings.Contains(err.Error(), "VPC subnet limit reached") {
+		t.Errorf("error = %q, must not classify a non-quota 403 as a quota error", err)
+	}
+	var apiErr *apierrors.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error does not preserve APIError: %v", err)
+	}
+	if apiErr.StatusCode != http.StatusForbidden || apiErr.Message != "Access denied" {
+		t.Errorf("APIError = %#v, want 403 Access denied", apiErr)
 	}
 }
 

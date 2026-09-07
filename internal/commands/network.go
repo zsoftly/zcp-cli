@@ -3,7 +3,9 @@ package commands
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -234,6 +236,9 @@ func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest, aclRef stri
 
 	n, err := svc.Create(ctx, req)
 	if err != nil {
+		if req.VPC != "" && isVPCSubnetQuotaError(err) {
+			return fmt.Errorf("network create: VPC subnet limit reached (platform default: 8 subnets per VPC); open a support ticket to request a quota increase, then rerun this command after the platform applies the increase: %w", err)
+		}
 		return fmt.Errorf("network create: %w", err)
 	}
 
@@ -286,6 +291,16 @@ func runNetworkCreate(cmd *cobra.Command, req network.CreateRequest, aclRef stri
 		{"State", state},
 	}
 	return printer.PrintTable(headers, rows)
+}
+
+// isVPCSubnetQuotaError identifies the CMP response returned when the platform
+// rejects a VPC tier because the VPC has reached vpc.max.networks. Keep this
+// intentionally narrow: other 403 responses must retain their API error.
+func isVPCSubnetQuotaError(err error) bool {
+	var apiErr *apierrors.APIError
+	return errors.As(err, &apiErr) &&
+		apiErr.StatusCode == http.StatusForbidden &&
+		strings.TrimSpace(apiErr.Message) == "Something went wrong"
 }
 
 func newNetworkUpdateCmd() *cobra.Command {

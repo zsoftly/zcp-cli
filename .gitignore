@@ -124,7 +124,6 @@ tmp/*
 **/explore-*.yml
 
 # Local test/deployment scripts
-ansible/cloudstack/tests/
 
 # Go binaries and build artifacts
 bin/

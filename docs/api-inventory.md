@@ -107,7 +107,7 @@
 | --- | --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------ | --------- |
 | 59  | `/networks`                                   | GET    | List networks                                                                              | `network` |
 | 60  | `/networks`                                   | POST   | Create network (isolated/L2 need `network_plan`+`type`; VPC subnets need `vpc`+`type=Vpc`) | `network` |
-| 61  | `/networks/{SLUG}`                            | GET    | Get network detail (CloudStack `meta`: cidr, state, vpc_id, acl_name)                      | `network` |
+| 61  | `/networks/{SLUG}`                            | GET    | Get network detail (platform `meta`: cidr, state, vpc_id, acl_name)                        | `network` |
 | 61b | `/networks/{SLUG}`                            | PUT    | Update network                                                                             | `network` |
 | 61c | `/networks/{SLUG}/replace-acl-list`           | POST   | Replace network ACL (body: `acl_id`)                                                       | `acl`     |
 | 62  | `/networks/categories`                        | GET    | List network categories                                                                    | `network` |

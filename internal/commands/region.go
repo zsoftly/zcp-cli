@@ -47,8 +47,7 @@ func runRegionList(cmd *cobra.Command) error {
 	}
 
 	// PROVIDER and COMING SOON are intentionally omitted: the provider name
-	// (e.g. "Cloud Stack", "Ceph") leaks backend technology and must not be
-	// exposed to users.
+	// leaks backend technology and must not be exposed to users.
 	headers := []string{"SLUG", "NAME", "COUNTRY", "CONTINENT", "STATUS"}
 	rows := make([][]string, 0, len(regions))
 	for _, r := range regions {

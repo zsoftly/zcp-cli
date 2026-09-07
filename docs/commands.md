@@ -298,6 +298,8 @@ zcp vpc create \
 zcp network create --name web-tier --vpc my-vpc \
   --gateway 10.1.1.1 --netmask 255.255.255.0 \
   --billing-cycle hourly --region yul-1 --project default-9
+# A VPC supports 8 subnets by default. Open a support ticket to request a
+# higher limit, then rerun this command after the platform applies it.
 # 2. attach a VM to the tier ('instance create' provisions its own network via
 #    --network-plan and does not take a VPC tier directly, so attach afterward)
 zcp instance add-network <vm-slug> --network web-tier
