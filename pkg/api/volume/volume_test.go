@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,12 +84,15 @@ func TestVolumeListPagination(t *testing.T) {
 		"2": {{ID: "vol-2", Slug: "vol-2"}},
 	}
 	var requestedPages []string
+	var requestedPagesMu sync.Mutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := r.URL.Query().Get("page")
 		if page == "" {
 			page = "1"
 		}
+		requestedPagesMu.Lock()
 		requestedPages = append(requestedPages, page)
+		requestedPagesMu.Unlock()
 		if got := r.URL.Query().Get("filter[region]"); got != "ca-central" {
 			t.Errorf("region filter = %q, want ca-central", got)
 		}
@@ -115,7 +119,10 @@ func TestVolumeListPagination(t *testing.T) {
 	if got, want := volumes[1].Slug, "vol-2"; got != want {
 		t.Errorf("volumes[1].Slug = %q, want %q", got, want)
 	}
-	if got, want := requestedPages, []string{"1", "2"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	requestedPagesMu.Lock()
+	got := append([]string(nil), requestedPages...)
+	requestedPagesMu.Unlock()
+	if want := []string{"1", "2"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("requested pages = %v, want %v", got, want)
 	}
 }
@@ -135,6 +142,33 @@ func TestVolumeListPaginationRejectsIgnoredPage(t *testing.T) {
 	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
 	if err == nil {
 		t.Fatal("List() error = nil, want an error when the API ignores page 2")
+	}
+}
+
+func TestVolumeListPaginationRejectsMissingCurrentPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		if page == "" {
+			json.NewEncoder(w).Encode(listResponse{
+				Status:      "Success",
+				CurrentPage: 1,
+				Data:        []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+				Total:       2,
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(listResponse{
+			Status: "Success",
+			Data:   []volume.Volume{{ID: "vol-1", Slug: "vol-1"}},
+			Total:  2,
+		})
+	}))
+	defer srv.Close()
+
+	_, err := volume.NewService(newTestClient(t, srv)).List(context.Background(), "", "")
+	if err == nil {
+		t.Fatal("List() error = nil, want an error when the API omits current_page for page 2")
 	}
 }
 

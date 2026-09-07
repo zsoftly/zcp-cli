@@ -156,16 +156,21 @@ const maxListPages = 1000
 
 // List returns all block storage volumes. Use the include parameter to embed related resources.
 func (s *Service) List(ctx context.Context, region, project string) ([]Volume, error) {
+	baseQuery := url.Values{
+		"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
+	}
+	if region != "" {
+		baseQuery.Set("filter[region]", region)
+	}
+	if project != "" {
+		baseQuery.Set("filter[project]", project)
+	}
+
 	var all []Volume
 	for page := 1; page <= maxListPages; page++ {
-		q := url.Values{
-			"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
-		}
-		if region != "" {
-			q.Set("filter[region]", region)
-		}
-		if project != "" {
-			q.Set("filter[project]", project)
+		q := make(url.Values, len(baseQuery))
+		for key, values := range baseQuery {
+			q[key] = append([]string(nil), values...)
 		}
 		if page > 1 {
 			q.Set("page", fmt.Sprintf("%d", page))
@@ -173,10 +178,13 @@ func (s *Service) List(ctx context.Context, region, project string) ([]Volume, e
 
 		var resp listResponse
 		if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
-			return nil, fmt.Errorf("listing block storages: %w", err)
+			return nil, fmt.Errorf("listing volumes: %w", err)
+		}
+		if page > 1 && resp.CurrentPage == 0 {
+			return nil, fmt.Errorf("listing volumes: requested page %d but the API did not return pagination metadata", page)
 		}
 		if resp.CurrentPage > 0 && resp.CurrentPage != page {
-			return nil, fmt.Errorf("listing block storages: requested page %d but the API returned page %d", page, resp.CurrentPage)
+			return nil, fmt.Errorf("listing volumes: requested page %d but the API returned page %d", page, resp.CurrentPage)
 		}
 		all = append(all, resp.Data...)
 
@@ -187,13 +195,13 @@ func (s *Service) List(ctx context.Context, region, project string) ([]Volume, e
 			return all, nil
 		}
 		if len(resp.Data) == 0 {
-			return nil, fmt.Errorf("listing block storages: page %d was empty before reaching reported total %d", page, resp.Total)
+			return nil, fmt.Errorf("listing volumes: page %d was empty before reaching reported total %d", page, resp.Total)
 		}
 		if len(all) >= resp.Total {
 			return all, nil
 		}
 	}
-	return nil, fmt.Errorf("listing block storages: exceeded %d pages without reaching the reported total", maxListPages)
+	return nil, fmt.Errorf("listing volumes: exceeded %d pages without reaching the reported total", maxListPages)
 }
 
 // Create creates a new block storage volume.
