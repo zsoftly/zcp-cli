@@ -10,19 +10,38 @@ import (
 
 // FirewallRule represents a ZCP firewall rule from the STKCNSL API.
 type FirewallRule struct {
-	ID                  string        `json:"id"`
-	RuleID              string        `json:"rule_id"`
-	Protocol            string        `json:"protocol"`
-	StartPort           interface{}   `json:"start_port"`
-	EndPort             interface{}   `json:"end_port"`
-	CIDRList            string        `json:"cidr_list"`
-	DestinationCIDRList string        `json:"destination_cidr_list"`
-	ICMPType            string        `json:"icmp_type"`
-	ICMPCode            string        `json:"icmp_code"`
-	State               string        `json:"state"`
-	CreatedAt           string        `json:"created_at"`
-	UpdatedAt           string        `json:"updated_at"`
-	Original            *FirewallRule `json:"_original,omitempty"`
+	ID                  string      `json:"id"`
+	RuleID              string      `json:"rule_id"`
+	Protocol            string      `json:"protocol"`
+	StartPort           interface{} `json:"start_port"`
+	EndPort             interface{} `json:"end_port"`
+	CIDRList            string      `json:"cidr_list"`
+	DestinationCIDRList string      `json:"destination_cidr_list"`
+	ICMPType            string      `json:"icmp_type"`
+	ICMPCode            string      `json:"icmp_code"`
+	State               string      `json:"state"`
+	CreatedAt           string      `json:"created_at"`
+	UpdatedAt           string      `json:"updated_at"`
+	// Original is the nested "_original" object the list endpoint returns.
+	// The API leaves the top-level state empty and reports it only here
+	// (verified live 2026-09-07). Only the fields whose names match the
+	// top-level ones (id, protocol, state) decode from it; the rest of the
+	// nested object uses un-underscored keys such as "cidrlist".
+	Original *FirewallRule `json:"_original,omitempty"`
+}
+
+// EffectiveState returns the rule's state, preferring the top-level field
+// and falling back to the nested "_original" object the list endpoint
+// populates instead. It is nil-safe, so a rule without "_original" (for
+// example from the create response) yields "" rather than a panic.
+func (r *FirewallRule) EffectiveState() string {
+	if r.State != "" {
+		return r.State
+	}
+	if r.Original != nil {
+		return r.Original.State
+	}
+	return ""
 }
 
 // CreateRequest holds parameters for creating a firewall rule.

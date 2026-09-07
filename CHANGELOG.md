@@ -21,6 +21,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
+- **`firewall list` shows the rule state.** The list endpoint leaves the top-level `state` field empty and reports it only inside a nested `_original` object, so the STATE column was always blank. The column now reads the nested value, and a rule without that object shows an empty cell instead of failing. _Contributed by @cokerrd (#53, fixes #52)._
 - **`autoscale policy delete` and `autoscale condition delete` print the numeric ID in their not-found message.** The message used `%q` with an integer, which rendered the ID as a quoted character instead of a number. Caught by `go vet` under Go 1.26.8.
 - **The `integration`-tagged test suite compiles again.** It had not compiled since June, when the instance, volume, snapshot, network and plan listings gained region and project arguments and `volume.Attach` changed its return type. The suite now passes the detected region and project through every listing. Its read-only phase was run against the live API to confirm.
 - **`instance ssh` now prefers the public IP.** Previously it always connected over the private address. Its public-IP fallback read the VM's top-level `public_ip` field, which the API leaves null even when a public IP is attached. It now checks the `ipaddresses` list the same way `instance get` does. It connects to the public IP when one is attached and falls back to the private IP otherwise. An explicit `--user root` is now honoured instead of being replaced by the VM's reported username.
