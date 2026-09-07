@@ -5,11 +5,12 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.0.28] - 2026-09-07
 
 ### Added
 
 - **`instance ssh` supports `--use-public` and `--use-private`.** These flags force the connection over the VM's public or private IP address. The two flags are mutually exclusive.
+- **SDK additions for library consumers.** `response.ParseFlexInt`, `backup.Backup.Blockstorage` with `VolumeSlug()`, `vmbackup.VMBackup.VirtualMachine` with `VMSlug()`, `vmbackup.ServiceName`, `firewall.FirewallRule.EffectiveState()`, and `dns.Domain.StatusKnown`. `apierrors.IsResourceNotFound` also recognises the API's "The selected <resource> not found." message.
 
 ### Changed
 
@@ -21,6 +22,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
+- **`dns show` no longer reports a domain as `false` when the API did not say so.** The show endpoint returns no `status` field, unlike `dns list`, so the CLI printed a fabricated `false`. It now prints `-` when the endpoint does not report a status. _Fixes #51._
 - **`firewall list` shows the rule state.** The list endpoint leaves the top-level `state` field empty and reports it only inside a nested `_original` object, so the STATE column was always blank. The column now reads the nested value, and a rule without that object shows an empty cell instead of failing. _Contributed by @cokerrd (#53, fixes #52)._
 - **`autoscale policy delete` and `autoscale condition delete` print the numeric ID in their not-found message.** The message used `%q` with an integer, which rendered the ID as a quoted character instead of a number. Caught by `go vet` under Go 1.26.8.
 - **The `integration`-tagged test suite compiles again.** It had not compiled since June, when the instance, volume, snapshot, network and plan listings gained region and project arguments and `volume.Attach` changed its return type. The suite now passes the detected region and project through every listing. Its read-only phase was run against the live API to confirm.
@@ -35,6 +37,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 - **`--debug` output no longer leaks the account's API token.** Some list endpoints echo the account's full bearer token in a nested `access_key_token` field. Debug output now redacts that field, related credential fields such as `token` and `password`, and the configured bearer token wherever it appears in a response body. Error messages built from response bodies the CLI cannot parse are redacted the same way, so an unparseable error body cannot echo a credential. Redaction also covers other common secret field names such as `client_secret` and `private_key`.
 
 ## [v0.0.27] - 2026-08-31
+
+_This version was prepared but never tagged or published. Its changes ship in v0.0.28._
 
 ### Added
 
