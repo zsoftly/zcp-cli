@@ -14,11 +14,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Changed
 
+- **`ip allocate --vpc` help text notes the precondition.** The API rejects an allocation into a VPC that has no network yet with "We cannot acquire IP Address when there are no networks in vpc." The flag help and the command reference now say so. _Relates to #57._
 - **Go toolchain `1.26.6` -> `1.26.8`.** The `go.mod` `go` directive moves from `1.25.0` to `1.26.0` because `golang.org/x/crypto` v0.56.0 requires it. CI workflows and the documented requirement were updated to match.
 - **`backup create` and `vm-backup create` now validate `--interval` client-side.** The API only accepts `dailyAt` and `hourlyAt`. It rejected every other value, including the previous `vm-backup create` default of `daily`, with "The selected interval is invalid." Both commands now catch an unsupported value before sending the request and list the accepted ones.
 - **`backup list` shows the volume slug, not a blank ID.** The VOLUME column (renamed from VOLUME ID) now reads the nested `blockstorage` object the API returns for list responses. It also gained AT and SCHEDULED AT columns next to INTERVAL. In JSON output the key changes from `volume_id` to `volume`, and `at` and `scheduled_at` are new.
 - **`backup create` shows the volume slug you passed, not a blank ID.** The create response has no nested `blockstorage` object, so the VOLUME column echoes the `--volume` flag instead. It also gained an AT column next to INTERVAL.
 - **`vm-backup list` columns changed.** ID and STATE are gone. The API's list items carry no top-level VM ID, and `state` was always blank, so both columns were dropped and the `id` key no longer appears in `-o json`. VM now shows the VM slug from the nested `virtual_machine` object. Three columns were added: INTERVAL, AT, and SCHEDULED AT.
+- **`object-storage bucket encryption enable` now refuses to run and explains why.** The region's Ceph RADOS Gateway has no encryption key backend configured. It accepts the enable request and then rejects every upload to the bucket with a 400 InvalidArgument error until encryption is disabled again. The command now fails fast with an explanation instead of reporting success. `status` and `disable` still work, so an existing setting can be checked or cleared. _Relates to #54._
 
 ### Fixed
 

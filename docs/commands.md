@@ -248,6 +248,8 @@ zcp network create --name web-tier --vpc <vpc-slug> --acl <acl-name> \
 # Public IP addresses. Plan slugs come from `zcp plan ip`
 zcp ip list
 zcp ip allocate --network <slug> --plan <ip-plan> --billing-cycle hourly
+# Allocating into a VPC needs at least one network in that VPC first, or the API rejects it
+zcp ip allocate --vpc <vpc-slug> --plan <ip-plan> --billing-cycle hourly
 zcp ip release <slug>
 zcp ip static-nat enable <ip-slug> --instance <vm-slug> --network <network-slug>
 
@@ -611,6 +613,10 @@ zcp object-storage bucket tag set <slug> <bucket-slug> --tag env=prod --tag team
 zcp object-storage bucket tag delete <slug> <bucket-slug>
 
 # Default encryption (SSE-S3)
+# `enable` is not currently supported: the region's gateway has no encryption
+# key backend, and enabling SSE-S3 makes every upload to the bucket fail
+# until it is disabled again. `status` and `disable` remain available so you
+# can check or clear an existing setting.
 zcp object-storage bucket encryption status <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug>
 zcp object-storage bucket encryption disable <slug> <bucket-slug>

@@ -782,6 +782,14 @@ func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName stri
 }
 
 // SetBucketEncryption enables default SSE-S3 encryption on a bucket.
+//
+// Warning: as of issue #54, the region's Ceph RADOS Gateway has no
+// encryption key backend configured. It accepts this call and then rejects
+// every subsequent PutObject on the bucket with a 400 InvalidArgument error
+// until DisableBucketEncryption is called. The CLI's 'bucket encryption
+// enable' command refuses to call this method until the platform fixes the
+// gateway. This method is left in place because the Terraform provider may
+// still reference it.
 func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string) error {
 	mc, err := s.s3(ctx, slug)
 	if err != nil {

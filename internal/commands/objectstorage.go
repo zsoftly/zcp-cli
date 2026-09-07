@@ -719,21 +719,18 @@ func newOSBucketEncryptionCmd() *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "enable <storage-slug> <bucket-slug>",
-		Short: "Enable default SSE-S3 encryption on a bucket",
-		Args:  exactArgs(2),
+		Short: "Not supported on this platform yet: enabling default SSE-S3 encryption breaks uploads",
+		Long: `Not supported on this platform yet.
+
+The object storage gateway has no encryption key backend configured. Enabling
+default SSE-S3 encryption on a bucket makes every subsequent upload to that
+bucket fail with a 400 InvalidArgument error until encryption is disabled
+again. This command is kept registered for help and scripting purposes, but
+it refuses to run. Use 'status' to check a bucket's current encryption, or
+'disable' to clear a setting that is already causing this problem.`,
+		Args: exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, client, _, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-			svc := objectstorage.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-			if err := svc.SetBucketEncryption(ctx, args[0], args[1]); err != nil {
-				return fmt.Errorf("object-storage bucket encryption enable: %w", err)
-			}
-			fmt.Fprintf(os.Stdout, "Default SSE-S3 encryption enabled on bucket %q.\n", args[1])
-			return nil
+			return fmt.Errorf("bucket encryption enable is not supported on this platform yet: the object storage gateway has no encryption key backend, and enabling default SSE-S3 makes every upload to the bucket fail with InvalidArgument until it is disabled again. Use 'zcp object-storage bucket encryption status' and 'encryption disable' to check or clear an existing setting. Support will return once the platform adds it")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{

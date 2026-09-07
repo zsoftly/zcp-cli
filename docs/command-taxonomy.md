@@ -213,7 +213,7 @@ zcp
 │   │   ├── versioning                 Object versioning (S3): enable | suspend | status
 │   │   ├── policy                     Raw S3 bucket policy (S3): get | set --file | delete
 │   │   ├── tag                        Bucket tags (S3): get | set --tag k=v | delete
-│   │   ├── encryption                 Default SSE-S3 encryption (S3): status | enable | disable
+│   │   ├── encryption                 Default SSE-S3 encryption (S3): status | enable (not supported yet) | disable
 │   │   ├── lifecycle                  Expiration rules (S3): expire --days|--noncurrent-days|--abort-multipart-days [--prefix] | get | delete
 │   │   ├── cors                       Cross-origin rules (S3): set --origin --method [--header --max-age] | get | delete
 │   │   ├── uploads                    Incomplete multipart uploads (S3): list | abort

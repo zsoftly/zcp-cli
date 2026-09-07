@@ -117,6 +117,15 @@ VM backup listings now walk every page, and both backup types decode the
 scheduled hour from a number or a string. The changelog lists the new helper
 methods.
 
+## Known limitation
+
+**`object-storage bucket encryption enable` is disabled.** The region's Ceph
+RADOS Gateway has no encryption key backend configured. Enabling SSE-S3
+default encryption makes every subsequent upload to the bucket fail until
+encryption is disabled again. The command now refuses to run and explains
+why. `status` and `disable` still work, so you can check or clear an
+existing setting. See #54.
+
 ---
 
 ## Installation and upgrade
