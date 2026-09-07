@@ -150,22 +150,50 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns block storage volumes. Use the include parameter to embed related resources.
+// maxListPages bounds paginated List loops so a server that reports an invalid
+// total cannot cause an unbounded request loop.
+const maxListPages = 1000
+
+// List returns all block storage volumes. Use the include parameter to embed related resources.
 func (s *Service) List(ctx context.Context, region, project string) ([]Volume, error) {
-	q := url.Values{
-		"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
+	var all []Volume
+	for page := 1; page <= maxListPages; page++ {
+		q := url.Values{
+			"include": {"cloud_provider,region,virtual_machine,project,snapshots,offering"},
+		}
+		if region != "" {
+			q.Set("filter[region]", region)
+		}
+		if project != "" {
+			q.Set("filter[project]", project)
+		}
+		if page > 1 {
+			q.Set("page", fmt.Sprintf("%d", page))
+		}
+
+		var resp listResponse
+		if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
+			return nil, fmt.Errorf("listing block storages: %w", err)
+		}
+		if resp.CurrentPage > 0 && resp.CurrentPage != page {
+			return nil, fmt.Errorf("listing block storages: requested page %d but the API returned page %d", page, resp.CurrentPage)
+		}
+		all = append(all, resp.Data...)
+
+		// A missing total is treated as a non-paginated response. With a reported
+		// total, an empty page before the collection is complete is malformed: do
+		// not return a partial volume list.
+		if resp.Total == 0 {
+			return all, nil
+		}
+		if len(resp.Data) == 0 {
+			return nil, fmt.Errorf("listing block storages: page %d was empty before reaching reported total %d", page, resp.Total)
+		}
+		if len(all) >= resp.Total {
+			return all, nil
+		}
 	}
-	var resp listResponse
-	if region != "" {
-		q.Set("filter[region]", region)
-	}
-	if project != "" {
-		q.Set("filter[project]", project)
-	}
-	if err := s.client.Get(ctx, "/blockstorages", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing block storages: %w", err)
-	}
-	return resp.Data, nil
+	return nil, fmt.Errorf("listing block storages: exceeded %d pages without reaching the reported total", maxListPages)
 }
 
 // Create creates a new block storage volume.

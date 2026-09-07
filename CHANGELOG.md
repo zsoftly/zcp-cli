@@ -5,6 +5,12 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Block-storage volume listings now retrieve every page.** Volume lookups no longer miss volumes beyond the API's first results page.
+
 ## [v0.0.28] - 2026-09-07
 
 ### Added
