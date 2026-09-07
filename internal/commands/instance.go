@@ -1583,14 +1583,19 @@ func cancelBillingCycle(vm *instance.VirtualMachine) (string, bool) {
 func newInstanceSSHCmd() *cobra.Command {
 	var user, identityFile string
 	var port int
+	var usePublic, usePrivate bool
 
 	cmd := &cobra.Command{
 		Use:   "ssh <slug>",
 		Short: "Open an SSH session to a virtual machine",
 		Long: `Open an SSH session to a virtual machine by resolving its IP address via the API.
 
-The CLI looks up the VM's private or public IP and connects. The default SSH user
-is "root"; use --user to override.
+The CLI prefers the VM's public IP address and falls back to its private IP
+when no public IP is attached. Use --use-public to require the public IP.
+Use --use-private to require the private IP and connect over the VPC/VPN.
+The two flags are mutually exclusive. The default SSH user comes from the
+VM's username as reported by the API, falling back to "root" when the API
+reports none. Use --user to override.
 
 Requirements:
   - ssh must be installed and available in your PATH
@@ -1598,18 +1603,103 @@ Requirements:
 		Args: exactArgs(1),
 		Example: `  zcp instance ssh my-vm
   zcp instance ssh my-vm --user ubuntu
+  zcp instance ssh my-vm --use-private
   zcp instance ssh my-vm --user root --identity-file ~/.ssh/my-key.pem`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInstanceSSH(cmd, args[0], user, identityFile, port)
+			return runInstanceSSH(cmd, args[0], user, identityFile, port, usePublic, usePrivate)
 		},
 	}
 	cmd.Flags().StringVar(&user, "user", "root", "SSH username")
 	cmd.Flags().StringVarP(&identityFile, "identity-file", "i", "", "Path to SSH private key file")
 	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
+	cmd.Flags().BoolVar(&usePublic, "use-public", false, "Force connecting over the VM's public IP address (mutually exclusive with --use-private)")
+	cmd.Flags().BoolVar(&usePrivate, "use-private", false, "Force connecting over the VM's private IP address, VPC/VPN (mutually exclusive with --use-public)")
 	return cmd
 }
 
-func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port int) error {
+// sshTargetIP selects the IP address `zcp instance ssh` should connect to, and
+// reports whether it is the VM's "public" or "private" address so the caller
+// can log which one was chosen.
+//
+// By default it prefers the public address: the VM's top-level public_ip is
+// null even when a public IP is attached, so GetPublicIPAddress (which scans
+// ipaddresses for ip_type == "Public IP") is tried first, then the top-level
+// PublicIP field as a secondary source. If neither yields a public IP, it
+// falls back to the private address (PrivateIP, then the default network's
+// pivot IP). --use-public and --use-private force one address family and
+// error out if the VM has none of that kind; passing both is rejected as
+// mutually exclusive.
+func sshTargetIP(vm *instance.VirtualMachine, usePublic, usePrivate bool) (ip string, kind string, err error) {
+	if vm == nil {
+		return "", "", fmt.Errorf("instance has no usable IP address")
+	}
+
+	if usePublic && usePrivate {
+		return "", "", fmt.Errorf("--use-public and --use-private are mutually exclusive")
+	}
+
+	if usePrivate {
+		ip = instance.StringVal(vm.PrivateIP)
+		if ip == "" {
+			ip = vm.NetworkPrivateIP()
+		}
+		if ip == "" {
+			return "", "", fmt.Errorf("instance %s has no private IP address", vm.Slug)
+		}
+		return ip, "private", nil
+	}
+
+	if usePublic {
+		ip = vm.GetPublicIPAddress()
+		if ip == "" {
+			ip = instance.StringVal(vm.PublicIP)
+		}
+		if ip == "" {
+			return "", "", fmt.Errorf("instance %s has no public IP address. Use --use-private to connect over the VPC/VPN", vm.Slug)
+		}
+		return ip, "public", nil
+	}
+
+	// Default: prefer public, fall back to private.
+	ip = vm.GetPublicIPAddress()
+	if ip == "" {
+		ip = instance.StringVal(vm.PublicIP)
+	}
+	if ip != "" {
+		return ip, "public", nil
+	}
+
+	ip = instance.StringVal(vm.PrivateIP)
+	if ip == "" {
+		ip = vm.NetworkPrivateIP()
+	}
+	if ip != "" {
+		return ip, "private", nil
+	}
+
+	return "", "", fmt.Errorf("instance %s has no usable IP address", vm.Slug)
+}
+
+// sshUser resolves the SSH username to connect as. If the --user flag was
+// explicitly set to a non-empty value, it always wins, even when the value
+// is "root". An explicitly set but empty --user is treated as unset.
+// Otherwise the VM's reported username is used when available, falling back
+// to "root".
+func sshUser(flagUser string, flagSet bool, vmUsername string) string {
+	if flagSet && flagUser != "" {
+		return flagUser
+	}
+	if vmUsername != "" {
+		return vmUsername
+	}
+	return "root"
+}
+
+func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port int, usePublic, usePrivate bool) error {
+	if usePublic && usePrivate {
+		return fmt.Errorf("--use-public and --use-private are mutually exclusive")
+	}
+
 	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -1629,22 +1719,12 @@ func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port in
 		return fmt.Errorf("resolving instance IP: %w", err)
 	}
 
-	// Prefer private IP; fall back to network pivot IP, then public IP
-	ip := instance.StringVal(vm.PrivateIP)
-	if ip == "" {
-		ip = vm.NetworkPrivateIP()
-	}
-	if ip == "" {
-		ip = instance.StringVal(vm.PublicIP)
-	}
-	if ip == "" {
-		return fmt.Errorf("instance %s has no usable IP address", slug)
+	ip, kind, err := sshTargetIP(vm, usePublic, usePrivate)
+	if err != nil {
+		return err
 	}
 
-	// Use VM username if no --user override and username is available
-	if user == "root" && vm.Username != "" {
-		user = vm.Username
-	}
+	user = sshUser(user, cmd.Flags().Changed("user"), vm.Username)
 
 	// Build SSH command
 	sshArgs := []string{}
@@ -1661,7 +1741,7 @@ func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port in
 		return fmt.Errorf("ssh not found in PATH: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Connecting to %s@%s...\n", user, ip)
+	fmt.Fprintf(os.Stderr, "Connecting to %s@%s (%s IP)...\n", user, ip, kind)
 
 	sshCmd := exec.CommandContext(context.Background(), sshPath, sshArgs...)
 	sshCmd.Stdin = os.Stdin

@@ -262,3 +262,30 @@ func TestIsResourceNotFoundProvidedInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestIsResourceNotFoundSelectedNotFound(t *testing.T) {
+	cases := []struct {
+		status int
+		msg    string
+		want   bool
+	}{
+		// Verified live 2026-09-06: cancelling a VM backup schedule for a slug
+		// that does not exist returns this exact 403 message.
+		{403, "The selected service not found.", true},
+		{403, "The selected service not found", true},
+		// The "provided ... is invalid" phrasing must still match (left as-is).
+		{403, "The provided service is invalid.", true},
+		// Validation-style "selected" messages that aren't the not-found phrase
+		// must NOT match.
+		{403, "The selected vpc is invalid.", false},
+		{422, "The selected service not found.", false},
+		// Anchored match: phrase embedded in a longer message must NOT match.
+		{403, "Error: The selected service not found. Try again.", false},
+	}
+	for _, c := range cases {
+		err := &apierrors.APIError{StatusCode: c.status, Message: c.msg}
+		if got := apierrors.IsResourceNotFound(err); got != c.want {
+			t.Errorf("IsResourceNotFound(%d, %q) = %v, want %v", c.status, c.msg, got, c.want)
+		}
+	}
+}

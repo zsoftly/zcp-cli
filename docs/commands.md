@@ -160,9 +160,12 @@ zcp instance tag-delete <slug> --key env
 # Addons
 zcp instance addons <slug>
 
-# Open an SSH session directly from the CLI
+# Open an SSH session directly from the CLI (prefers the public IP, falls back to the private IP)
+# Stock Ubuntu images need --user ubuntu unless the API reports a username
 zcp instance ssh <slug>
 zcp instance ssh <slug> --user ubuntu
+zcp instance ssh <slug> --use-private       # force the private IP (VPC/VPN)
+zcp instance ssh <slug> --use-public        # force the public IP
 zcp instance ssh <slug> --user root --identity-file ~/.ssh/my-key.pem --port 2222
 
 # Delete an instance permanently (releases the auto-assigned public IP by default)
@@ -432,17 +435,20 @@ zcp dns delete <domain-slug>
 
 ```bash
 # Block storage (volume) backups. Plans are region-specific: zcp plan backup
+# --interval accepts dailyAt or hourlyAt only. The API rejects any other value.
 zcp backup list
 zcp backup create --volume root-1234 --interval dailyAt --at 1 --immediate 1 \
   --plan backup-yul --billing-cycle hourly --region yul-1 --project default-9
 zcp backup delete <slug>
 
-# VM backups
+# VM backups. --interval accepts dailyAt or hourlyAt only. The API rejects any other value.
 zcp vm-backup list
-zcp vm-backup create <vm-slug> --interval daily --plan backup-yul \
+zcp vm-backup create <vm-slug> --interval dailyAt --plan backup-yul \
   --pseudo-service vm-backup --billing-cycle hourly --region yul-1 --project default-9
 zcp vm-backup delete <slug>
 ```
+
+`vm-backup delete` submits a service-cancellation request, the same workflow `instance delete` uses, since the VM backup API route does not support direct deletion.
 
 ---
 

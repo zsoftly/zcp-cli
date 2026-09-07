@@ -47,6 +47,12 @@ func IsForbidden(err error) bool {
 // full message so unrelated 403s containing similar words don't match.
 var providedInvalidRE = regexp.MustCompile(`(?i)^the provided [a-z0-9 _-]+ is invalid\.?$`)
 
+// selectedNotFoundRE matches the CMP's "selected service not found" 403
+// phrasing, e.g. "The selected service not found." (verified live 2026-09-06
+// against a VM backup cancellation for a nonexistent slug). Anchored to the
+// full message like providedInvalidRE so unrelated 403s don't match.
+var selectedNotFoundRE = regexp.MustCompile(`(?i)^the selected [a-z0-9 _-]+ not found\.?$`)
+
 // transientRoutingRE matches the CMP's known routing-layer error phrase.
 // Expected format: "The route <path> could not be found."
 var transientRoutingRE = regexp.MustCompile(`(?i)\bthe route\b.*could not be found`)
@@ -84,7 +90,11 @@ func IsResourceNotFound(err error) bool {
 	if strings.Contains(strings.ToLower(ae.Message), "not-found") {
 		return true
 	}
-	return providedInvalidRE.MatchString(strings.TrimSpace(ae.Message))
+	msg := strings.TrimSpace(ae.Message)
+	if providedInvalidRE.MatchString(msg) {
+		return true
+	}
+	return selectedNotFoundRE.MatchString(msg)
 }
 
 // apiErrorResponse mirrors the STKCNSL error envelope:

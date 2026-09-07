@@ -80,7 +80,7 @@ zcp
 │   ├── add-network                    Attach an additional network to an instance
 │   ├── addons                         List available addons for an instance
 │   ├── purchase-addon                 Purchase an addon for an instance
-│   ├── ssh                            Open an SSH session to an instance
+│   ├── ssh                            Open an SSH session to an instance; prefers the public IP, falls back to the private IP (--use-public / --use-private to force one)
 │   └── delete                         Permanently delete an instance; releases its auto-assigned public IP by default (--delete-public-ip=false to keep it)
 │
 ├── volume                             Block storage volume operations
@@ -383,7 +383,7 @@ zcp
 │
 ├── backup                             Block storage backup operations
 │   ├── list                           List block storage backups
-│   ├── create                         Create a block storage backup
+│   ├── create                         Create a block storage backup (--interval dailyAt|hourlyAt)
 │   └── delete                         Permanently delete a block storage backup (--yes to skip prompt)
 │
 ├── profile-info                       User profile management (2FA status shown via get, not managed)
@@ -398,8 +398,8 @@ zcp
 │
 ├── vm-backup                          VM backup operations
 │   ├── list                           List VM backups
-│   ├── create                         Create a VM backup
-│   └── delete                         Permanently delete a VM backup (--yes to skip prompt)
+│   ├── create                         Create a VM backup (--interval dailyAt|hourlyAt)
+│   └── delete                         Delete a VM backup by submitting a service-cancellation request (--yes to skip prompt)
 │
 ├── cloud-provider                     Cloud provider operations
 │   └── list                           List available cloud providers

@@ -5,6 +5,30 @@ All notable changes to zcp will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`instance ssh` supports `--use-public` and `--use-private`.** These flags force the connection over the VM's public or private IP address. The two flags are mutually exclusive.
+
+### Changed
+
+- **`backup create` and `vm-backup create` now validate `--interval` client-side.** The API only accepts `dailyAt` and `hourlyAt`. It rejected every other value, including the previous `vm-backup create` default of `daily`, with "The selected interval is invalid." Both commands now catch an unsupported value before sending the request and list the accepted ones.
+- **`backup list` shows the volume slug, not a blank ID.** The VOLUME column (renamed from VOLUME ID) now reads the nested `blockstorage` object the API returns for list responses. It also gained AT and SCHEDULED AT columns next to INTERVAL. In JSON output the key changes from `volume_id` to `volume`, and `at` and `scheduled_at` are new.
+- **`backup create` shows the volume slug you passed, not a blank ID.** The create response has no nested `blockstorage` object, so the VOLUME column echoes the `--volume` flag instead. It also gained an AT column next to INTERVAL.
+- **`vm-backup list` columns changed.** ID and STATE are gone. The API's list items carry no top-level VM ID, and `state` was always blank, so both columns were dropped and the `id` key no longer appears in `-o json`. VM now shows the VM slug from the nested `virtual_machine` object. Three columns were added: INTERVAL, AT, and SCHEDULED AT.
+
+### Fixed
+
+- **`instance ssh` now prefers the public IP.** Previously it always connected over the private address. Its public-IP fallback read the VM's top-level `public_ip` field, which the API leaves null even when a public IP is attached. It now checks the `ipaddresses` list the same way `instance get` does. It connects to the public IP when one is attached and falls back to the private IP otherwise. An explicit `--user root` is now honoured instead of being replaced by the VM's reported username.
+- **`backup list` no longer fails to decode its own API response.** The API returns the schedule's `at` field as a quoted string ("3") in list responses, but as a number in create responses. The CLI only handled the number and errored with "cannot unmarshal string into Go struct field Backup.data.at". It now accepts either form. This also fixes reads for the `zcp_volume_backup` Terraform resource, which uses this package.
+- **`vm-backup delete` never worked.** The route `virtual-machines/backups/{slug}` only supports PUT, so the API always rejected the direct DELETE request the command sent. It now submits a service-cancellation request instead, the same workflow `instance delete` uses, with service name `Backups`.
+- **`vm-backup create` no longer defaults `--interval` to a value the API rejects.** The default was `daily`, which the API always rejected. It is now `dailyAt`.
+
+### Security
+
+- **`--debug` output no longer leaks the account's API token.** Some list endpoints echo the account's full bearer token in a nested `access_key_token` field. Debug output now redacts that field, related credential fields such as `token` and `password`, and the configured bearer token wherever it appears in a response body. Error messages built from response bodies the CLI cannot parse are redacted the same way, so an unparseable error body cannot echo a credential. Redaction also covers other common secret field names such as `client_secret` and `private_key`.
+
 ## [v0.0.27] - 2026-08-31
 
 ### Added
