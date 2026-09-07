@@ -218,7 +218,7 @@ func TestInstanceSSHMutuallyExclusiveFlags(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "--use-public and --use-private are mutually exclusive") {
+	if !strings.Contains(err.Error(), "use-public") || !strings.Contains(err.Error(), "use-private") {
 		t.Errorf("error = %q, want containing mutual-exclusion message", err.Error())
 	}
 }

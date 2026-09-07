@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,10 +108,9 @@ func TestBackupListPagination(t *testing.T) {
 func TestBackupListPaginationIgnoresEchoedCurrentPage(t *testing.T) {
 	// A server that ignores the ?page query parameter entirely and always
 	// echoes current_page:1, last_page:2 must not send List into an
-	// unbounded loop: the loop counter, not the server-echoed
-	// resp.CurrentPage, decides when to stop. Before the fix this stub
-	// drove List to maxListPages (1000) requests and 1000 duplicate rows;
-	// after the fix it must stop after exactly 2 requests.
+	// unbounded loop, and must not hand back the repeated page as duplicate
+	// rows. List requests page 2, sees current_page:1 echoed back, and
+	// returns an error after exactly 2 requests.
 	const body = `{"status":"Success","message":"Ok","current_page":1,"last_page":2,"total":2,
 		"data":[{"id":"bak-1","name":"a","slug":"backup-a","blockstorage_id":"vol-1"}]}`
 
@@ -124,14 +124,17 @@ func TestBackupListPaginationIgnoresEchoedCurrentPage(t *testing.T) {
 
 	svc := backup.NewService(newTestClient(t, srv))
 	backups, err := svc.List(context.Background(), "", "")
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
+	if err == nil {
+		t.Fatalf("List() error = nil, want an error for a repeated page (got %d backups)", len(backups))
+	}
+	if !strings.Contains(err.Error(), "requested page 2 but the API returned page 1") {
+		t.Errorf("List() error = %q, want it to name the page mismatch", err)
 	}
 	if calls != 2 {
 		t.Fatalf("server received %d requests, want exactly 2", calls)
 	}
-	if len(backups) != 2 {
-		t.Fatalf("List() returned %d backups, want 2 (no duplicates beyond 2 pages)", len(backups))
+	if backups != nil {
+		t.Fatalf("List() returned %d backups alongside the error, want none", len(backups))
 	}
 }
 

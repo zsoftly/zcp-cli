@@ -169,6 +169,12 @@ func (s *Service) List(ctx context.Context, region, project string) ([]VMBackup,
 		if err := json.Unmarshal(env.Data, &backups); err != nil {
 			return nil, fmt.Errorf("decoding VM backups: %w", err)
 		}
+		// A server that ignores ?page and repeats an earlier page would
+		// otherwise yield duplicate rows; surface that instead of returning
+		// them. A zero current_page (field absent) is tolerated.
+		if env.CurrentPage > 0 && env.CurrentPage != page {
+			return nil, fmt.Errorf("listing VM backups: requested page %d but the API returned page %d", page, env.CurrentPage)
+		}
 		all = append(all, backups...)
 
 		// The loop counter, not the server-echoed current_page, drives

@@ -25,6 +25,12 @@ func TestParseFlexInt(t *testing.T) {
 		{name: "quoted non-integral float", raw: `"3.5"`, wantErr: true},
 		{name: "non-numeric string", raw: `"soon"`, wantErr: true},
 		{name: "invalid quoted json", raw: `"unterminated`, wantErr: true},
+		{name: "negative", raw: `-1`, want: -1},
+		{name: "large integer exact", raw: `9007199254740993`, want: 9007199254740993},
+		{name: "quoted large integer exact", raw: `"9007199254740993"`, want: 9007199254740993},
+		{name: "exponent form", raw: `3e0`, want: 3},
+		{name: "integer out of range", raw: `99999999999999999999`, wantErr: true},
+		{name: "float out of range", raw: `1e30`, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

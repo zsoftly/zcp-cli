@@ -3,7 +3,9 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -58,16 +60,30 @@ func ParseFlexInt(raw json.RawMessage) (int, error) {
 	return parseIntegralFloat(s)
 }
 
-// parseIntegralFloat parses s as a float64 and requires it to represent a
-// whole number, rejecting fractional values like "3.5".
+// parseIntegralFloat parses s as a whole number. Plain integers go through
+// strconv.ParseInt so large values are exact and out-of-range values are
+// rejected; only decimal or exponent forms (e.g. "3.0", "3e0") fall back to
+// float parsing, which then must be integral and fit in an int.
 func parseIntegralFloat(s string) (int, error) {
+	if !strings.ContainsAny(s, ".eE") {
+		n, err := strconv.ParseInt(s, 10, strconv.IntSize)
+		if err != nil {
+			if errors.Is(err, strconv.ErrRange) {
+				return 0, fmt.Errorf("value %q out of range", s)
+			}
+			return 0, fmt.Errorf("non-numeric value %q", s)
+		}
+		return int(n), nil
+	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0, fmt.Errorf("non-numeric value %q", s)
 	}
-	n := int(f)
-	if float64(n) != f {
+	if f != math.Trunc(f) {
 		return 0, fmt.Errorf("non-integral value %q", s)
 	}
-	return n, nil
+	if f < math.MinInt || f > math.MaxInt || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("value %q out of range", s)
+	}
+	return int(f), nil
 }

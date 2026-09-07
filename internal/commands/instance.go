@@ -1614,6 +1614,7 @@ Requirements:
 	cmd.Flags().IntVar(&port, "port", 22, "SSH port")
 	cmd.Flags().BoolVar(&usePublic, "use-public", false, "Force connecting over the VM's public IP address (mutually exclusive with --use-private)")
 	cmd.Flags().BoolVar(&usePrivate, "use-private", false, "Force connecting over the VM's private IP address, VPC/VPN (mutually exclusive with --use-public)")
+	cmd.MarkFlagsMutuallyExclusive("use-public", "use-private")
 	return cmd
 }
 
@@ -1696,10 +1697,9 @@ func sshUser(flagUser string, flagSet bool, vmUsername string) string {
 }
 
 func runInstanceSSH(cmd *cobra.Command, slug, user, identityFile string, port int, usePublic, usePrivate bool) error {
-	if usePublic && usePrivate {
-		return fmt.Errorf("--use-public and --use-private are mutually exclusive")
-	}
-
+	// --use-public/--use-private exclusivity is declared on the command via
+	// MarkFlagsMutuallyExclusive, so cobra rejects the combination before RunE
+	// runs; sshTargetIP re-checks it so the helper is safe on its own.
 	_, client, _, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err

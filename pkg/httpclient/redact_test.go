@@ -44,6 +44,11 @@ func TestRedactSecrets(t *testing.T) {
 			wantSubstr: `"refresh_token":null`,
 		},
 		{
+			name:       "exponent numeric value redacted",
+			body:       `{"token":1e10,"secret":-2.5E+3}`,
+			wantAbsent: []string{"1e10", "e10", "2.5E+3", "E+3"},
+		},
+		{
 			name:       "numeric value redacted",
 			body:       `{"token":123456}`,
 			wantSubstr: `"token":"[REDACTED]"`,

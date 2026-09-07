@@ -153,6 +153,12 @@ func (s *Service) List(ctx context.Context, region, project string) ([]Backup, e
 		if err := s.client.Get(ctx, "/blockstorages/backups", q, &resp); err != nil {
 			return nil, fmt.Errorf("listing block storage backups: %w", err)
 		}
+		// A server that ignores ?page and repeats an earlier page would
+		// otherwise yield duplicate rows; surface that instead of returning
+		// them. A zero current_page (field absent) is tolerated.
+		if resp.CurrentPage > 0 && resp.CurrentPage != page {
+			return nil, fmt.Errorf("listing block storage backups: requested page %d but the API returned page %d", page, resp.CurrentPage)
+		}
 		all = append(all, resp.Data...)
 
 		// The loop counter, not the server-echoed current_page, drives

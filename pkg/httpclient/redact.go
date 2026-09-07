@@ -11,10 +11,10 @@ import (
 // prefix separately from the value so the value alone can be replaced.
 //
 // The value alternative matches a JSON string (including one with escaped
-// characters such as \" inside it), a JSON number, the literals true/false,
-// or null.
+// characters such as \" inside it), a JSON number (including exponent
+// forms such as 1e10), the literals true/false, or null.
 var secretFieldPattern = regexp.MustCompile(
-	`(?i)("(?:access_key_token|access_token|refresh_token|secret_key|api_key|token|password|secret|client_secret|secret_access_key|private_key|bearer_token|api_token|auth_token|access_key_secret)"\s*:\s*)("(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?|true|false|null)`,
+	`(?i)("(?:access_key_token|access_token|refresh_token|secret_key|api_key|token|password|secret|client_secret|secret_access_key|private_key|bearer_token|api_token|auth_token|access_key_secret)"\s*:\s*)("(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)`,
 )
 
 // redactSecrets returns a copy of body with the values of known

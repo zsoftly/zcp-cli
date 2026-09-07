@@ -21,16 +21,33 @@ import (
 func execCaptureStdio(t *testing.T, cmd *cobra.Command, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	oldOut, oldErr := os.Stdout, os.Stderr
-	outR, outW, _ := os.Pipe()
-	errR, errW, _ := os.Pipe()
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() for stdout: %v", err)
+	}
+	defer outR.Close()
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		outW.Close()
+		t.Fatalf("os.Pipe() for stderr: %v", err)
+	}
+	defer errR.Close()
 	os.Stdout = outW
 	os.Stderr = errW
+	// Restore the real streams even if execCmd panics or calls t.Fatal.
+	defer func() { os.Stdout, os.Stderr = oldOut, oldErr }()
 	cobraOut, cobraErr, runErr := execCmd(t, cmd, args...)
 	outW.Close()
 	errW.Close()
 	os.Stdout, os.Stderr = oldOut, oldErr
-	pipedOut, _ := io.ReadAll(outR)
-	pipedErr, _ := io.ReadAll(errR)
+	pipedOut, err := io.ReadAll(outR)
+	if err != nil {
+		t.Fatalf("reading captured stdout: %v", err)
+	}
+	pipedErr, err := io.ReadAll(errR)
+	if err != nil {
+		t.Fatalf("reading captured stderr: %v", err)
+	}
 	return cobraOut + string(pipedOut), cobraErr + string(pipedErr), runErr
 }
 
