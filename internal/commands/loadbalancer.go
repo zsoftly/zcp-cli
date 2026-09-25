@@ -39,6 +39,7 @@ func NewLoadBalancerCmd() *cobra.Command {
 	cmd.AddCommand(newLBListCmd())
 	cmd.AddCommand(newLBCreateCmd())
 	cmd.AddCommand(newLBDeleteCmd())
+	cmd.AddCommand(newLBListRuleCmd())
 	cmd.AddCommand(newLBCreateRuleCmd())
 	cmd.AddCommand(newLBDeleteRuleCmd())
 	cmd.AddCommand(newLBAttachVMCmd())
@@ -578,6 +579,54 @@ func runLBCreateRule(cmd *cobra.Command, lbSlug string, req loadbalancer.CreateR
 
 	printer.Fprintf("Rule created on load balancer %q.\n", lbSlug)
 	return nil
+}
+
+func newLBListRuleCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list-rule <lb-slug>",
+		Short: "List load balancer rules",
+		Args:  exactArgs(1),
+		Example: `  zcp loadbalancer list-rule my-lb
+  zcp loadbalancer list-rule my-lb -o json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runLBlistRule(cmd, args[0])
+		},
+	}
+	return cmd
+}
+
+func runLBlistRule(cmd *cobra.Command, lbSlug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	svc := loadbalancer.NewService(client)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	lb, err := svc.Get(ctx, lbSlug)
+	if err != nil {
+		return fmt.Errorf("loadbalancer rule list: %w", err)
+	}
+	if printer.Format() == output.FormatJSON || printer.Format() == output.FormatYAML {
+		return printer.Print(lb.Rules)
+	}
+
+	headers := []string{"ID", "NAME", "ALGORITHM", "PROTOCOL", "PUBLIC PORT", "PRIVATE PORT", "CREATED"}
+	rows := make([][]string, 0, len(lb.Rules))
+	for _, rule := range lb.Rules {
+		rows = append(rows, []string{
+			rule.ID,
+			rule.Name,
+			rule.Algorithm,
+			rule.Protocol,
+			rule.PublicPort,
+			rule.PrivatePort,
+			rule.CreatedAt,
+		})
+	}
+	return printer.PrintTable(headers, rows)
 }
 
 func newLBDeleteRuleCmd() *cobra.Command {

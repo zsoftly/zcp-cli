@@ -334,6 +334,7 @@ zcp loadbalancer list
 zcp loadbalancer create --name my-lb --network <network-slug> \
   --billing-cycle hourly --public-port 80 --private-port 8080 --algorithm roundrobin \
   --region yul-1 --project default-9
+zcp loadbalancer list-rule <lb-slug>
 zcp loadbalancer create-rule <lb-slug> --name api-rule \
   --public-port 8443 --private-port 443 --protocol tcp --algorithm leastconn
 zcp loadbalancer attach-vm <lb-slug> <rule-id> --vm <vm-slug>

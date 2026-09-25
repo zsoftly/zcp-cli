@@ -11,6 +11,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **`instance create` now supports custom VM plans.** Passing `--cpu`, `--memory`, and `--disk` without `--plan` sends `plan: null` with a `custom_plan` payload. `--memory` is now documented and validated as GB, matching the API. Out-of-range custom CPU and memory values fail locally with clear unit-aware messages. _Fixes zsoftly/iaas#544._
 
+### Added
+
+- **`loadbalancer list-rule`.** Lists the rules for a load balancer, including each rule's ID. Use the rule ID with `loadbalancer attach-vm` to attach a VM to a specific rule.
+- **`loadbalancer.Service.Get(ctx, slug)`** — new service method; fetches a single loadbalancer by slug
+
 ## [v0.0.29] - 2026-09-07
 
 ### Fixed
