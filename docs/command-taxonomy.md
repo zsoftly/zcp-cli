@@ -165,6 +165,7 @@ zcp
 │   ├── list                           List load balancers
 │   ├── create                         Create a load balancer with an initial rule (--public-port, --private-port, --algorithm required; --rule-name, --protocol, --sticky-method, --enable-tls, --enable-proxy-protocol, --vm optional)
 │   ├── delete                         Permanently delete a load balancer (via service-cancel); IP kept by default, --release-ip to free the LB's dedicated IP (never source-NAT), --billing-cycle hourly|monthly
+│   ├── list-rule                      List load balancer rules
 │   ├── create-rule                    Create a load balancer rule
 │   ├── delete-rule                    Delete a rule from a load balancer (--yes to skip prompt)
 │   ├── attach-vm                      Attach a VM to a load balancer rule
