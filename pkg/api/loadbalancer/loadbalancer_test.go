@@ -124,6 +124,100 @@ func TestLoadBalancerListEmpty(t *testing.T) {
 	}
 }
 
+func TestLoadBalancerGet(t *testing.T) {
+	expected := loadbalancer.LoadBalancer{
+		ID:   "my-lb",
+		Name: "my-lb",
+		Slug: "my-lb",
+		IPAddress: &loadbalancer.IPAddress{
+			ID:        "ip-1",
+			IPAddress: "0.0.0.48",
+			Slug:      "ip-1",
+		},
+		Rules: []loadbalancer.Rule{
+			{
+				ID:           "lb-12345",
+				Algorithm:    "roundrobin",
+				Protocol:     "tcp",
+				StickyMethod: "None",
+				PublicPort:   "8050",
+				PrivatePort:  "9090",
+				CreatedAt:    "2026-09-15T12:04:37.000000Z",
+			},
+			{
+				ID:           "lb-6345789",
+				Algorithm:    "source",
+				Protocol:     "tcp",
+				StickyMethod: "LbCookie",
+				PublicPort:   "8052",
+				PrivatePort:  "9095",
+				CreatedAt:    "2026-09-15T12:12:24.000000Z",
+			},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/load-balancers/my-lb" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "expected GET", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(envelope{Status: "Success", Message: "OK", Data: expected})
+	}))
+	defer srv.Close()
+
+	svc := loadbalancer.NewService(newClient(srv.URL))
+	got, err := svc.Get(context.Background(), "my-lb")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("Get() returned nil, want load balancer")
+	}
+	if got.ID != expected.ID {
+		t.Errorf("got.ID = %q, want %q", got.ID, expected.ID)
+	}
+	if got.Name != expected.Name {
+		t.Errorf("got.Name = %q, want %q", got.Name, expected.Name)
+	}
+	if got.Slug != expected.Slug {
+		t.Errorf("got.Slug = %q, want %q", got.Slug, expected.Slug)
+	}
+	if got.IPAddress == nil {
+		t.Fatal("got.IPAddress = nil, want non-nil")
+	}
+	if got.IPAddress.ID != expected.IPAddress.ID {
+		t.Errorf("got.IPAddress.ID = %q, want %q", got.IPAddress.ID, expected.IPAddress.ID)
+	}
+	if got.IPAddress.IPAddress != expected.IPAddress.IPAddress {
+		t.Errorf("got.IPAddress.IPAddress = %q, want %q", got.IPAddress.IPAddress, expected.IPAddress.IPAddress)
+	}
+	if got.IPAddress.Slug != expected.IPAddress.Slug {
+		t.Errorf("got.IPAddress.Slug = %q, want %q", got.IPAddress.Slug, expected.IPAddress.Slug)
+	}
+	if len(got.Rules) != 2 {
+		t.Fatalf("Get() returned %d rules, want 2", len(got.Rules))
+	}
+	if got.Rules[0].ID != "lb-12345" {
+		t.Errorf("got.Rules[0].ID = %q, want %q", got.Rules[0].ID, "lb-12345")
+	}
+	if got.Rules[0].Algorithm != "roundrobin" {
+		t.Errorf("got.Rules[0].Algorithm = %q, want %q", got.Rules[0].Algorithm, "roundrobin")
+	}
+	if got.Rules[0].Protocol != "tcp" {
+		t.Errorf("got.Rules[0].Protocol = %q, want %q", got.Rules[0].Protocol, "tcp")
+	}
+	if got.Rules[0].PublicPort != "8050" {
+		t.Errorf("got.Rules[0].PublicPort = %q, want %q", got.Rules[0].PublicPort, "8050")
+	}
+	if got.Rules[0].PrivatePort != "9090" {
+		t.Errorf("got.Rules[0].PrivatePort = %q, want %q", got.Rules[0].PrivatePort, "9090")
+	}
+}
 func TestLoadBalancerCreate(t *testing.T) {
 	created := loadbalancer.LoadBalancer{
 		ID:    "lb-new",

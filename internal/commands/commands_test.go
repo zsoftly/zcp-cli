@@ -751,6 +751,41 @@ func TestLoadBalancerDeleteRejectsBadBillingCycle(t *testing.T) {
 	}
 }
 
+// TestLoadBalancerListRuleCmd verifies the registered `loadbalancer list-rule`
+func TestLoadBalancerListRuleCmd(t *testing.T) {
+	for _, format := range []string{"table", "json", "yaml"} {
+		t.Run(format, func(t *testing.T) {
+			var gotPath, gotMethod string
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				gotMethod = r.Method
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"status":"Success","message":"OK","data":{"slug":"my-lb","name":"my-lb","load_balancer_rules":[{"id":"rule-123","name":"web-rule","algorithm":"roundrobin","protocol":"tcp","public_port":"80","private_port":"8080","created_at":"2026-01-01T00:00:00.000000Z"}]}}`)
+			}))
+			defer srv.Close()
+
+			os.Setenv("ZCP_BEARER_TOKEN", "test-tok")
+			defer os.Unsetenv("ZCP_BEARER_TOKEN")
+
+			stdout, stderr, err := execCmd(t, NewLoadBalancerCmd(),
+				"list-rule", "my-lb", "-o", format, "--api-url", srv.URL)
+			if err != nil {
+				t.Fatalf("list-rule error = %v\nstdout: %q\nstderr: %q", err, stdout, stderr)
+			}
+			if gotMethod != http.MethodGet {
+				t.Errorf("method = %q, want %q", gotMethod, http.MethodGet)
+			}
+			if gotPath != "/load-balancers/my-lb" {
+				t.Errorf("path = %q, want %q", gotPath, "/load-balancers/my-lb")
+			}
+			if !strings.Contains(stdout, "rule-123") {
+				t.Errorf("output (%s) does not contain rule ID:\n%q", format, stdout)
+			}
+		})
+	}
+}
+
 // TestBillingCycleUnit locks the exact-match normalization (no loose prefix matching).
 func TestBillingCycleUnit(t *testing.T) {
 	cases := []struct {

@@ -55,7 +55,7 @@ func buildClientAndPrinter(cmd *cobra.Command) (*config.Profile, *httpclient.Cli
 	}
 
 	client := httpclient.New(opts)
-	printer := output.NewPrinter(os.Stdout, output.ParseFormat(outputFmt), noColor)
+	printer := output.NewPrinter(cmd.OutOrStdout(), output.ParseFormat(outputFmt), noColor)
 	printer.SetPager(pager)
 
 	return profile, client, printer, nil
