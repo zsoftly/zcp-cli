@@ -37,9 +37,10 @@ git branch -d release/<version>
 ## Update the public docs changelog
 
 The documentation site carries a unified, user-facing changelog at
-`zcp-docs/src/content/docs/changelog/index.md` and its French mirror
-`zcp-docs/src/content/docs/fr/changelog/index.md`. It is **maintained by hand** (not
-generated). After cutting a release, add the new version to the **CLI (`zcp`)** section of
+`zcp-docs/src/content/docs/changelog/index.mdx` and its French mirror
+`zcp-docs/src/content/docs/fr/changelog/index.md`. The English file uses MDX; the
+French mirror uses Markdown. Both are **maintained by hand** (not generated).
+After cutting a release, add the new version to the **CLI (`zcp`)** section of
 **both** files:
 
 1. Add a `### vX.Y.Z - <Month DD, YYYY>` entry at the top of the CLI section, summarizing
