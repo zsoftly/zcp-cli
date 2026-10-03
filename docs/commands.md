@@ -596,8 +596,29 @@ zcp object-storage create \
 # Resize (change allocated GB)
 zcp object-storage resize <slug> --storage-gb 200
 
-# Show S3 credentials (access key + secret)
+# Show a newly-created key's secret while CMP makes it visible (five minutes).
+# Use --key to select a particular visible key. A key remains active after the
+# secret is hidden, so save the pair in your own secret manager.
 zcp object-storage credentials <slug>
+zcp object-storage credentials <slug> --key <key-id>
+zcp object-storage keys list <slug>
+zcp object-storage keys create <slug> --output json
+zcp object-storage keys delete <slug> <key-id> -y
+
+# CMP exposes no verified API to select a primary key; --primary is unavailable.
+
+# JSON create output contains the created store and its initial key if its secret
+# is still visible. If key retrieval fails, the command returns an error naming
+# the created store. Do not create it again.
+# Values here are examples only.
+# {"object_storage":{"slug":"my-store"},"credentials":{"api_key":"...","api_secret":"...","endpoint":"https://s3.example.test","region":"os-yul","secret_visible_until":"..."}}
+
+# CMP permits one or two active keys. Rotate safely: create key #2 and capture
+# its secret within five minutes, update consumers, then revoke key #1. CMP
+# blocks a third active key and revocation of the final active key.
+zcp object-storage keys create <slug> --output json
+# update consumers with the captured key pair
+zcp object-storage keys delete <slug> <old-key-id> -y
 
 # Delete an object storage instance
 zcp object-storage delete <slug>
@@ -688,7 +709,7 @@ Object storage spans two backends, and this determines what is reachable outside
 the CLI:
 
 - **ZCP REST API (also available in the Web UI / CMP):** instance lifecycle
-  (`create`, `list`, `get`, `delete`, `resize`, `credentials`) and basic bucket
+  (`create`, `list`, `get`, `delete`, `resize`, `credentials`, `keys`) and basic bucket
   management (`bucket create`, `bucket list`, `bucket get`, `bucket delete`).
   `object get` also goes through the REST API (it returns object metadata only).
 
@@ -698,9 +719,10 @@ the CLI:
   `download`, `url`, `put-url`, `stat`, `versions`, `restore`, `copy`, `move`,
   `tag`, `delete`) and all advanced `bucket` configuration (`set-acl`,
   `versioning`, `policy`, `tag`, `encryption`, `lifecycle`, `cors`, `uploads`,
-  `empty`, and `bucket delete --purge`). The CLI derives the S3 endpoint and
-  credentials from the same `object-storage get` response, so no separate S3
-  configuration is needed.
+  `empty`, and `bucket delete --purge`). Set `ZCP_S3_ACCESS_KEY` and
+  `ZCP_S3_SECRET_KEY` to a saved, complete S3 key pair before running these
+  commands. The CLI checks that the access key is active for the requested
+  object-storage instance and reads the endpoint and region from that instance.
 
 > **CLI-only (not yet on the REST API or Web UI):** every S3-direct operation in
 > the second group above is available **only through this CLI**. The CMP has not

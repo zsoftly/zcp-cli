@@ -28,90 +28,121 @@ import (
 
 // RegionSetupConfig holds the cloud-provider-setup configuration embedded in a region.
 type RegionSetupConfig struct {
-	S3Endpoint         string `json:"s3_endpoint"`
-	S3FallbackEndpoint string `json:"s3_fallback_endpoint"`
+	S3Endpoint         string `json:"s3_endpoint" yaml:"s3_endpoint"`
+	S3FallbackEndpoint string `json:"s3_fallback_endpoint" yaml:"s3_fallback_endpoint"`
 }
 
 // RegionCloudProviderSetup holds the setup embedded in a region response.
 type RegionCloudProviderSetup struct {
-	Config RegionSetupConfig `json:"config"`
+	Config RegionSetupConfig `json:"config" yaml:"config"`
 }
 
 // Region represents the region where the object storage is deployed.
 type Region struct {
-	ID                 string                    `json:"id"`
-	Name               string                    `json:"name"`
-	Slug               string                    `json:"slug"`
-	Country            string                    `json:"country"`
-	CloudProviderSetup *RegionCloudProviderSetup `json:"cloud_provider_setup"`
+	ID                 string                    `json:"id" yaml:"id"`
+	Name               string                    `json:"name" yaml:"name"`
+	Slug               string                    `json:"slug" yaml:"slug"`
+	Country            string                    `json:"country" yaml:"country"`
+	CloudProviderSetup *RegionCloudProviderSetup `json:"cloud_provider_setup" yaml:"cloud_provider_setup"`
 }
 
 // OSStats holds object-count and byte-total stats for a storage instance.
 type OSStats struct {
-	TotalFiles int `json:"total_files"`
-	TotalSize  int `json:"total_size"`
+	TotalFiles int   `json:"total_files" yaml:"total_files"`
+	TotalSize  int64 `json:"total_size" yaml:"total_size"`
 }
 
 // CloudProvider represents the cloud provider backing the object storage.
 type CloudProvider struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Slug        string `json:"slug"`
+	ID          string `json:"id" yaml:"id"`
+	Name        string `json:"name" yaml:"name"`
+	DisplayName string `json:"display_name" yaml:"display_name"`
+	Slug        string `json:"slug" yaml:"slug"`
 }
 
 // Project represents the project the object storage belongs to.
 type Project struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID   string `json:"id" yaml:"id"`
+	Name string `json:"name" yaml:"name"`
+	Slug string `json:"slug" yaml:"slug"`
 }
 
 // BillingCycle represents a billing cycle on an offering.
 type BillingCycle struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	ID   string `json:"id" yaml:"id"`
+	Name string `json:"name" yaml:"name"`
+	Slug string `json:"slug" yaml:"slug"`
 }
 
 // Offering represents the billing plan attached to the object storage.
 type Offering struct {
-	ID           string        `json:"id"`
-	Size         json.Number   `json:"size"`
-	Price        string        `json:"price"`
-	BillingCycle *BillingCycle `json:"billing_cycle"`
-	RenewAt      string        `json:"renew_at"`
+	ID           string        `json:"id" yaml:"id"`
+	Storage      json.Number   `json:"storage" yaml:"storage"`
+	Size         json.Number   `json:"size" yaml:"size"`
+	Price        string        `json:"price" yaml:"price"`
+	BillingCycle *BillingCycle `json:"billing_cycle" yaml:"billing_cycle"`
+	RenewAt      string        `json:"renew_at" yaml:"renew_at"`
 }
 
 // ObjectStorage represents a Ceph object storage instance.
 type ObjectStorage struct {
-	ID                   string         `json:"id"`
-	Slug                 string         `json:"slug"`
-	Name                 string         `json:"name"`
-	Status               string         `json:"status"`
-	Size                 json.Number    `json:"size"`
-	UsedSpace            json.Number    `json:"used_space"`
-	StorageUsage         json.Number    `json:"storage_usage"`
-	AllTimeConsumption   float64        `json:"all_time_consumption"`
-	ServiceName          string         `json:"service_name"`
-	ServiceDisplayName   string         `json:"service_display_name"`
-	APIKey               string         `json:"api_key"`
-	APISecret            string         `json:"api_secret"`
-	IsAutoscale          bool           `json:"is_autoscale"`
-	Stats                *OSStats       `json:"stats"`
-	ProjectID            string         `json:"project_id"`
-	RegionID             string         `json:"region_id"`
-	CloudProviderID      string         `json:"cloud_provider_id"`
-	CloudProviderSetupID string         `json:"cloud_provider_setup_id"`
-	FrozenAt             *string        `json:"frozen_at"`
-	SuspendedAt          *string        `json:"suspended_at"`
-	TerminatedAt         *string        `json:"terminated_at"`
-	CreatedAt            string         `json:"created_at"`
-	UpdatedAt            string         `json:"updated_at"`
-	Region               *Region        `json:"region"`
-	CloudProvider        *CloudProvider `json:"cloud_provider"`
-	Project              *Project       `json:"project"`
-	Offering             *Offering      `json:"offering"`
+	ID                   string         `json:"id" yaml:"id"`
+	Slug                 string         `json:"slug" yaml:"slug"`
+	Name                 string         `json:"name" yaml:"name"`
+	Status               string         `json:"status" yaml:"status"`
+	Size                 json.Number    `json:"size" yaml:"size"`
+	UsedSpace            json.Number    `json:"used_space" yaml:"used_space"`
+	StorageUsage         json.Number    `json:"storage_usage" yaml:"storage_usage"`
+	AllTimeConsumption   float64        `json:"all_time_consumption" yaml:"all_time_consumption"`
+	ServiceName          string         `json:"service_name" yaml:"service_name"`
+	ServiceDisplayName   string         `json:"service_display_name" yaml:"service_display_name"`
+	APIKey               string         `json:"-" yaml:"-"`
+	APISecret            string         `json:"-" yaml:"-"`
+	S3Region             string         `json:"-" yaml:"-"`
+	IsAutoscale          bool           `json:"is_autoscale" yaml:"is_autoscale"`
+	Stats                *OSStats       `json:"stats" yaml:"stats"`
+	ProjectID            string         `json:"project_id" yaml:"project_id"`
+	RegionID             string         `json:"region_id" yaml:"region_id"`
+	CloudProviderID      string         `json:"cloud_provider_id" yaml:"cloud_provider_id"`
+	CloudProviderSetupID string         `json:"cloud_provider_setup_id" yaml:"cloud_provider_setup_id"`
+	FrozenAt             *string        `json:"frozen_at" yaml:"frozen_at"`
+	SuspendedAt          *string        `json:"suspended_at" yaml:"suspended_at"`
+	TerminatedAt         *string        `json:"terminated_at" yaml:"terminated_at"`
+	CreatedAt            string         `json:"created_at" yaml:"created_at"`
+	UpdatedAt            string         `json:"updated_at" yaml:"updated_at"`
+	Region               *Region        `json:"region" yaml:"region"`
+	CloudProvider        *CloudProvider `json:"cloud_provider" yaml:"cloud_provider"`
+	Project              *Project       `json:"project" yaml:"project"`
+	Offering             *Offering      `json:"offering" yaml:"offering"`
+}
+
+// AllocatedSizeGB returns the storage allocation reported by the current API.
+// Object storage allocations belong to the attached offering; the legacy
+// top-level size field is not present in current responses.
+func (o ObjectStorage) AllocatedSizeGB() string {
+	if o.Offering == nil || o.Offering.Storage == "" {
+		return "-"
+	}
+	return o.Offering.Storage.String()
+}
+
+// UsedSizeGB returns usage from stats.total_size. CMP reports this field in
+// bytes, so convert it to GiB for the command output headed "USED (GB)".
+func (o ObjectStorage) UsedSizeGB() string {
+	if o.Stats == nil {
+		return "-"
+	}
+	const bytesPerGiB = 1024 * 1024 * 1024
+	return strconv.FormatFloat(float64(o.Stats.TotalSize)/bytesPerGiB, 'f', 2, 64)
+}
+
+// DisplayStatus returns the API status when it is present. Current object
+// storage responses omit status, which is unknown rather than active.
+func (o ObjectStorage) DisplayStatus() string {
+	if o.Status == "" {
+		return "-"
+	}
+	return o.Status
 }
 
 // S3Endpoint returns the S3 endpoint URL, resolved from the nested region
@@ -134,6 +165,43 @@ type Bucket struct {
 	ObjectStorageID string      `json:"object_storage_id"`
 	CreatedAt       string      `json:"created_at"`
 	UpdatedAt       string      `json:"updated_at"`
+}
+
+// Key represents an S3 access key. APISecret is returned only while the key's
+// secret visibility window remains open.
+type Key struct {
+	ID                 string `json:"id" yaml:"id"`
+	APIKey             string `json:"api_key" yaml:"api_key"`
+	Status             string `json:"status" yaml:"status"`
+	IsPrimary          bool   `json:"is_primary" yaml:"is_primary"`
+	SecretVisibleUntil string `json:"secret_visible_until" yaml:"secret_visible_until"`
+	CreatedAt          string `json:"created_at" yaml:"created_at"`
+	UpdatedAt          string `json:"updated_at" yaml:"updated_at"`
+	APISecret          string `json:"api_secret" yaml:"api_secret"`
+}
+
+// Credentials are the plaintext S3 credentials disclosed for a newly-created
+// key. CMP stops returning the secret after SecretVisibleUntil, while the key
+// itself stays active until it is revoked.
+type Credentials struct {
+	APIKey             string `json:"api_key" yaml:"api_key"`
+	APISecret          string `json:"api_secret" yaml:"api_secret"`
+	Endpoint           string `json:"endpoint" yaml:"endpoint"`
+	Region             string `json:"region" yaml:"region"`
+	SecretVisibleUntil string `json:"secret_visible_until" yaml:"secret_visible_until"`
+}
+
+// IsEncryptedSecret identifies CMP's nonce:ciphertext:tag AES-GCM payload
+// shape without attempting to decrypt it.
+func IsEncryptedSecret(value string) bool {
+	parts := strings.Split(value, ":")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return false
+	}
+	nonce, nonceErr := base64.StdEncoding.DecodeString(parts[0])
+	ciphertext, ciphertextErr := base64.StdEncoding.DecodeString(parts[1])
+	tag, tagErr := base64.StdEncoding.DecodeString(parts[2])
+	return nonceErr == nil && ciphertextErr == nil && tagErr == nil && len(nonce) == 12 && len(ciphertext) > 0 && len(tag) == 16
 }
 
 // CustomPlan holds storage size for a custom (non-catalogue) plan.
@@ -240,6 +308,18 @@ type bucketSingleResponse struct {
 	Data    Bucket `json:"data"`
 }
 
+type keyListResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Data    []Key  `json:"data"`
+}
+
+type keySingleResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Data    Key    `json:"data"`
+}
+
 // objectListResponse is the API envelope for the object list endpoint.
 // The live API wraps files inside data.files[], not data[].
 type objectListResponse struct {
@@ -315,6 +395,76 @@ func (s *Service) Resize(ctx context.Context, slug string, storageGB int) (*Obje
 	return &resp.Data, nil
 }
 
+// ListKeys returns S3 access keys on an object storage instance. A key can
+// include its secret while its server-reported visibility window remains open.
+func (s *Service) ListKeys(ctx context.Context, slug string) ([]Key, error) {
+	var resp keyListResponse
+	if err := s.client.Get(ctx, "/object-storages/"+slug+"/keys", nil, &resp); err != nil {
+		return nil, fmt.Errorf("listing keys for %s: %w", slug, err)
+	}
+	return resp.Data, nil
+}
+
+// CreateKey creates an S3 key. The returned secret is available only during
+// the server-reported visibility window and callers must persist it immediately.
+func (s *Service) CreateKey(ctx context.Context, slug string) (*Key, error) {
+	var resp keySingleResponse
+	if err := s.client.Post(ctx, "/object-storages/"+slug+"/keys", nil, &resp); err != nil {
+		return nil, fmt.Errorf("creating key for %s: %w", slug, err)
+	}
+	return &resp.Data, nil
+}
+
+// DeleteKey revokes an S3 access key in CMP and Ceph.
+func (s *Service) DeleteKey(ctx context.Context, slug, keyID string) error {
+	if err := s.client.Delete(ctx, "/object-storages/"+slug+"/keys/"+keyID, nil); err != nil {
+		return fmt.Errorf("deleting key %s for %s: %w", keyID, slug, err)
+	}
+	return nil
+}
+
+// GetCredentials returns a plaintext key pair only when CMP reports its secret
+// is still visible. It never calls the legacy credential-recovery endpoint.
+func (s *Service) GetCredentials(ctx context.Context, slug string) (*Credentials, error) {
+	return s.GetCredentialsForKey(ctx, slug, "")
+}
+
+// GetCredentialsForKey optionally selects a key by its CMP ID. Without an ID,
+// it chooses a visible primary key, then the first visible key in list order.
+func (s *Service) GetCredentialsForKey(ctx context.Context, slug, keyID string) (*Credentials, error) {
+	keys, err := s.ListKeys(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	var fallback *Key
+	for i := range keys {
+		key := &keys[i]
+		if keyID != "" && key.ID != keyID {
+			continue
+		}
+		if !strings.EqualFold(key.Status, "active") || key.APIKey == "" || key.APISecret == "" || IsEncryptedSecret(key.APISecret) {
+			continue
+		}
+		visibleUntil, err := time.Parse(time.RFC3339, key.SecretVisibleUntil)
+		if err != nil || !visibleUntil.After(time.Now()) {
+			continue
+		}
+		if key.IsPrimary {
+			return &Credentials{APIKey: key.APIKey, APISecret: key.APISecret, SecretVisibleUntil: key.SecretVisibleUntil}, nil
+		}
+		if fallback == nil {
+			fallback = key
+		}
+	}
+	if fallback != nil {
+		return &Credentials{APIKey: fallback.APIKey, APISecret: fallback.APISecret, SecretVisibleUntil: fallback.SecretVisibleUntil}, nil
+	}
+	if keyID != "" {
+		return nil, fmt.Errorf("key %q has no visible plaintext secret", keyID)
+	}
+	return nil, fmt.Errorf("CMP has no active key with a visible plaintext secret; use the secret copied when the key was created")
+}
+
 // ListBuckets returns all buckets for an object storage instance.
 func (s *Service) ListBuckets(ctx context.Context, slug string) ([]Bucket, error) {
 	var resp bucketListResponse
@@ -376,7 +526,7 @@ func (s *Service) ListObjects(ctx context.Context, slug, bucketSlug string) ([]O
 	if err != nil {
 		return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return nil, fmt.Errorf("listing objects in bucket %s/%s: %w", slug, bucketSlug, err)
 	}
@@ -530,7 +680,7 @@ func (s *Service) SetBucketVisibility(ctx context.Context, slug, bucketName, vis
 	if err != nil {
 		return err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return err
 	}
@@ -559,7 +709,7 @@ func (s *Service) SetBucketVersioning(ctx context.Context, slug, bucketName stri
 	if err != nil {
 		return err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return err
 	}
@@ -581,7 +731,7 @@ func (s *Service) GetBucketVersioning(ctx context.Context, slug, bucketName stri
 	if err != nil {
 		return "", err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return "", err
 	}
@@ -598,7 +748,7 @@ func (s *Service) GetBucketPolicy(ctx context.Context, slug, bucketName string) 
 	if err != nil {
 		return "", err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return "", err
 	}
@@ -615,7 +765,7 @@ func (s *Service) PutBucketPolicy(ctx context.Context, slug, bucketName, policyJ
 	if err != nil {
 		return err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return err
 	}
@@ -631,7 +781,35 @@ func (s *Service) s3(ctx context.Context, slug string) (*minio.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewS3Client(store)
+	return s.s3ForStore(ctx, store)
+}
+
+func (s *Service) s3ForStore(ctx context.Context, store *ObjectStorage) (*minio.Client, error) {
+	accessKey, secretKey := os.Getenv("ZCP_S3_ACCESS_KEY"), os.Getenv("ZCP_S3_SECRET_KEY")
+	if accessKey == "" || secretKey == "" {
+		return nil, fmt.Errorf("set both ZCP_S3_ACCESS_KEY and ZCP_S3_SECRET_KEY for S3 operations")
+	}
+	keys, err := s.ListKeys(ctx, store.Slug)
+	if err != nil {
+		return nil, err
+	}
+	valid := false
+	for _, key := range keys {
+		if strings.EqualFold(key.Status, "active") && key.APIKey == accessKey {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return nil, fmt.Errorf("ZCP_S3_ACCESS_KEY is not an active key for object storage %q", store.Slug)
+	}
+	configured := *store
+	configured.APIKey = accessKey
+	configured.APISecret = secretKey
+	if store.Region != nil {
+		configured.S3Region = store.Region.Slug
+	}
+	return NewS3Client(&configured)
 }
 
 // s3NotConfigured reports whether an S3 error means "this subresource has no
@@ -656,7 +834,7 @@ func (s *Service) EmptyBucket(ctx context.Context, slug, bucketName string) (int
 	if err != nil {
 		return 0, err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return 0, err
 	}
@@ -999,7 +1177,7 @@ func (s *Service) PresignObjectURL(ctx context.Context, slug, bucketName, object
 	if err != nil {
 		return "", err
 	}
-	mc, err := NewS3Client(store)
+	mc, err := s.s3ForStore(ctx, store)
 	if err != nil {
 		return "", err
 	}
