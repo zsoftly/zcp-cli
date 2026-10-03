@@ -84,11 +84,15 @@ The following environment variables are evaluated at runtime and take precedence
 | `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag / profile   | Cloud provider slug. Optional — auto-detected by `auth validate`; set only to override (multi-provider accounts, or CI that skips `auth validate`). |
 | `ZCP_OUTPUT`         | `--output` / `-o` flag              | Default output format (`table`, `json`, `yaml`).                                                                                                    |
 | `ZCP_DEBUG`          | `--debug` flag                      | Set to `true` to enable debug output (stderr).                                                                                                      |
+| `ZCP_S3_ACCESS_KEY`  | Object-storage S3 operations        | Saved S3 access key. Set together with `ZCP_S3_SECRET_KEY`; the CLI checks it is active for the requested object-storage instance.                  |
+| `ZCP_S3_SECRET_KEY`  | Object-storage S3 operations        | Saved S3 secret key. Set together with `ZCP_S3_ACCESS_KEY`; it is never stored by the CLI.                                                          |
 | `XDG_CONFIG_HOME`    | Config file directory (Linux/macOS) | Overrides the base directory for the config file.                                                                                                   |
 
 Environment variables are useful for CI/CD pipelines and scripting where you do not want to pass repetitive flags or store credentials in a file on disk.
 
 > **Object storage uses its own provider and regions.** `object-storage` commands default to the `ceph` cloud provider (compute commands default to the auto-detected `nimbo`), so you do not normally set `ZCP_CLOUD_PROVIDER` for them. They also run in object-storage regions (`os-yul`, `os-yow`) rather than compute regions (`yul-1`, `yow-1`). Advanced bucket and object operations additionally connect **directly to the Ceph S3 (RGW) endpoint** read from the instance details — keep that endpoint reachable from any host (or CI runner) behind a proxy or firewall.
+
+> CMP shows an S3 secret only for five minutes after its key is created. Save the complete pair in your own secret manager. The key remains active after the secret is hidden.
 
 Example usage in a pipeline:
 

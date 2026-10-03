@@ -9,10 +9,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
+- **Object storage reads now use the current CMP response shape.** `object-storage list` and `get` show allocated storage from `offering.storage` and usage from `stats.total_size` (bytes, displayed as GiB). A missing status displays as `-` instead of being reported as active, and reads do not print secrets. S3-direct commands use an explicitly saved `ZCP_S3_ACCESS_KEY` and `ZCP_S3_SECRET_KEY` pair after confirming its access key is active for the requested store. _Relates to #74 and #75._
+- **Debug output redacts `api_secret`.** _Relates to #74._
 - **`instance create` now supports custom VM plans.** Passing `--cpu`, `--memory`, and `--disk` without `--plan` sends `plan: null` with a `custom_plan` payload. `--memory` is now documented and validated as GB, matching the API. Out-of-range custom CPU and memory values fail locally with clear unit-aware messages. _Fixes zsoftly/iaas#544._
 
 ### Added
 
+- **Object storage key commands and creation credentials.** `object-storage keys list|create|delete` supports CMP's one-to-two active-key rotation rules. Plaintext secrets are displayed only during CMP's five-minute visibility window; `keys delete` revokes the key in CMP and Ceph. JSON `object-storage create` includes the initial key only while CMP exposes it.
 - **`loadbalancer list-rule`.** Lists the rules for a load balancer, including each rule's ID. Use the rule ID with `loadbalancer attach-vm` to attach a VM to a specific rule.
 - **`loadbalancer.Service.Get(ctx, slug)`** — new service method; fetches a single loadbalancer by slug
 

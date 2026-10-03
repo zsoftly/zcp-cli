@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/zsoftly/zcp-cli/pkg/api/objectstorage"
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -105,6 +107,109 @@ func TestGet(t *testing.T) {
 	}
 	if store.ID != "os-1" {
 		t.Errorf("store.ID = %q, want %q", store.ID, "os-1")
+	}
+}
+
+func TestGetCurrentResponseShape(t *testing.T) {
+	const payload = `{"status":"Success","data":{"id":"os-1","slug":"my-storage-1","name":"my-storage","stats":{"total_files":2,"total_size":3221225472},"offering":{"id":"off-1","storage":100}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/object-storages/my-storage-1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, payload)
+	}))
+	defer srv.Close()
+
+	store, err := objectstorage.NewService(newTestClient(t, srv)).Get(context.Background(), "my-storage-1")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got := store.AllocatedSizeGB(); got != "100" {
+		t.Errorf("AllocatedSizeGB() = %q, want 100", got)
+	}
+	if got := store.UsedSizeGB(); got != "3.00" {
+		t.Errorf("UsedSizeGB() = %q, want 3.00", got)
+	}
+	if got := store.DisplayStatus(); got != "-" {
+		t.Errorf("DisplayStatus() = %q, want - for omitted API status", got)
+	}
+}
+
+func TestKeyOperations(t *testing.T) {
+	var createCalled, deleteCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/object-storages/my-storage-1/keys":
+			fmt.Fprint(w, `{"status":"Success","data":[{"id":"key-1","api_key":"access-1","status":"active","is_primary":true,"secret_visible_until":"2026-10-02T12:05:00Z"}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/object-storages/my-storage-1/keys":
+			createCalled = true
+			fmt.Fprint(w, `{"status":"Success","data":{"id":"key-2","api_key":"access-2","api_secret":"secret-2","status":"active"}}`)
+		case r.Method == http.MethodDelete && r.URL.Path == "/object-storages/my-storage-1/keys/key-1":
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	svc := objectstorage.NewService(newTestClient(t, srv))
+	keys, err := svc.ListKeys(context.Background(), "my-storage-1")
+	if err != nil || len(keys) != 1 || keys[0].APIKey != "access-1" || !keys[0].IsPrimary {
+		t.Fatalf("ListKeys() = %#v, %v; want key metadata", keys, err)
+	}
+	key, err := svc.CreateKey(context.Background(), "my-storage-1")
+	if err != nil || key.APISecret != "secret-2" || !createCalled {
+		t.Fatalf("CreateKey() = %#v, %v; want one-time secret", key, err)
+	}
+	if err := svc.DeleteKey(context.Background(), "my-storage-1", "key-1"); err != nil || !deleteCalled {
+		t.Fatalf("DeleteKey() error = %v, called = %t", err, deleteCalled)
+	}
+}
+
+func TestCredentialYAMLUsesAPIFieldNames(t *testing.T) {
+	data, err := yaml.Marshal(objectstorage.Credentials{APIKey: "key", APISecret: "secret", SecretVisibleUntil: "2026-10-02T12:05:00Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "api_key:") || !strings.Contains(got, "api_secret:") || !strings.Contains(got, "secret_visible_until:") || strings.Contains(got, "APIKey:") {
+		t.Errorf("credentials YAML = %q", got)
+	}
+	data, err = yaml.Marshal(objectstorage.Key{APIKey: "key", APISecret: "secret", IsPrimary: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "api_key:") || !strings.Contains(string(data), "api_secret:") || strings.Contains(string(data), "APIKey:") {
+		t.Errorf("key YAML = %q", data)
+	}
+	data, err = yaml.Marshal(objectstorage.ObjectStorage{APIKey: "key", APISecret: "secret", S3Region: "internal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "s3region") || strings.Contains(string(data), "internal") {
+		t.Errorf("object storage YAML leaked internal S3 region: %q", data)
+	}
+}
+
+func TestGetCredentialsUsesOnlyVisibleActiveKeys(t *testing.T) {
+	visible := time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/object-storages/store/keys" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprintf(w, `{"status":"Success","data":[{"id":"expired","api_key":"old","api_secret":"old-secret","status":"active","is_primary":true,"secret_visible_until":"2000-01-01T00:00:00Z"},{"id":"visible","api_key":"new","api_secret":"plain:secret:value","status":"active","secret_visible_until":%q}]}`, visible)
+	}))
+	defer srv.Close()
+	creds, err := objectstorage.NewService(newTestClient(t, srv)).GetCredentials(context.Background(), "store")
+	if err != nil || creds.APIKey != "new" || creds.APISecret != "plain:secret:value" {
+		t.Fatalf("GetCredentials() = %#v, %v", creds, err)
+	}
+	if _, err := objectstorage.NewService(newTestClient(t, srv)).GetCredentialsForKey(context.Background(), "store", "expired"); err == nil {
+		t.Fatal("GetCredentialsForKey() accepted expired secret visibility")
 	}
 }
 
@@ -506,7 +611,7 @@ func TestS3EndpointNilRegion(t *testing.T) {
 	}
 }
 
-func TestCredentialsDecoding(t *testing.T) {
+func TestObjectStorageDoesNotDecodeLegacyEmbeddedCredentials(t *testing.T) {
 	payload := `{
 		"status": "Success",
 		"message": "OK",
@@ -536,11 +641,8 @@ func TestCredentialsDecoding(t *testing.T) {
 		t.Fatalf("Unmarshal error = %v", err)
 	}
 	store := resp.Data
-	if store.APIKey != "AKIAIOSFODNN7EXAMPLE" {
-		t.Errorf("APIKey = %q, want AKIAIOSFODNN7EXAMPLE", store.APIKey)
-	}
-	if store.APISecret != "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" {
-		t.Errorf("APISecret = %q, want wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", store.APISecret)
+	if store.APIKey != "" || store.APISecret != "" {
+		t.Errorf("legacy credentials decoded into object storage: %#v", store)
 	}
 	if store.S3Endpoint() != "https://s3.yul-1.zsoftly.ca" {
 		t.Errorf("S3Endpoint() = %q, want https://s3.yul-1.zsoftly.ca", store.S3Endpoint())
@@ -556,6 +658,8 @@ func TestCredentialsDecoding(t *testing.T) {
 // to answer that preflight automatically so individual tests don't need to.
 func newS3TestPair(t *testing.T, s3Handler http.Handler) (mgmt *httptest.Server, s3srv *httptest.Server) {
 	t.Helper()
+	t.Setenv("ZCP_S3_ACCESS_KEY", "tempkey")
+	t.Setenv("ZCP_S3_SECRET_KEY", "tempsecret")
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body) //nolint: errcheck
@@ -571,6 +675,11 @@ func newS3TestPair(t *testing.T, s3Handler http.Handler) (mgmt *httptest.Server,
 	s3srv = httptest.NewServer(wrapped)
 
 	mgmt = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/object-storages/my-storage-1/keys" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","data":[{"id":"key-1","api_key":"tempkey","status":"active"}]}`)
+			return
+		}
 		store := objectstorage.ObjectStorage{
 			ID:        "os-1",
 			Slug:      "my-storage-1",
@@ -632,6 +741,61 @@ func TestPutObject(t *testing.T) {
 	}
 	if size != int64(len(content)) {
 		t.Errorf("returned size = %d, want %d", size, len(content))
+	}
+}
+
+func TestPutObjectUsesSavedCredentials(t *testing.T) {
+	var authorization string
+	s3Handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.Header().Set("ETag", `"abc123"`)
+		w.WriteHeader(http.StatusOK)
+	})
+	mgmt, _ := newS3TestPair(t, s3Handler)
+	f, err := os.CreateTemp(t.TempDir(), "upload-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("hello zcp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil)
+	if err != nil {
+		t.Fatalf("PutObject() error = %v", err)
+	}
+	if !strings.Contains(authorization, "Credential=tempkey/") {
+		t.Errorf("S3 Authorization = %q, want saved credential access key", authorization)
+	}
+	if strings.Contains(authorization, "testkey") {
+		t.Errorf("S3 Authorization = %q, must not use legacy embedded credentials", authorization)
+	}
+}
+
+func TestS3OperationsRequireCompleteActiveSavedCredentials(t *testing.T) {
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	f, err := os.CreateTemp(t.TempDir(), "upload-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("hello"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, pair := range [][2]string{{"", "tempsecret"}, {"tempkey", ""}, {"", ""}, {"revoked", "secret"}} {
+		t.Setenv("ZCP_S3_ACCESS_KEY", pair[0])
+		t.Setenv("ZCP_S3_SECRET_KEY", pair[1])
+		_, err := objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "bucket", f.Name(), "object", "", nil)
+		if err == nil {
+			t.Fatalf("PutObject() succeeded with access=%q secret present=%t", pair[0], pair[1] != "")
+		}
 	}
 }
 

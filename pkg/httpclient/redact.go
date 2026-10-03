@@ -14,12 +14,12 @@ import (
 // characters such as \" inside it), a JSON number (including exponent
 // forms such as 1e10), the literals true/false, or null.
 var secretFieldPattern = regexp.MustCompile(
-	`(?i)("(?:access_key_token|access_token|refresh_token|secret_key|api_key|token|password|secret|client_secret|secret_access_key|private_key|bearer_token|api_token|auth_token|access_key_secret)"\s*:\s*)("(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)`,
+	`(?i)("(?:access_key_token|access_token|refresh_token|secret_key|api_key|api_secret|token|password|secret|client_secret|secret_access_key|private_key|bearer_token|api_token|auth_token|access_key_secret)"\s*:\s*)("(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)`,
 )
 
 // redactSecrets returns a copy of body with the values of known
 // credential-bearing JSON fields (access_key_token, token, access_token,
-// refresh_token, password, secret_key, secret, api_key, client_secret,
+// refresh_token, password, secret_key, secret, api_key, api_secret, client_secret,
 // secret_access_key, private_key, bearer_token, api_token, auth_token,
 // access_key_secret) replaced with "[REDACTED]". Matching is
 // case-insensitive on the field name and anchored on the quoted key, so

@@ -72,6 +72,12 @@ func TestRedactSecrets(t *testing.T) {
 			wantAbsent: []string{"tok-SECRET-123"},
 		},
 		{
+			name:       "api_secret redacted",
+			body:       `{"api_secret":"tok-SECRET-123"}`,
+			wantSubstr: `"api_secret":"[REDACTED]"`,
+			wantAbsent: []string{"tok-SECRET-123"},
+		},
+		{
 			name:       "secret_access_key redacted",
 			body:       `{"secret_access_key":"tok-SECRET-123"}`,
 			wantSubstr: `"secret_access_key":"[REDACTED]"`,

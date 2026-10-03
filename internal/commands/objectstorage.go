@@ -70,6 +70,7 @@ func NewObjectStorageCmd() *cobra.Command {
 	cmd.AddCommand(newOSDeleteCmd())
 	cmd.AddCommand(newOSResizeCmd())
 	cmd.AddCommand(newOSCredentialsCmd())
+	cmd.AddCommand(newOSKeysCmd())
 	cmd.AddCommand(newOSBucketCmd())
 	cmd.AddCommand(newOSObjectCmd())
 	return cmd
@@ -116,9 +117,9 @@ func newOSListCmd() *cobra.Command {
 				rows = append(rows, []string{
 					s.Slug,
 					s.Name,
-					s.Size.String(),
-					s.UsedSpace.String(),
-					s.Status,
+					s.AllocatedSizeGB(),
+					s.UsedSizeGB(),
+					s.DisplayStatus(),
 					regionName,
 					s.CreatedAt,
 				})
@@ -161,12 +162,10 @@ func newOSGetCmd() *cobra.Command {
 			rows := [][]string{
 				{"Slug", store.Slug},
 				{"Name", store.Name},
-				{"Status", store.Status},
-				{"Size (GB)", store.Size.String()},
-				{"Used (GB)", store.UsedSpace.String()},
+				{"Status", store.DisplayStatus()},
+				{"Size (GB)", store.AllocatedSizeGB()},
+				{"Used (GB)", store.UsedSizeGB()},
 				{"S3 Endpoint", store.S3Endpoint()},
-				{"Access Key", store.APIKey},
-				{"Secret Key", store.APISecret},
 				{"Region", regionName},
 				{"Project", projectName},
 				{"Created", store.CreatedAt},
@@ -255,6 +254,31 @@ func newOSCreateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("object-storage create: %w", err)
 			}
+			createdSlug := store.Slug
+			// Read the newly provisioned instance so its region supplies the S3
+			// endpoint and signing region. Then obtain only a still-visible initial
+			// key; this never creates another key or recovers an older secret.
+			store, err = svc.Get(ctx, createdSlug)
+			if err != nil {
+				return fmt.Errorf("object-storage create: storage %q was created, but its details could not be retrieved: %w", createdSlug, err)
+			}
+			creds, err := svc.GetCredentials(ctx, store.Slug)
+			if err != nil {
+				return fmt.Errorf("object-storage create: storage %q was created, but its initial S3 key could not be retrieved: %w", store.Slug, err)
+			}
+			creds.Endpoint = store.S3Endpoint()
+			if store.Region != nil {
+				creds.Region = store.Region.Slug
+			}
+			if creds.Endpoint == "" || creds.Region == "" {
+				return fmt.Errorf("object-storage create: storage %q was created, but its S3 endpoint or region was not returned", store.Slug)
+			}
+			if printer.Format() != output.FormatTable {
+				return printer.Print(struct {
+					ObjectStorage *objectstorage.ObjectStorage `json:"object_storage" yaml:"object_storage"`
+					Credentials   *objectstorage.Credentials   `json:"credentials" yaml:"credentials"`
+				}{store, creds})
+			}
 
 			regionName := ""
 			if store.Region != nil {
@@ -264,12 +288,15 @@ func newOSCreateCmd() *cobra.Command {
 			rows := [][]string{{
 				store.Slug,
 				store.Name,
-				store.Size.String(),
-				store.Status,
+				store.AllocatedSizeGB(),
+				store.DisplayStatus(),
 				regionName,
 				store.CreatedAt,
 			}}
-			return printer.PrintTable(headers, rows)
+			if err := printer.PrintTable(headers, rows); err != nil {
+				return err
+			}
+			return printer.PrintTable([]string{"S3 ENDPOINT", "ACCESS KEY", "SECRET KEY", "REGION", "SECRET VISIBLE UNTIL"}, [][]string{{creds.Endpoint, creds.APIKey, creds.APISecret, creds.Region, creds.SecretVisibleUntil}})
 		},
 	}
 
@@ -286,9 +313,10 @@ func newOSCreateCmd() *cobra.Command {
 }
 
 func newOSCredentialsCmd() *cobra.Command {
-	return &cobra.Command{
+	var keyID string
+	cmd := &cobra.Command{
 		Use:   "credentials <slug>",
-		Short: "Show S3 credentials for an object storage instance",
+		Short: "Show a newly-created S3 key while its secret is visible",
 		Args:  exactArgs(1),
 		Example: `  zcp object-storage credentials my-storage-1
   zcp object-storage credentials my-storage-1 --output json`,
@@ -305,16 +333,162 @@ func newOSCredentialsCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("object-storage credentials: %w", err)
 			}
-
-			headers := []string{"FIELD", "VALUE"}
-			rows := [][]string{
-				{"S3 Endpoint", store.S3Endpoint()},
-				{"Access Key", store.APIKey},
-				{"Secret Key", store.APISecret},
+			creds, err := svc.GetCredentialsForKey(ctx, args[0], keyID)
+			if err != nil {
+				return fmt.Errorf("object-storage credentials: %w", err)
 			}
-			return printer.PrintTable(headers, rows)
+			if creds.Endpoint == "" {
+				creds.Endpoint = store.S3Endpoint()
+			}
+			if store.Region != nil {
+				creds.Region = store.Region.Slug
+			}
+			if creds.Endpoint == "" || creds.Region == "" {
+				return fmt.Errorf("object-storage credentials: S3 endpoint or region is missing from the object storage instance")
+			}
+			if printer.Format() == output.FormatTable {
+				return printer.PrintTable([]string{"FIELD", "VALUE"}, [][]string{
+					{"S3 Endpoint", creds.Endpoint},
+					{"Access Key", creds.APIKey},
+					{"Secret Key", creds.APISecret},
+					{"Region", creds.Region},
+					{"Secret Visible Until", creds.SecretVisibleUntil},
+				})
+			}
+			return printer.Print(creds)
 		},
 	}
+	cmd.Flags().StringVar(&keyID, "key", "", "Key ID to reveal (defaults to a visible primary key)")
+	return cmd
+}
+
+func newOSKeysCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "keys", Short: "List S3 access-key metadata"}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list <storage-slug>",
+		Short: "List S3 access-key metadata (secrets are never returned)",
+		Args:  exactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			keys, err := svc.ListKeys(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("object-storage keys list: %w", err)
+			}
+			type keyMetadata struct {
+				ID                 string `json:"id" yaml:"id"`
+				APIKey             string `json:"api_key" yaml:"api_key"`
+				Status             string `json:"status" yaml:"status"`
+				IsPrimary          bool   `json:"is_primary" yaml:"is_primary"`
+				SecretVisibleUntil string `json:"secret_visible_until" yaml:"secret_visible_until"`
+				CreatedAt          string `json:"created_at" yaml:"created_at"`
+			}
+			metadata := make([]keyMetadata, 0, len(keys))
+			rows := make([][]string, 0, len(keys))
+			for _, key := range keys {
+				primary := "no"
+				if key.IsPrimary {
+					primary = "yes"
+				}
+				metadata = append(metadata, keyMetadata{
+					ID:                 key.ID,
+					APIKey:             key.APIKey,
+					Status:             key.Status,
+					IsPrimary:          key.IsPrimary,
+					SecretVisibleUntil: key.SecretVisibleUntil,
+					CreatedAt:          key.CreatedAt,
+				})
+				rows = append(rows, []string{key.ID, key.APIKey, key.Status, primary, key.SecretVisibleUntil, key.CreatedAt})
+			}
+			if printer.Format() != output.FormatTable {
+				return printer.Print(metadata)
+			}
+			return printer.PrintTable([]string{"ID", "ACCESS KEY", "STATUS", "PRIMARY", "SECRET VISIBLE UNTIL", "CREATED"}, rows)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "create <storage-slug>",
+		Short: "Create an S3 access key and print its secret during the five-minute visibility window",
+		Args:  exactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			keys, err := svc.ListKeys(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("object-storage keys create: %w", err)
+			}
+			active := 0
+			for _, existing := range keys {
+				if strings.EqualFold(existing.Status, "active") {
+					active++
+				}
+			}
+			if active >= 2 {
+				return fmt.Errorf("object-storage keys create: CMP allows at most two active keys; revoke one before creating another")
+			}
+			key, err := svc.CreateKey(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("object-storage keys create: %w", err)
+			}
+			visibleUntil, visibilityErr := time.Parse(time.RFC3339, key.SecretVisibleUntil)
+			if key.APIKey == "" || key.APISecret == "" || objectstorage.IsEncryptedSecret(key.APISecret) || visibilityErr != nil || !visibleUntil.After(time.Now()) {
+				return fmt.Errorf("object-storage keys create: key %q was created, but the API did not return a plaintext credential pair with a future secret visibility time", key.ID)
+			}
+			if printer.Format() != output.FormatTable {
+				return printer.Print(key)
+			}
+			return printer.PrintTable([]string{"ID", "ACCESS KEY", "SECRET KEY", "STATUS", "SECRET VISIBLE UNTIL"}, [][]string{{key.ID, key.APIKey, key.APISecret, key.Status, key.SecretVisibleUntil}})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "delete <storage-slug> <key-id>",
+		Short: "Revoke an S3 access key in CMP and Ceph",
+		Args:  exactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !autoApproved(cmd) {
+				return fmt.Errorf("object-storage keys delete (revoke) requires -y or --auto-approve")
+			}
+			_, client, printer, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			keys, err := svc.ListKeys(ctx, args[0])
+			if err != nil {
+				return fmt.Errorf("object-storage keys delete: %w", err)
+			}
+			active := 0
+			isActive := false
+			for _, existing := range keys {
+				if strings.EqualFold(existing.Status, "active") {
+					active++
+					if existing.ID == args[1] {
+						isActive = true
+					}
+				}
+			}
+			if isActive && active <= 1 {
+				return fmt.Errorf("object-storage keys delete: CMP requires at least one active key")
+			}
+			if err := svc.DeleteKey(ctx, args[0], args[1]); err != nil {
+				return fmt.Errorf("object-storage keys delete: %w", err)
+			}
+			return printer.PrintTable([]string{"REVOKED KEY"}, [][]string{{args[1]}})
+		},
+	})
+	return cmd
 }
 
 func newOSDeleteCmd() *cobra.Command {
@@ -389,8 +563,8 @@ func newOSResizeCmd() *cobra.Command {
 			rows := [][]string{{
 				store.Slug,
 				store.Name,
-				store.Size.String(),
-				store.Status,
+				store.AllocatedSizeGB(),
+				store.DisplayStatus(),
 			}}
 			return printer.PrintTable(headers, rows)
 		},
