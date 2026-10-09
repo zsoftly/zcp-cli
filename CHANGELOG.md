@@ -7,6 +7,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Security
+
+- **Go toolchain `1.26.8` -> `1.26.9` and `golang.org/x/net` `v0.58.0` -> `v0.60.0`.** Resolves the reachable standard-library and `x/net` vulnerabilities reported by `govulncheck`.
+
 ### Fixed
 
 - **ACL rule listings now retrieve every page.** Terraform ACL rule reads and creates no longer miss rules beyond the first API response page.
