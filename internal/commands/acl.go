@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/acl"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 )
@@ -215,12 +216,31 @@ func newACLDeleteCmd() *cobra.Command {
 }
 
 func newACLRulesCmd() *cobra.Command {
+	var maxItems, pageSize int
+	var startingToken string
+	var noPaginate bool
+
 	cmd := &cobra.Command{
-		Use:     "rules <vpc-slug> <acl-name-or-id>",
-		Short:   "List the rules inside a network ACL",
-		Args:    exactArgs(2),
-		Example: `  zcp acl rules my-vpc web-acl`,
+		Use:   "rules <vpc-slug> <acl-name-or-id>",
+		Short: "List the rules inside a network ACL",
+		Args:  exactArgs(2),
+		Example: `  zcp acl rules my-vpc web-acl
+  zcp acl rules my-vpc web-acl --max-items 25
+  zcp acl rules my-vpc web-acl --max-items 25 --starting-token '<token>'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("max-items") && maxItems <= 0 {
+				return fmt.Errorf("--max-items must be greater than zero")
+			}
+			if cmd.Flags().Changed("page-size") && pageSize <= 0 {
+				return fmt.Errorf("--page-size must be greater than zero")
+			}
+			if cmd.Flags().Changed("starting-token") && strings.TrimSpace(startingToken) == "" {
+				return fmt.Errorf("--starting-token must not be empty")
+			}
+			if noPaginate && (cmd.Flags().Changed("max-items") || cmd.Flags().Changed("starting-token") || cmd.Flags().Changed("page-size")) {
+				return fmt.Errorf("--no-paginate cannot be combined with --max-items, --starting-token, or --page-size")
+			}
+
 			_, client, printer, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
@@ -233,33 +253,71 @@ func newACLRulesCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("acl rules: %w", err)
 			}
-			rules, err := svc.ListRules(ctx, args[0], aclID)
+			result, err := svc.ListRulesWithOptions(ctx, args[0], aclID, acl.ListRulesOptions{
+				MaxItems: maxItems, StartingToken: startingToken, PageSize: pageSize, NoPaginate: noPaginate,
+			})
 			if err != nil {
 				return fmt.Errorf("acl rules: %w", err)
 			}
 
-			headers := []string{"ID", "NUMBER", "ACTION", "TRAFFIC", "PROTOCOL", "PORTS", "CIDR", "STATE"}
-			rows := make([][]string, 0, len(rules))
-			for _, r := range rules {
-				ports := "-"
-				if r.StartPort != "" {
-					ports = r.StartPort + "-" + r.EndPort
+			headers, rows, records := aclRuleDisplay(result.Rules)
+			structured := cmd.Flags().Changed("max-items") || cmd.Flags().Changed("starting-token") || cmd.Flags().Changed("no-paginate")
+			if structured && printer.Format() != output.FormatTable {
+				response := aclRulesOutput{Rules: records}
+				if result.NextToken != "" {
+					response.NextToken = result.NextToken
 				}
-				rows = append(rows, []string{
-					r.ID,
-					strconv.Itoa(r.Number),
-					r.Action,
-					r.TrafficType,
-					r.Protocol,
-					ports,
-					r.CIDRList,
-					r.State,
-				})
+				return printer.Print(response)
 			}
-			return printer.PrintTable(headers, rows)
+			if err := printer.PrintTable(headers, rows); err != nil {
+				return err
+			}
+			if structured && result.NextToken != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Next token: %s\n", result.NextToken)
+			}
+			return nil
 		},
 	}
+	cmd.Flags().IntVar(&maxItems, "max-items", 0, "Maximum rules to return before emitting a continuation token")
+	cmd.Flags().StringVar(&startingToken, "starting-token", "", "Continuation token from a previous rules request")
+	cmd.Flags().IntVar(&pageSize, "page-size", 0, "Rules requested from the API per page")
+	cmd.Flags().BoolVar(&noPaginate, "no-paginate", false, "Request one API page only")
 	return cmd
+}
+
+type aclRuleOutput struct {
+	ID       string `json:"id" yaml:"id"`
+	Number   string `json:"number" yaml:"number"`
+	Action   string `json:"action" yaml:"action"`
+	Traffic  string `json:"traffic" yaml:"traffic"`
+	Protocol string `json:"protocol" yaml:"protocol"`
+	Ports    string `json:"ports" yaml:"ports"`
+	CIDR     string `json:"cidr" yaml:"cidr"`
+	State    string `json:"state" yaml:"state"`
+}
+
+type aclRulesOutput struct {
+	Rules     []aclRuleOutput `json:"rules" yaml:"rules"`
+	NextToken string          `json:"next_token,omitempty" yaml:"next_token,omitempty"`
+}
+
+func aclRuleDisplay(rules []acl.Rule) ([]string, [][]string, []aclRuleOutput) {
+	headers := []string{"ID", "NUMBER", "ACTION", "TRAFFIC", "PROTOCOL", "PORTS", "CIDR", "STATE"}
+	rows := make([][]string, 0, len(rules))
+	records := make([]aclRuleOutput, 0, len(rules))
+	for _, r := range rules {
+		ports := "-"
+		if r.StartPort != "" {
+			ports = r.StartPort + "-" + r.EndPort
+		}
+		record := aclRuleOutput{
+			ID: r.ID, Number: strconv.Itoa(r.Number), Action: r.Action, Traffic: r.TrafficType,
+			Protocol: r.Protocol, Ports: ports, CIDR: r.CIDRList, State: r.State,
+		}
+		records = append(records, record)
+		rows = append(rows, []string{record.ID, record.Number, record.Action, record.Traffic, record.Protocol, record.Ports, record.CIDR, record.State})
+	}
+	return headers, rows, records
 }
 
 // aclRuleFlags holds the shared flag values for create-rule and update-rule.

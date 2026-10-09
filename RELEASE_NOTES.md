@@ -1,81 +1,47 @@
-# zcp v0.0.30 Release Notes
+# zcp v0.0.31 Release Notes
 
-v0.0.30 adds custom VM plans, load balancer rule listing, and object-storage
-key management. It also aligns object-storage reads and S3 commands with the
-current platform API response shape.
+v0.0.31 fixes ACL rule listings that stopped at the first API page, adds
+bounded ACL rule listing controls, and includes security updates to the Go
+toolchain and networking dependencies.
 
 ## Highlights
 
-**Create a custom VM plan.** Omit `--plan` and provide a CPU count plus memory
-and disk in GB. Existing catalogue-plan creates keep their current form.
+**List every rule in an ACL.** `zcp acl rules` now retrieves every API page, so
+ACLs with more than the default page size return their complete rule set.
 
 ```bash
-zcp instance create \
-  --name my-custom-vm \
-  --project default-9 \
-  --region yul-1 \
-  --template ubuntu-2604-lts-1 \
-  --cpu 2 \
-  --memory 4 \
-  --disk 45 \
-  --billing-cycle hourly \
-  --network-plan pnet-yul \
-  --storage-category pro-nvme
+zcp acl rules <vpc-slug> <acl-name-or-id>
 ```
 
-**List load balancer rules before attaching a VM.** The output includes each
-rule ID required by `attach-vm` and `detach-vm`.
+**Safer API pagination.** If a later page fails or reports inconsistent
+pagination metadata, the command returns an error instead of a partial rule
+list. A response that explicitly reports `total: 0` must contain no rules.
+
+**Choose how many ACL rules to return.** Use `--max-items` for a bounded
+result, `--starting-token` to resume it, `--page-size` to set the API request
+size, or `--no-paginate` to request one API page. Bounded and single-page JSON
+and YAML output use an object with a `rules` array and optional `next_token`.
+Table output prints the continuation token on standard error.
 
 ```bash
-zcp loadbalancer list-rule <load-balancer-slug>
-zcp loadbalancer attach-vm <load-balancer-slug> <rule-id> --vm <vm-slug>
+zcp acl rules <vpc-slug> <acl-name-or-id> --max-items 25 --output json
+zcp acl rules <vpc-slug> <acl-name-or-id> --max-items 25 --starting-token '<next_token>' --output json
+zcp acl rules <vpc-slug> <acl-name-or-id> --no-paginate --output yaml
 ```
 
-**Manage object-storage access keys.** A store can have one or two active
-keys. Create a second key, copy its secret within five minutes, update your
-applications, then revoke the old key. The platform blocks a third active key
-and revocation of the final active key.
+`--no-paginate` cannot be combined with the other pagination flags. A
+continuation token applies only to the same ACL and retains its page size.
 
-```bash
-zcp object-storage keys list <store-slug>
-zcp object-storage keys create <store-slug> --output json
-# Store the returned pair in your secret manager, then update consumers.
-zcp object-storage keys delete <store-slug> <old-key-id> -y
-```
-
-The CLI only displays plaintext credentials while the platform reports their
-visibility window as open. It does not decrypt or recover a secret after its
-visibility window closes.
-`object-storage create --output json` includes its initial key only when the
-platform exposes that secret.
-For direct S3 commands, set both variables from the pair you saved when the
-key was created. The CLI verifies that the access key is active for the named
-store before using it.
-
-```bash
-# Example values only. Keep the secret out of shell history where possible.
-export ZCP_S3_ACCESS_KEY='<access-key>'
-export ZCP_S3_SECRET_KEY='<secret-key>'
-zcp object-storage bucket versioning status <store-slug> <bucket-name>
-```
-
-## Fixed
-
-- Object-storage list and get output now reads allocation from the attached
-  offering and usage from the current statistics field. Missing status values
-  display as `-`; normal reads do not print secrets.
-- Debug redaction now covers `api_secret`.
+**Security updates.** The selected Go toolchain is now Go 1.26.9 and
+`golang.org/x/net` is now v0.60.0. These updates resolve the reachable
+standard-library and networking vulnerabilities reported by `govulncheck`.
 
 ## Go library consumers
 
-`loadbalancer.Service.Get(ctx, slug)` is available for library consumers.
-Object-storage users should review serialized output before upgrading.
-`ObjectStorage.APIKey` and `APISecret` are excluded from JSON and YAML encoding
-and decoding. `OSStats.TotalSize` is now `int64`, and storage allocation is
-reported in `Offering.Storage`. Object-storage YAML output now uses API-style
-snake_case field names. Direct S3 methods require the
-`ZCP_S3_ACCESS_KEY` and `ZCP_S3_SECRET_KEY` environment-variable pair. The
-object-storage service also adds key-management methods.
+`acl.Service.ListRules` now returns rules from every page. Callers receive an
+error and no partial rule list when a later page cannot be retrieved or its
+pagination metadata is inconsistent. Terraform provider maintainers must adopt
+this `zcp-cli` module release to receive this behavior.
 
 ---
 
@@ -103,7 +69,7 @@ place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v0.0.30
+zcp version   # zcp version v0.0.31
 ```
 
 First-time setup after installing:
