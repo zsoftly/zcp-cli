@@ -215,6 +215,148 @@ func TestListRules(t *testing.T) {
 	}
 }
 
+func TestListRulesPagination(t *testing.T) {
+	pages := map[string][]acl.Rule{
+		"1": make([]acl.Rule, 10),
+		"2": {{ID: "r11", Number: 11}},
+		"3": {{ID: "r12", Number: 12}},
+	}
+	for i := range pages["1"] {
+		pages["1"][i] = acl.Rule{ID: fmt.Sprintf("r%d", i+1), Number: i + 1}
+	}
+
+	var requestedPages []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		requestedPages = append(requestedPages, page)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":       "Success",
+			"current_page": map[string]int{"1": 1, "2": 2, "3": 3}[page],
+			"data":         pages[page],
+			"total":        12,
+		}); err != nil {
+			t.Errorf("encoding page %s response: %v", page, err)
+		}
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err != nil {
+		t.Fatalf("ListRules() error = %v", err)
+	}
+	if got, want := len(rules), 12; got != want {
+		t.Fatalf("ListRules() returned %d rules, want %d", got, want)
+	}
+	if got, want := rules[11].ID, "r12"; got != want {
+		t.Errorf("rules[11].ID = %q, want %q", got, want)
+	}
+	if want := []string{"1", "2", "3"}; len(requestedPages) != len(want) || requestedPages[0] != want[0] || requestedPages[1] != want[1] || requestedPages[2] != want[2] {
+		t.Errorf("requested pages = %v, want %v", requestedPages, want)
+	}
+}
+
+func TestListRulesPaginationDoesNotReturnPartialResultsOnLaterPageFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "2" {
+			http.Error(w, "later page failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "current_page": 1,
+			"data": []acl.Rule{{ID: "r1"}}, "total": 11,
+		})
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want error when page 2 fails")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil on pagination failure", rules)
+	}
+}
+
+func TestListRulesPaginationDoesNotReturnPartialResultsOnLaterPageDecodeFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			fmt.Fprint(w, `{"status":"Success","current_page":2,"data":`)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "current_page": 1,
+			"data": []acl.Rule{{ID: "r1"}}, "total": 11,
+		})
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want error when page 2 cannot be decoded")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil on pagination decode failure", rules)
+	}
+}
+
+func TestListRulesPaginationRejectsMalformedMetadata(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		if page == "2" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status": "Success", "data": []acl.Rule{{ID: "r11"}}, "total": 11,
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "current_page": 1,
+			"data": []acl.Rule{{ID: "r1"}}, "total": 11,
+		})
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want error for missing page metadata")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil for malformed pagination metadata", rules)
+	}
+}
+
+func TestListRulesPaginationRejectsDroppedTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		if page == "2" {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status": "Success", "current_page": 2, "data": []acl.Rule{},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "current_page": 1,
+			"data": []acl.Rule{{ID: "r1"}}, "total": 11,
+		})
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want error when page 2 drops total")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil when page 2 drops total", rules)
+	}
+}
+
 // TestDeleteRulePath verifies the DELETE route shape.
 func TestDeleteRulePath(t *testing.T) {
 	var gotPath string

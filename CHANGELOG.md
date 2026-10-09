@@ -7,6 +7,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Fixed
+
+- **ACL rule listings now retrieve every page.** Terraform ACL rule reads and creates no longer miss rules beyond the first API response page.
+
 ## [v0.0.30] - 2026-10-03
 
 ### Fixed

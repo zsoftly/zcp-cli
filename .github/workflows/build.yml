@@ -36,6 +36,7 @@ jobs:
             go:
               - 'cmd/**'
               - 'internal/**'
+              - 'pkg/**'
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
