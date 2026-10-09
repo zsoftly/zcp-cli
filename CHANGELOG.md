@@ -15,6 +15,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **`zcp acl rules` retrieves every ACL rule page.** `acl.Service.ListRules` returns all pages and returns an error rather than a partial list if a later page fails.
 
+### Added
+
+- **ACL rule pagination controls.** `zcp acl rules` now supports `--max-items`, `--starting-token`, `--page-size`, and `--no-paginate`. Bounded and single-page JSON/YAML results include an opaque `next_token` when more rules are available; table output prints it on standard error.
+
 ## [v0.0.30] - 2026-10-03
 
 ### Fixed

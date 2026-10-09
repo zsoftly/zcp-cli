@@ -128,7 +128,7 @@ zcp
 ├── acl                                Network ACL operations
 │   ├── list                           List network ACLs (ID, name, description)
 │   ├── create                         Create an ACL list in a VPC
-│   ├── rules                          List the rules inside an ACL
+│   ├── rules                          List ACL rules (--max-items, --starting-token, --page-size, --no-paginate)
 │   ├── create-rule                    Add a rule to an ACL (--protocol, --cidr, --start/end-port, --action, --traffic-type)
 │   ├── update-rule                    Update a rule in place (all fields re-sent; rule ID preserved)
 │   ├── delete-rule                    Delete a rule from an ACL

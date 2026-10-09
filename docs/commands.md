@@ -815,6 +815,36 @@ zcp auth validate
 
 ---
 
+## ACL rule pagination
+
+`zcp acl rules <vpc-slug> <acl-name-or-id>` fetches every API page by default.
+Use `--page-size <n>` to request a different API page size without limiting the
+complete result.
+
+Use `--max-items <n>` when a script needs a bounded result. JSON and YAML then
+return an object with a `rules` array and optional opaque `next_token`. Pass
+that token back with `--starting-token` to continue from the next rule. The
+token applies only to the same ACL and retains its page size, so a different explicit
+`--page-size` is rejected on resume. Table output prints the token on standard
+error after the rows.
+
+```bash
+# Return at most 25 rules and, when more exist, a continuation token.
+zcp acl rules my-vpc web-acl --max-items 25 --output json
+
+# Continue the preceding result. Keep the same ACL and page size.
+zcp acl rules my-vpc web-acl --max-items 25 --starting-token '<next_token>' --output json
+
+# Fetch one API page only. Do not combine with the other pagination flags.
+zcp acl rules my-vpc web-acl --no-paginate --output yaml
+```
+
+`--no-paginate` conflicts with `--max-items`, `--starting-token`, and
+`--page-size`. A token is valid only while the ACL's rule set remains stable;
+changes between calls can change the resumed result.
+
+---
+
 ## Output Formats
 
 All listing commands support three output formats controlled by the `--output`

@@ -3,9 +3,12 @@ package acl
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
@@ -83,6 +86,33 @@ type ruleListResponse struct {
 	Total       *int   `json:"total"`
 }
 
+// ListRulesOptions controls optional ACL rule pagination. Zero values retain
+// ListRules' complete-list behavior.
+type ListRulesOptions struct {
+	MaxItems      int
+	StartingToken string
+	PageSize      int
+	NoPaginate    bool
+}
+
+// ListRulesResult contains a page of ACL rules and an optional local token for
+// fetching the next page.
+type ListRulesResult struct {
+	Rules     []Rule
+	NextToken string
+}
+
+type listRulesToken struct {
+	Version  int    `json:"v"`
+	VPC      string `json:"vpc"`
+	ACL      string `json:"acl"`
+	Page     int    `json:"page"`
+	Offset   int    `json:"offset"`
+	Consumed int    `json:"consumed"`
+	PageSize int    `json:"page_size"`
+	Total    *int   `json:"total,omitempty"`
+}
+
 // Service provides Network ACL API operations.
 type Service struct {
 	client *httpclient.Client
@@ -140,60 +170,208 @@ func (s *Service) Delete(ctx context.Context, vpcSlug, aclID string) error {
 
 // ListRules returns all rules inside an ACL list.
 func (s *Service) ListRules(ctx context.Context, vpcSlug, aclID string) ([]Rule, error) {
-	path := "/vpcs/" + vpcSlug + "/network-acl-list/" + aclID + "/network-acl"
-	var all []Rule
-	var reportedTotal *int
-	for page := 1; page <= maxListPages; page++ {
-		q := url.Values{}
-		if page > 1 {
-			q.Set("page", fmt.Sprintf("%d", page))
-		}
-
-		var resp ruleListResponse
-		if err := s.client.Get(ctx, path, q, &resp); err != nil {
-			return nil, fmt.Errorf("listing rules for ACL %s: %w", aclID, err)
-		}
-		if resp.CurrentPage < 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative page %d", aclID, resp.CurrentPage)
-		}
-		if page > 1 && resp.CurrentPage == 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: requested page %d but the API did not return pagination metadata", aclID, page)
-		}
-		if resp.CurrentPage > 0 && resp.CurrentPage != page {
-			return nil, fmt.Errorf("listing rules for ACL %s: requested page %d but the API returned page %d", aclID, page, resp.CurrentPage)
-		}
-		all = append(all, resp.Data...)
-
-		if resp.Total != nil && *resp.Total < 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative total %d", aclID, *resp.Total)
-		}
-		if page == 1 {
-			reportedTotal = resp.Total
-		} else if reportedTotal != nil && (resp.Total == nil || *resp.Total != *reportedTotal) {
-			return nil, fmt.Errorf("listing rules for ACL %s: API changed reported total on page %d", aclID, page)
-		}
-
-		// A missing total on the first page is treated as a non-paginated response.
-		// Once the API reports a total, every later page must retain it. An empty
-		// page before the collection is complete is malformed: do not return a
-		// partial rule list.
-		if reportedTotal == nil {
-			return all, nil
-		}
-		if *reportedTotal == 0 {
-			if len(resp.Data) > 0 {
-				return nil, fmt.Errorf("listing rules for ACL %s: page %d returned rules despite a total of zero", aclID, page)
-			}
-			return all, nil
-		}
-		if len(resp.Data) == 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: page %d was empty before reaching reported total %d", aclID, page, *reportedTotal)
-		}
-		if len(all) >= *reportedTotal {
-			return all, nil
-		}
+	result, err := s.ListRulesWithOptions(ctx, vpcSlug, aclID, ListRulesOptions{})
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("listing rules for ACL %s: exceeded %d pages without reaching the reported total", aclID, maxListPages)
+	return result.Rules, nil
+}
+
+// ListRulesWithOptions lists ACL rules with optional bounded pagination.
+func (s *Service) ListRulesWithOptions(ctx context.Context, vpcSlug, aclID string, options ListRulesOptions) (ListRulesResult, error) {
+	if options.MaxItems < 0 {
+		return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: max items must not be negative", aclID)
+	}
+	if options.PageSize < 0 {
+		return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: page size must not be negative", aclID)
+	}
+	if options.NoPaginate && (options.MaxItems != 0 || options.StartingToken != "" || options.PageSize != 0) {
+		return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: no-paginate cannot be combined with pagination options", aclID)
+	}
+
+	path := "/vpcs/" + vpcSlug + "/network-acl-list/" + aclID + "/network-acl"
+	page, offset, consumed := 1, 0, 0
+	var reportedTotal *int
+	if options.StartingToken != "" {
+		token, err := decodeListRulesToken(options.StartingToken)
+		if err != nil {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: invalid starting token: %w", aclID, err)
+		}
+		if token.VPC != vpcSlug || token.ACL != aclID {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: starting token is for a different ACL", aclID)
+		}
+		if options.PageSize != 0 && options.PageSize != token.PageSize {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: page size must match the starting token", aclID)
+		}
+		page, offset, consumed = token.Page, token.Offset, token.Consumed
+		options.PageSize, reportedTotal = token.PageSize, token.Total
+	}
+
+	if options.NoPaginate {
+		resp, err := s.listRulesPage(ctx, path, 1, 0)
+		if err != nil {
+			return ListRulesResult{}, err
+		}
+		if _, err := validateRuleListResponse(aclID, 1, nil, resp); err != nil {
+			return ListRulesResult{}, err
+		}
+		result := ListRulesResult{Rules: resp.Data}
+		if resp.Total != nil && len(resp.Data) < *resp.Total {
+			token, err := encodeListRulesToken(listRulesToken{
+				Version: 1, VPC: vpcSlug, ACL: aclID, Page: 2,
+				Consumed: len(resp.Data), Total: resp.Total,
+			})
+			if err != nil {
+				return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: encoding continuation token: %w", aclID, err)
+			}
+			result.NextToken = token
+		}
+		return result, nil
+	}
+
+	if page < 1 || page > maxListPages || offset < 0 || consumed < 0 {
+		return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: invalid starting token pagination state", aclID)
+	}
+
+	var rules []Rule
+	for requests := 0; requests < maxListPages; requests++ {
+		if page > maxListPages {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: exceeded %d pages without reaching the reported total", aclID, maxListPages)
+		}
+		resp, err := s.listRulesPage(ctx, path, page, options.PageSize)
+		if err != nil {
+			return ListRulesResult{}, err
+		}
+		reportedTotal, err = validateRuleListResponse(aclID, page, reportedTotal, resp)
+		if err != nil {
+			return ListRulesResult{}, err
+		}
+		if offset > len(resp.Data) {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: starting token offset %d exceeds page %d", aclID, offset, page)
+		}
+		if reportedTotal != nil && len(resp.Data)-offset > *reportedTotal-consumed {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: page %d returned more rules than the reported total", aclID, page)
+		}
+
+		available := resp.Data[offset:]
+		take := len(available)
+		if options.MaxItems > 0 && take > options.MaxItems-len(rules) {
+			take = options.MaxItems - len(rules)
+		}
+		if take > int(^uint(0)>>1)-consumed {
+			return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: pagination count overflow", aclID)
+		}
+		rules = append(rules, available[:take]...)
+		consumed += take
+		nextOffset := offset + take
+
+		hasMore := reportedTotal != nil && consumed < *reportedTotal
+		if reportedTotal == nil && nextOffset < len(resp.Data) {
+			hasMore = true
+		}
+		if !hasMore {
+			return ListRulesResult{Rules: rules}, nil
+		}
+		if options.MaxItems > 0 && len(rules) == options.MaxItems {
+			nextPage := page
+			if nextOffset == len(resp.Data) {
+				nextPage++
+				nextOffset = 0
+			}
+			if nextPage > maxListPages {
+				return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: exceeded %d pages without reaching the reported total", aclID, maxListPages)
+			}
+			token, err := encodeListRulesToken(listRulesToken{
+				Version: 1, VPC: vpcSlug, ACL: aclID, Page: nextPage,
+				Offset: nextOffset, Consumed: consumed, PageSize: options.PageSize, Total: reportedTotal,
+			})
+			if err != nil {
+				return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: encoding continuation token: %w", aclID, err)
+			}
+			return ListRulesResult{Rules: rules, NextToken: token}, nil
+		}
+
+		page++
+		offset = 0
+	}
+	return ListRulesResult{}, fmt.Errorf("listing rules for ACL %s: exceeded %d pages without reaching the reported total", aclID, maxListPages)
+}
+
+func (s *Service) listRulesPage(ctx context.Context, path string, page, pageSize int) (ruleListResponse, error) {
+	q := url.Values{}
+	if page > 1 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	if pageSize > 0 {
+		q.Set("per_page", strconv.Itoa(pageSize))
+	}
+	var resp ruleListResponse
+	if err := s.client.Get(ctx, path, q, &resp); err != nil {
+		return ruleListResponse{}, fmt.Errorf("listing rules: %w", err)
+	}
+	return resp, nil
+}
+
+func validateRuleListResponse(aclID string, page int, reportedTotal *int, resp ruleListResponse) (*int, error) {
+	if resp.CurrentPage < 0 {
+		return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative page %d", aclID, resp.CurrentPage)
+	}
+	if page > 1 && resp.CurrentPage == 0 {
+		return nil, fmt.Errorf("listing rules for ACL %s: requested page %d but the API did not return pagination metadata", aclID, page)
+	}
+	if resp.CurrentPage > 0 && resp.CurrentPage != page {
+		return nil, fmt.Errorf("listing rules for ACL %s: requested page %d but the API returned page %d", aclID, page, resp.CurrentPage)
+	}
+	if resp.Total != nil && *resp.Total < 0 {
+		return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative total %d", aclID, *resp.Total)
+	}
+	if reportedTotal == nil {
+		reportedTotal = resp.Total
+	} else if resp.Total == nil || *resp.Total != *reportedTotal {
+		return nil, fmt.Errorf("listing rules for ACL %s: API changed reported total on page %d", aclID, page)
+	}
+	if reportedTotal == nil {
+		return nil, nil
+	}
+	if *reportedTotal == 0 {
+		if len(resp.Data) > 0 {
+			return nil, fmt.Errorf("listing rules for ACL %s: page %d returned rules despite a total of zero", aclID, page)
+		}
+		return reportedTotal, nil
+	}
+	if len(resp.Data) > *reportedTotal {
+		return nil, fmt.Errorf("listing rules for ACL %s: page %d returned more rules than the reported total", aclID, page)
+	}
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("listing rules for ACL %s: page %d was empty before reaching reported total %d", aclID, page, *reportedTotal)
+	}
+	return reportedTotal, nil
+}
+
+func encodeListRulesToken(token listRulesToken) (string, error) {
+	b, err := json.Marshal(token)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func decodeListRulesToken(value string) (listRulesToken, error) {
+	if strings.TrimSpace(value) == "" {
+		return listRulesToken{}, fmt.Errorf("token is empty")
+	}
+	b, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return listRulesToken{}, err
+	}
+	var token listRulesToken
+	if err := json.Unmarshal(b, &token); err != nil {
+		return listRulesToken{}, err
+	}
+	if token.Version != 1 || token.VPC == "" || token.ACL == "" || token.Page < 1 || token.Page > maxListPages || token.Offset < 0 || token.Consumed < 0 || token.Offset > token.Consumed || token.PageSize < 0 || (token.Total == nil && token.Page > 1) || (token.Total != nil && (*token.Total < 0 || token.Consumed > *token.Total)) {
+		return listRulesToken{}, fmt.Errorf("token has invalid pagination state")
+	}
+	return token, nil
 }
 
 // CreateRule adds a rule to an ACL list.

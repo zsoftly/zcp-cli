@@ -409,6 +409,177 @@ func TestListRulesPaginationRejectsDroppedTotal(t *testing.T) {
 	}
 }
 
+func TestListRulesWithOptionsStopsAndResumesWithoutGaps(t *testing.T) {
+	rules := []acl.Rule{{ID: "r1"}, {ID: "r2"}, {ID: "r3"}, {ID: "r4"}, {ID: "r5"}}
+	var pages []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		pages = append(pages, page)
+		if got := r.URL.Query().Get("per_page"); got != "2" {
+			t.Errorf("per_page = %q, want 2", got)
+		}
+		start := map[string]int{"1": 0, "2": 2, "3": 4}[page]
+		end := start + 2
+		if end > len(rules) {
+			end = len(rules)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "Success", "current_page": map[string]int{"1": 1, "2": 2, "3": 3}[page],
+			"data": rules[start:end], "total": len(rules),
+		})
+	}))
+	defer srv.Close()
+
+	svc := acl.NewService(newClient(srv.URL))
+	first, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{MaxItems: 3, PageSize: 2})
+	if err != nil {
+		t.Fatalf("first ListRulesWithOptions() error = %v", err)
+	}
+	if got := []string{first.Rules[0].ID, first.Rules[1].ID, first.Rules[2].ID}; fmt.Sprint(got) != "[r1 r2 r3]" {
+		t.Errorf("first rules = %v, want [r1 r2 r3]", got)
+	}
+	if first.NextToken == "" {
+		t.Fatal("first NextToken is empty, want continuation token")
+	}
+
+	second, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{MaxItems: 3, StartingToken: first.NextToken})
+	if err != nil {
+		t.Fatalf("second ListRulesWithOptions() error = %v", err)
+	}
+	if got := []string{second.Rules[0].ID, second.Rules[1].ID}; fmt.Sprint(got) != "[r4 r5]" {
+		t.Errorf("second rules = %v, want [r4 r5]", got)
+	}
+	if second.NextToken != "" {
+		t.Errorf("second NextToken = %q, want empty", second.NextToken)
+	}
+	if got, want := fmt.Sprint(pages), "[1 2 2 3]"; got != want {
+		t.Errorf("requested pages = %s, want %s", got, want)
+	}
+
+	if _, err := svc.ListRulesWithOptions(context.Background(), "other-vpc", "acl-1", acl.ListRulesOptions{StartingToken: first.NextToken}); err == nil {
+		t.Error("ListRulesWithOptions() error = nil, want scope mismatch error")
+	}
+	if _, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{StartingToken: first.NextToken, PageSize: 3}); err == nil {
+		t.Error("ListRulesWithOptions() error = nil, want page size mismatch error")
+	}
+	if _, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{StartingToken: "not-a-token"}); err == nil {
+		t.Error("ListRulesWithOptions() error = nil, want malformed token error")
+	}
+}
+
+func TestListRulesWithOptionsNoPaginateRequestsOnePage(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if got := r.URL.RawQuery; got != "" {
+			t.Errorf("query = %q, want empty", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"data":[{"id":"r1"}],"total":2}`)
+	}))
+	defer srv.Close()
+
+	result, err := acl.NewService(newClient(srv.URL)).ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{NoPaginate: true})
+	if err != nil {
+		t.Fatalf("ListRulesWithOptions() error = %v", err)
+	}
+	if got, want := len(result.Rules), 1; got != want || result.NextToken == "" {
+		t.Errorf("result = %+v, want one rule and a token", result)
+	}
+	if got, want := requests, 1; got != want {
+		t.Errorf("requests = %d, want %d", got, want)
+	}
+}
+
+func TestListRulesWithOptionsRejectsRulesBeyondReportedTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"data":[{"id":"r1"},{"id":"r2"},{"id":"r3"}],"total":1}`)
+	}))
+	defer srv.Close()
+
+	svc := acl.NewService(newClient(srv.URL))
+	for _, options := range []acl.ListRulesOptions{
+		{MaxItems: 1},
+		{NoPaginate: true},
+	} {
+		result, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", options)
+		if err == nil {
+			t.Errorf("ListRulesWithOptions(%+v) error = nil, want inconsistent total error", options)
+		}
+		if result.Rules != nil || result.NextToken != "" {
+			t.Errorf("ListRulesWithOptions(%+v) result = %+v, want no partial result", options, result)
+		}
+	}
+}
+
+func TestListRulesWithOptionsRejectsPageBeyondLimitAfterResume(t *testing.T) {
+	var pages []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		pages = append(pages, page)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"status":"Success","current_page":%s,"data":[{"id":"r%s"}],"total":1001}`, page, page)
+	}))
+	defer srv.Close()
+
+	svc := acl.NewService(newClient(srv.URL))
+	first, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{MaxItems: 999, PageSize: 1})
+	if err != nil {
+		t.Fatalf("initial ListRulesWithOptions() error = %v", err)
+	}
+	if len(first.Rules) != 999 || first.NextToken == "" {
+		t.Fatalf("initial result = %+v, want 999 rules and a continuation token", first)
+	}
+
+	result, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{StartingToken: first.NextToken})
+	if err == nil {
+		t.Fatal("ListRulesWithOptions() error = nil, want page-limit error")
+	}
+	if result.Rules != nil || result.NextToken != "" {
+		t.Errorf("result = %+v, want no partial result", result)
+	}
+	if got, want := len(pages), 1000; got != want || pages[len(pages)-1] != "1000" {
+		t.Errorf("requested pages = %d ending at %q, want 1000 ending at page 1000", got, pages[len(pages)-1])
+	}
+}
+
+func TestListRulesWithOptionsResumesWithinOmittedTotalPage(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","data":[{"id":"r1"},{"id":"r2"},{"id":"r3"}]}`)
+	}))
+	defer srv.Close()
+
+	svc := acl.NewService(newClient(srv.URL))
+	first, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{MaxItems: 2})
+	if err != nil {
+		t.Fatalf("first ListRulesWithOptions() error = %v", err)
+	}
+	if len(first.Rules) != 2 || first.NextToken == "" {
+		t.Fatalf("first result = %+v, want two rules and a token", first)
+	}
+	second, err := svc.ListRulesWithOptions(context.Background(), "my-vpc", "acl-1", acl.ListRulesOptions{MaxItems: 2, StartingToken: first.NextToken})
+	if err != nil {
+		t.Fatalf("second ListRulesWithOptions() error = %v", err)
+	}
+	if len(second.Rules) != 1 || second.Rules[0].ID != "r3" || second.NextToken != "" {
+		t.Errorf("second result = %+v, want r3 and no token", second)
+	}
+	if got, want := requests, 2; got != want {
+		t.Errorf("requests = %d, want %d", got, want)
+	}
+}
+
 // TestDeleteRulePath verifies the DELETE route shape.
 func TestDeleteRulePath(t *testing.T) {
 	var gotPath string
