@@ -13,7 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
-- **ACL rule listings now retrieve every page.** Terraform ACL rule reads and creates no longer miss rules beyond the first API response page.
+- **`zcp acl rules` retrieves every ACL rule page.** `acl.Service.ListRules` returns all pages and returns an error rather than a partial list if a later page fails.
 
 ## [v0.0.30] - 2026-10-03
 

@@ -80,7 +80,7 @@ type ruleListResponse struct {
 	Status      string `json:"status"`
 	CurrentPage int    `json:"current_page"`
 	Data        []Rule `json:"data"`
-	Total       int    `json:"total"`
+	Total       *int   `json:"total"`
 }
 
 // Service provides Network ACL API operations.
@@ -142,7 +142,7 @@ func (s *Service) Delete(ctx context.Context, vpcSlug, aclID string) error {
 func (s *Service) ListRules(ctx context.Context, vpcSlug, aclID string) ([]Rule, error) {
 	path := "/vpcs/" + vpcSlug + "/network-acl-list/" + aclID + "/network-acl"
 	var all []Rule
-	reportedTotal := 0
+	var reportedTotal *int
 	for page := 1; page <= maxListPages; page++ {
 		q := url.Values{}
 		if page > 1 {
@@ -164,26 +164,32 @@ func (s *Service) ListRules(ctx context.Context, vpcSlug, aclID string) ([]Rule,
 		}
 		all = append(all, resp.Data...)
 
-		if resp.Total < 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative total %d", aclID, resp.Total)
+		if resp.Total != nil && *resp.Total < 0 {
+			return nil, fmt.Errorf("listing rules for ACL %s: API returned invalid negative total %d", aclID, *resp.Total)
 		}
 		if page == 1 {
 			reportedTotal = resp.Total
-		} else if reportedTotal > 0 && resp.Total != reportedTotal {
-			return nil, fmt.Errorf("listing rules for ACL %s: API changed reported total from %d to %d on page %d", aclID, reportedTotal, resp.Total, page)
+		} else if reportedTotal != nil && (resp.Total == nil || *resp.Total != *reportedTotal) {
+			return nil, fmt.Errorf("listing rules for ACL %s: API changed reported total on page %d", aclID, page)
 		}
 
 		// A missing total on the first page is treated as a non-paginated response.
 		// Once the API reports a total, every later page must retain it. An empty
 		// page before the collection is complete is malformed: do not return a
 		// partial rule list.
-		if reportedTotal == 0 {
+		if reportedTotal == nil {
+			return all, nil
+		}
+		if *reportedTotal == 0 {
+			if len(resp.Data) > 0 {
+				return nil, fmt.Errorf("listing rules for ACL %s: page %d returned rules despite a total of zero", aclID, page)
+			}
 			return all, nil
 		}
 		if len(resp.Data) == 0 {
-			return nil, fmt.Errorf("listing rules for ACL %s: page %d was empty before reaching reported total %d", aclID, page, reportedTotal)
+			return nil, fmt.Errorf("listing rules for ACL %s: page %d was empty before reaching reported total %d", aclID, page, *reportedTotal)
 		}
-		if len(all) >= reportedTotal {
+		if len(all) >= *reportedTotal {
 			return all, nil
 		}
 	}

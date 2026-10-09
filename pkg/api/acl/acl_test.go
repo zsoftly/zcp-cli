@@ -215,6 +215,38 @@ func TestListRules(t *testing.T) {
 	}
 }
 
+func TestListRulesAllowsExplicitZeroTotalWithNoRules(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"data":[],"total":0}`)
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err != nil {
+		t.Fatalf("ListRules() error = %v", err)
+	}
+	if got, want := len(rules), 0; got != want {
+		t.Errorf("ListRules() returned %d rules, want %d", got, want)
+	}
+}
+
+func TestListRulesRejectsExplicitZeroTotalWithRules(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"data":[{"id":"r1"}],"total":0}`)
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want an error when total is zero with returned rules")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil for an invalid zero total", rules)
+	}
+}
+
 func TestListRulesPagination(t *testing.T) {
 	pages := map[string][]acl.Rule{
 		"1": make([]acl.Rule, 10),
@@ -279,6 +311,26 @@ func TestListRulesPaginationDoesNotReturnPartialResultsOnLaterPageFailure(t *tes
 	}
 	if rules != nil {
 		t.Errorf("ListRules() rules = %+v, want nil on pagination failure", rules)
+	}
+}
+
+func TestListRulesPaginationDoesNotReturnPartialResultsWhenLaterPageReportsZeroTotal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			fmt.Fprint(w, `{"status":"Success","current_page":2,"data":[{"id":"r2"}],"total":0}`)
+			return
+		}
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"data":[{"id":"r1"}],"total":2}`)
+	}))
+	defer srv.Close()
+
+	rules, err := acl.NewService(newClient(srv.URL)).ListRules(context.Background(), "my-vpc", "acl-1")
+	if err == nil {
+		t.Fatal("ListRules() error = nil, want an error when page 2 changes total to zero")
+	}
+	if rules != nil {
+		t.Errorf("ListRules() rules = %+v, want nil on pagination total failure", rules)
 	}
 }
 
