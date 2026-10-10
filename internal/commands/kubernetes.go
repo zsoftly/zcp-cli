@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func runK8sClusterList(cmd *cobra.Command) error {
 			c.Name,
 			c.State,
 			c.Version,
-			strconv.Itoa(c.NodeSize),
+			strconv.Itoa(k8sWorkerNodeCount(c)),
 			strconv.Itoa(c.ControlNodes),
 			strconv.FormatBool(c.EnableHA),
 			regionName,
@@ -127,7 +128,7 @@ func runK8sClusterGet(cmd *cobra.Command, slug string) error {
 		regionName = c.Region.Name
 	}
 	version := c.Version
-	workers := strconv.Itoa(c.NodeSize)
+	workers := strconv.Itoa(k8sWorkerNodeCount(*c))
 	controlNodes := strconv.Itoa(c.ControlNodes)
 	endpoint := ""
 
@@ -165,7 +166,197 @@ func runK8sClusterGet(cmd *cobra.Command, slug string) error {
 		{"Region", regionName},
 		{"Created", c.CreatedAt},
 	}
+	if c.Meta != nil {
+		rows = append(rows,
+			[]string{"Total CPU", c.Meta.CPU},
+			[]string{"Total RAM", k8sMemoryString(c.Meta.FormattedMemory, c.Meta.Memory)},
+		)
+		autoscaling := k8sAutoscalingStatus(c.Meta.AutoscalingEnabled, c.Autoscale != nil)
+		rows = append(rows, []string{"Autoscaling", autoscaling})
+		if autoscaling == "Enabled" {
+			rows = append(rows,
+				[]string{"Minimum workers", k8sRawValue(c.Meta.MinSize)},
+				[]string{"Maximum workers", k8sRawValue(c.Meta.MaxSize)},
+			)
+		}
+	}
+	if c.Offering != nil {
+		controlPlan, controlCPU, controlMemory, controlStorage := k8sPlanDetails(
+			c.Offering.MasterPlan,
+			c.Offering.MasterCustomCPU,
+			c.Offering.MasterCustomMemory,
+			c.Offering.MasterCustomStorage,
+			c.Offering.FormattedMasterCustomMemory,
+			c.Offering.FormattedMasterCustomStorage,
+			c.Offering.CPU,
+			c.Offering.Memory,
+			c.Offering.Storage,
+			c.Offering.FormattedMemory,
+			c.Offering.FormattedStorage,
+		)
+		workerPlan, workerCPU, workerMemory, workerStorage := k8sPlanDetails(
+			c.Offering.WorkerPlan,
+			c.Offering.WorkerCustomCPU,
+			c.Offering.WorkerCustomMemory,
+			c.Offering.WorkerCustomStorage,
+			c.Offering.FormattedWorkerCustomMemory,
+			c.Offering.FormattedWorkerCustomStorage,
+			c.Offering.CPU,
+			c.Offering.Memory,
+			c.Offering.Storage,
+			c.Offering.FormattedMemory,
+			c.Offering.FormattedStorage,
+		)
+		rows = append(rows,
+			[]string{"Control-plane plan", controlPlan},
+			[]string{"Control-plane CPU", controlCPU},
+			[]string{"Control-plane memory", controlMemory},
+			[]string{"Control-plane storage", controlStorage},
+			[]string{"Worker plan", workerPlan},
+			[]string{"Worker CPU", workerCPU},
+			[]string{"Worker memory", workerMemory},
+			[]string{"Worker storage", workerStorage},
+		)
+	}
+	rootVolumes := 0
+	for _, volume := range c.BlockStorages {
+		if volume.IsRoot {
+			rootVolumes++
+		}
+	}
+	if rootVolumes > 0 {
+		rows = append(rows, []string{"Root volumes", strconv.Itoa(rootVolumes)})
+	}
+	if c.Network != nil {
+		rows = append(rows, []string{"Network", k8sFirstNonEmpty(c.Network.Name, c.Network.Slug)})
+	}
 	return printer.PrintTable(headers, rows)
+}
+
+func k8sWorkerNodeCount(cluster kubernetes.Cluster) int {
+	if cluster.WorkerNodeSize > 0 {
+		return cluster.WorkerNodeSize
+	}
+	return cluster.NodeSize
+}
+
+func k8sObservedWorkerCount(cluster *kubernetes.Cluster) int {
+	workers := k8sWorkerNodeCount(*cluster)
+	if cluster.Meta != nil && cluster.Meta.Size != "" {
+		if n, err := strconv.Atoi(cluster.Meta.Size); err == nil {
+			workers = n
+		}
+	}
+	return workers
+}
+
+func k8sRawValue(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value interface{}
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return ""
+	}
+	return fmt.Sprint(value)
+}
+
+func k8sAutoscalingEnabled(raw json.RawMessage) bool {
+	switch strings.ToLower(k8sRawValue(raw)) {
+	case "", "0", "false", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+func k8sAutoscalingStatus(raw json.RawMessage, autoscalePresent bool) string {
+	if autoscalePresent {
+		return "Enabled"
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return "Unknown"
+	}
+	if k8sAutoscalingEnabled(raw) {
+		return "Enabled"
+	}
+	return "Disabled"
+}
+
+func k8sFirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func k8sPlanDetails(plan *kubernetes.NodePlan, customCPU, customMemory, customStorage json.RawMessage, formattedCustomMemory, formattedCustomStorage string, fallbackCPU, fallbackMemory, fallbackStorage json.RawMessage, formattedFallbackMemory, formattedFallbackStorage string) (name, cpu, memory, storage string) {
+	if plan != nil {
+		name = k8sFirstNonEmpty(plan.Name, plan.Slug)
+		if plan.Attribute != nil {
+			cpu = k8sCPUValue(k8sRawValue(plan.Attribute.FormattedCPU), plan.Attribute.CPU)
+			memory = k8sMemoryValue(plan.Attribute.FormattedMemory, plan.Attribute.Memory)
+			storage = k8sStorageValue(plan.Attribute.FormattedStorage, plan.Attribute.Storage)
+		}
+	}
+	cpu = k8sFirstNonEmpty(cpu, k8sCPUValue("", customCPU))
+	memory = k8sFirstNonEmpty(memory, k8sMemoryValue(formattedCustomMemory, customMemory))
+	storage = k8sFirstNonEmpty(storage, k8sStorageValue(formattedCustomStorage, customStorage))
+	if plan == nil {
+		cpu = k8sFirstNonEmpty(cpu, k8sCPUValue("", fallbackCPU))
+		memory = k8sFirstNonEmpty(memory, k8sMemoryValue(formattedFallbackMemory, fallbackMemory))
+		storage = k8sFirstNonEmpty(storage, k8sStorageValue(formattedFallbackStorage, fallbackStorage))
+	}
+	if name == "" && (cpu != "" || memory != "" || storage != "") {
+		name = "Custom"
+	}
+	return k8sFirstNonEmpty(name, "-"), k8sFirstNonEmpty(cpu, "-"), k8sFirstNonEmpty(memory, "-"), k8sFirstNonEmpty(storage, "-")
+}
+
+func k8sCPUValue(formatted string, raw json.RawMessage) string {
+	if formatted != "" {
+		if _, err := strconv.ParseFloat(formatted, 64); err == nil {
+			return formatted + " Cores"
+		}
+		return formatted
+	}
+	if value := k8sRawValue(raw); value != "" {
+		return value + " Cores"
+	}
+	return ""
+}
+
+func k8sMemoryValue(formatted string, raw json.RawMessage) string {
+	return k8sMemoryString(formatted, k8sRawValue(raw))
+}
+
+func k8sMemoryString(formatted, value string) string {
+	if formatted != "" {
+		return formatted
+	}
+	if value == "" {
+		return ""
+	}
+	amount, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return value + " MB"
+	}
+	if amount >= 1024 {
+		return fmt.Sprintf("%g GB", amount/1024)
+	}
+	return fmt.Sprintf("%g MB", amount)
+}
+
+func k8sStorageValue(formatted string, raw json.RawMessage) string {
+	if formatted != "" {
+		return formatted
+	}
+	if value := k8sRawValue(raw); value != "" {
+		return value + " GB"
+	}
+	return ""
 }
 
 func newK8sClusterCreateCmd() *cobra.Command {
@@ -180,7 +371,10 @@ func newK8sClusterCreateCmd() *cobra.Command {
 		project            string
 		billingCycle       string
 		enableHA           bool
-		plan               string
+		enableCSI          bool
+		controlPlanePlan   string
+		workerPlan         string
+		storagePlan        string
 		storageCategory    string
 		sshKey             string
 		authMethod         string
@@ -191,8 +385,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.36.1 --plan k8s-la-yul-1 --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --storage-category pro-nvme --ssh-key mykey
-  zcp kubernetes create --name ha-cluster --version v1.36.1 --plan k8s-la-yul-1 --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --control-nodes 3 --ha --storage-category pro-nvme --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-li-yul --storage-plan b2g1 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --ssh-key mykey
+		  zcp kubernetes create --name ha-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-4xli-yul --storage-plan b2g1 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --control-nodes 3 --ha --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -200,8 +394,14 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			if version == "" {
 				return fmt.Errorf("--version is required")
 			}
-			if plan == "" {
-				return fmt.Errorf("--plan is required")
+			if controlPlanePlan == "" {
+				return fmt.Errorf("--control-plane-plan is required")
+			}
+			if workerPlan == "" {
+				return fmt.Errorf("--worker-plan is required")
+			}
+			if storagePlan == "" {
+				return fmt.Errorf("--storage-plan is required")
 			}
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
@@ -228,8 +428,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			if sshKey == "" && authMethod == "ssh-key" {
 				return fmt.Errorf("--ssh-key is required when --auth-method is ssh-key")
 			}
-			if enableHA && controlNodes < 3 {
-				fmt.Fprintf(os.Stderr, "WARNING: --ha is set but --control-nodes is %d; HA clusters typically require >= 3 control nodes\n", controlNodes)
+			if enableHA && controlNodes < 2 {
+				return fmt.Errorf("--control-nodes must be >= 2 when --ha is set")
 			}
 			return runK8sClusterCreate(cmd, kubernetes.CreateRequest{
 				Name:               name,
@@ -243,8 +443,11 @@ func newK8sClusterCreateCmd() *cobra.Command {
 				Project:            project,
 				BillingCycle:       billingCycle,
 				EnableHA:           enableHA,
+				EnableCSI:          enableCSI,
 				Networks:           []string{},
-				Plan:               plan,
+				MasterPlan:         controlPlanePlan,
+				WorkerPlan:         workerPlan,
+				BlockstoragePlan:   storagePlan,
 				WithPoolCard:       false,
 				IsCustomPlan:       false,
 				CustomPlan:         nil,
@@ -259,7 +462,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Cluster name (required)")
-	cmd.Flags().StringVar(&version, "version", "", "Kubernetes version, e.g. v1.36.1 (required)")
+	cmd.Flags().StringVar(&version, "version", "", "Kubernetes version, e.g. v1.37.0 (required)")
 	cmd.Flags().IntVar(&nodeSize, "workers", 0, "Number of worker nodes (required, >= 1)")
 	cmd.Flags().IntVar(&controlNodes, "control-nodes", 1, "Number of control plane nodes (default 1)")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (optional; auto-detected, override only)")
@@ -268,7 +471,10 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required)")
 	cmd.Flags().StringVar(&billingCycle, "billing-cycle", "", "Billing cycle slug, e.g. hourly, monthly (required)")
 	cmd.Flags().BoolVar(&enableHA, "ha", false, "Enable high availability")
-	cmd.Flags().StringVar(&plan, "plan", "", "Plan slug (required)")
+	cmd.Flags().BoolVar(&enableCSI, "enable-csi", false, "Enable Cloud Storage Integration (CSI)")
+	cmd.Flags().StringVar(&controlPlanePlan, "control-plane-plan", "", "Control-plane node plan slug (required)")
+	cmd.Flags().StringVar(&workerPlan, "worker-plan", "", "Worker node plan slug (required)")
+	cmd.Flags().StringVar(&storagePlan, "storage-plan", "", "Root-volume plan slug applied to each control-plane and worker node (required)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. pro-nvme, nvme, ssd (required)")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "SSH key name")
 	cmd.Flags().StringVar(&authMethod, "auth-method", "ssh-key", "Authentication method: ssh-key or password")
@@ -298,7 +504,7 @@ func runK8sClusterCreate(cmd *cobra.Command, req kubernetes.CreateRequest) error
 		cluster.Name,
 		cluster.State,
 		cluster.Version,
-		strconv.Itoa(cluster.NodeSize),
+		strconv.Itoa(k8sWorkerNodeCount(*cluster)),
 		strconv.Itoa(cluster.ControlNodes),
 		strconv.FormatBool(cluster.EnableHA),
 	}}
@@ -383,19 +589,45 @@ func runK8sClusterStop(cmd *cobra.Command, slug string, yes bool) error {
 }
 
 func newK8sClusterScaleCmd() *cobra.Command {
-	var workers int
-	var wait bool
+	var (
+		workers            int
+		minWorkers         int
+		maxWorkers         int
+		enableAutoscaling  bool
+		disableAutoscaling bool
+		wait               bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "scale <slug>",
-		Short: "Scale the number of worker nodes on a Kubernetes cluster",
+		Short: "Scale workers or configure worker autoscaling on a Kubernetes cluster",
 		Args:  exactArgs(1),
 		Example: `  zcp kubernetes scale my-cluster --workers 5
-  zcp k8s scale my-cluster --workers 3 --wait`,
+	  zcp kubernetes scale my-cluster --enable-autoscaling --min-workers 2 --max-workers 5
+	  zcp kubernetes scale my-cluster --disable-autoscaling --workers 3 --wait`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			slug := args[0]
-			if workers < 1 {
+			if enableAutoscaling && disableAutoscaling {
+				return fmt.Errorf("--enable-autoscaling and --disable-autoscaling cannot be used together")
+			}
+			if enableAutoscaling {
+				if workers != 0 {
+					return fmt.Errorf("--workers cannot be used with --enable-autoscaling")
+				}
+				if minWorkers < 1 {
+					return fmt.Errorf("--min-workers must be >= 1 when enabling autoscaling")
+				}
+				if maxWorkers < minWorkers {
+					return fmt.Errorf("--max-workers must be >= --min-workers when enabling autoscaling")
+				}
+				if wait {
+					return fmt.Errorf("--wait cannot be used with --enable-autoscaling")
+				}
+			} else if workers < 1 {
 				return fmt.Errorf("--workers must be >= 1")
+			}
+			if !enableAutoscaling && (minWorkers != 0 || maxWorkers != 0) {
+				return fmt.Errorf("--min-workers and --max-workers require --enable-autoscaling")
 			}
 			_, client, _, err := buildClientAndPrinter(cmd)
 			if err != nil {
@@ -414,22 +646,33 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			default:
 				return fmt.Errorf("cluster %q is in state %q — scale requires Running or Scaling state", slug, current.State)
 			}
-
-			currentWorkers := current.NodeSize
-			if current.Meta != nil && current.Meta.Size != "" {
-				if n, aerr := strconv.Atoi(current.Meta.Size); aerr == nil {
-					currentWorkers = n
+			if enableAutoscaling {
+				if err := svc.EnableAutoscaling(ctx, slug, minWorkers, maxWorkers); err != nil {
+					return fmt.Errorf("kubernetes scale: %w", err)
 				}
+				fmt.Fprintf(os.Stdout, "Enabling autoscaling for %q with %d–%d worker(s) requested.\n", slug, minWorkers, maxWorkers)
+				return nil
 			}
-			if currentWorkers == workers {
+
+			currentWorkers := k8sObservedWorkerCount(current)
+			if !disableAutoscaling && currentWorkers == workers {
 				fmt.Fprintf(os.Stdout, "Cluster %q already has %d worker(s) — no change made.\n", slug, workers)
 				return nil
 			}
 
-			if err := svc.Scale(ctx, slug, workers); err != nil {
+			if disableAutoscaling {
+				err = svc.DisableAutoscaling(ctx, slug, workers)
+			} else {
+				err = svc.Scale(ctx, slug, workers)
+			}
+			if err != nil {
 				return fmt.Errorf("kubernetes scale: %w", err)
 			}
-			fmt.Fprintf(os.Stdout, "Scaling %q from %d → %d worker(s) requested.\n", slug, currentWorkers, workers)
+			if disableAutoscaling {
+				fmt.Fprintf(os.Stdout, "Disabling autoscaling for %q with %d worker(s) requested.\n", slug, workers)
+			} else {
+				fmt.Fprintf(os.Stdout, "Scaling %q from %d → %d worker(s) requested.\n", slug, currentWorkers, workers)
+			}
 
 			if wait {
 				const maxWait = 10 * time.Minute
@@ -446,18 +689,15 @@ func newK8sClusterScaleCmd() *cobra.Command {
 					if err != nil {
 						return fmt.Errorf("polling cluster state: %w", err)
 					}
-					workerCount := c.NodeSize
-					if c.Meta != nil && c.Meta.Size != "" {
-						if n, aerr := strconv.Atoi(c.Meta.Size); aerr == nil {
-							workerCount = n
-						}
-					}
+					workerCount := k8sObservedWorkerCount(c)
 					switch c.State {
 					case "Scaling":
 						// still in progress
 					case "Running":
-						fmt.Fprintf(os.Stdout, "Done — state: %s, workers: %d\n", c.State, workerCount)
-						return nil
+						if k8sScaleComplete(c, workers, disableAutoscaling) {
+							fmt.Fprintf(os.Stdout, "Done — state: %s, workers: %d\n", c.State, workerCount)
+							return nil
+						}
 					default:
 						return fmt.Errorf("cluster %q entered unexpected state %q during scaling", slug, c.State)
 					}
@@ -468,10 +708,26 @@ func newK8sClusterScaleCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&workers, "workers", 0, "Target number of worker nodes (required)")
+	cmd.Flags().IntVar(&workers, "workers", 0, "Target worker count; required unless enabling autoscaling")
+	cmd.Flags().BoolVar(&enableAutoscaling, "enable-autoscaling", false, "Enable worker autoscaling")
+	cmd.Flags().BoolVar(&disableAutoscaling, "disable-autoscaling", false, "Disable worker autoscaling")
+	cmd.Flags().IntVar(&minWorkers, "min-workers", 0, "Minimum workers when enabling autoscaling")
+	cmd.Flags().IntVar(&maxWorkers, "max-workers", 0, "Maximum workers when enabling autoscaling")
 	cmd.Flags().BoolVar(&wait, "wait", false, "Block until scaling completes")
-	_ = cmd.MarkFlagRequired("workers")
 	return cmd
+}
+
+func k8sScaleComplete(cluster *kubernetes.Cluster, workers int, autoscalingDisabled bool) bool {
+	if cluster.State != "Running" || k8sObservedWorkerCount(cluster) != workers {
+		return false
+	}
+	if autoscalingDisabled && cluster.Autoscale != nil {
+		return false
+	}
+	if autoscalingDisabled && cluster.Meta != nil && len(cluster.Meta.AutoscalingEnabled) > 0 && string(cluster.Meta.AutoscalingEnabled) != "null" && k8sAutoscalingEnabled(cluster.Meta.AutoscalingEnabled) {
+		return false
+	}
+	return true
 }
 
 func newK8sGetConfigCmd() *cobra.Command {
@@ -599,8 +855,8 @@ func newK8sClusterUpgradeVersionCmd() *cobra.Command {
 		Use:   "upgrade-version <cluster-slug>",
 		Short: "Upgrade the Kubernetes version of a cluster",
 		Args:  exactArgs(1),
-		Example: `  zcp kubernetes upgrade-version my-cluster --version v1.35.1
-  zcp kubernetes upgrade-version my-cluster --version v1.36.1`,
+		Example: `  zcp kubernetes upgrade-version my-cluster --version v1.36.4
+	  zcp kubernetes upgrade-version my-cluster --version v1.37.0`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if version == "" {
 				return fmt.Errorf("--version is required")

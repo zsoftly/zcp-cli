@@ -82,11 +82,21 @@ func (c *Client) Delete(ctx context.Context, path string, query url.Values) erro
 	return c.do(ctx, http.MethodDelete, path, query, nil, nil)
 }
 
+// DeleteWithResult performs a DELETE request and decodes its JSON response.
+func (c *Client) DeleteWithResult(ctx context.Context, path string, query url.Values, result interface{}) error {
+	return c.do(ctx, http.MethodDelete, path, query, nil, result)
+}
+
 // Put performs a PUT request. query params are optional (pass nil if not needed).
 // body is optional (pass nil for query-only PUTs like start/stop operations).
 // result is optional (pass nil to discard response body).
 func (c *Client) Put(ctx context.Context, path string, query url.Values, body interface{}, result interface{}) error {
 	return c.do(ctx, http.MethodPut, path, query, body, result)
+}
+
+// Patch performs a PATCH request with a JSON body.
+func (c *Client) Patch(ctx context.Context, path string, body interface{}, result interface{}) error {
+	return c.do(ctx, http.MethodPatch, path, nil, body, result)
 }
 
 // isRetryable reports whether a response status code or network error warrants a retry.

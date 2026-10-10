@@ -3,8 +3,10 @@ package dns_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +61,73 @@ func TestDNSDomainList(t *testing.T) {
 	}
 	if domains[1].Slug != "test-org-2" {
 		t.Errorf("domains[1].Slug = %q, want %q", domains[1].Slug, "test-org-2")
+	}
+}
+
+func TestDNSDomainListPaginatesAndReturnsEveryDomain(t *testing.T) {
+	var requestedPages []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedPages = append(requestedPages, r.URL.Query().Get("page"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("page") {
+		case "1":
+			fmt.Fprint(w, `{"status":"Success","current_page":1,"total":3,"data":[{"slug":"first","status":true},{"slug":"second","status":false}]}`)
+		case "2":
+			fmt.Fprint(w, `{"status":"Success","current_page":2,"total":3,"data":[{"slug":"third","status":true}]}`)
+		default:
+			http.Error(w, "unexpected page", http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+
+	domains, err := dns.NewService(newClient(srv.URL)).List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(domains) != 3 || domains[2].Slug != "third" {
+		t.Fatalf("List() domains = %+v, want all three pages", domains)
+	}
+	if got, want := strings.Join(requestedPages, ","), "1,2"; got != want {
+		t.Errorf("requested pages = %q, want %q", got, want)
+	}
+}
+
+func TestDNSDomainListReturnsNoPartialResultsOnLaterPageFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("page") {
+		case "1":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"status":"Success","current_page":1,"total":2,"data":[{"slug":"first","status":true}]}`)
+		case "2":
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		default:
+			http.Error(w, "unexpected page", http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+
+	domains, err := dns.NewService(newClient(srv.URL)).List(context.Background())
+	if err == nil {
+		t.Fatal("List() error = nil, want later-page failure")
+	}
+	if domains != nil {
+		t.Errorf("List() domains = %+v, want nil on later-page failure", domains)
+	}
+}
+
+func TestDNSDomainListRejectsExplicitZeroTotalWithDomains(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"Success","current_page":1,"total":0,"data":[{"slug":"first","status":true}]}`)
+	}))
+	defer srv.Close()
+
+	domains, err := dns.NewService(newClient(srv.URL)).List(context.Background())
+	if err == nil {
+		t.Fatal("List() error = nil, want invalid zero total error")
+	}
+	if domains != nil {
+		t.Errorf("List() domains = %+v, want nil with invalid total", domains)
 	}
 }
 

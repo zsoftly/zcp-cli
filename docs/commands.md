@@ -267,7 +267,7 @@ zcp ip release <slug>
 zcp ip static-nat enable <ip-slug> --instance <vm-slug> --network <network-slug>
 
 # Firewall rules (ingress)
-zcp firewall list
+zcp firewall list --ip <slug>
 zcp firewall create --ip <slug> --protocol tcp --start-port 80 --end-port 80
 
 # Egress rules
@@ -463,10 +463,34 @@ zcp backup delete <slug>
 zcp vm-backup list
 zcp vm-backup create <vm-slug> --interval dailyAt --plan backup-yul \
   --pseudo-service vm-backup --billing-cycle hourly --region yul-1 --project default-9
+# Create output includes the new schedule slug; JSON/YAML output is suitable for automation.
+zcp vm-backup create <vm-slug> --interval dailyAt --plan backup-yul \
+  --pseudo-service vm-backup --billing-cycle hourly --region yul-1 --project default-9 --output json
 zcp vm-backup delete <slug>
+
+# Scheduler-backed VM backup policies. These use an IANA timezone and retain a
+# specified number of backups. `--at` accepts whole hours as `HH:00`. For weeklyOn use Sunday=0 through Saturday=6;
+# for monthlyOn use day 1 through 28, matching the provider's supported range.
+zcp vm-backup schedule create <vm-slug> --name nightly --interval dailyAt --at 01:00 \
+  --timezone America/Toronto --retention 7 --immediate
+zcp vm-backup schedule create <vm-slug> --name weekly --interval weeklyOn --day 0 --at 02:00 \
+  --timezone UTC --retention 4
+zcp vm-backup schedule list
+zcp vm-backup schedule get <id>
+zcp vm-backup schedule update <id> --interval monthlyOn --day 1 --at 03:00 --timezone UTC --retention 3
+zcp vm-backup schedule pause <id>
+zcp vm-backup schedule resume <id>
+zcp vm-backup schedule run-now <id>
+zcp vm-backup schedule delete <id> --yes
 ```
 
 `vm-backup delete` submits a service-cancellation request, the same workflow `instance delete` uses, since the VM backup API route does not support direct deletion.
+
+`vm-backup schedule` manages the current scheduler-backed policies. `--immediate` requests one backup when the policy is created. `run-now` requests another backup without waiting for the next scheduled time. Pausing retains existing backups, and deleting a policy does not delete backups it already created.
+
+Use `zcp vm-backup schedule get <id>` to read the policy's last-run status and any reported error. A policy marked active does not by itself confirm that its last backup completed.
+
+The current platform rejects `everyOtherDay` with an error after persisting a policy. The CLI exposes the API interval for compatibility, but after such an error, list schedules before retrying and remove any unintended policy.
 
 ---
 
@@ -535,40 +559,61 @@ zcp project icon list
 ```bash
 # 'k8s' is accepted as an alias for 'kubernetes'
 zcp kubernetes list
+
+# Select independent control-plane and worker compute plans, plus one
+# root-volume plan used for every node.
 zcp kubernetes create \
   --name my-cluster \
-  --version v1.36.1 \
-  --plan k8s-la-yul-1 \
+  --version v1.37.0 \
+  --control-plane-plan k8s-cpi-yul \
+  --worker-plan k8s-li-yul \
+  --storage-plan b2g1 \
+  --storage-category pro-nvme \
   --region yul-1 \
   --project default-9 \
   --billing-cycle hourly \
   --workers 3 \
-  --storage-category pro-nvme \
+  --enable-csi \
   --ssh-key mykey
 
 # HA cluster with multiple control nodes
 zcp kubernetes create \
   --name ha-cluster \
-  --version v1.36.1 \
-  --plan k8s-la-yul-1 \
+  --version v1.37.0 \
+  --control-plane-plan k8s-cpi-yul \
+  --worker-plan k8s-4xli-yul \
+  --storage-plan b2g1 \
+  --storage-category pro-nvme \
   --region yul-1 \
   --project default-9 \
   --billing-cycle hourly \
   --workers 3 \
   --control-nodes 3 \
   --ha \
-  --storage-category pro-nvme \
+  --enable-csi \
   --ssh-key mykey
+
+# The selected billing cycle applies to the resource subscriptions created for
+# control-plane nodes, worker nodes, and their root volumes. Network, load
+# balancer, and public-IP billing depends on the enabled platform packages and
+# feature flags.
+# Use --enable-csi to request Cloud Storage Integration for supported clusters.
 
 # Kubeconfig
 zcp kubernetes get-config <slug>
+
+# Cluster overview, including resource plans, totals, root-volume count,
+# network, and autoscaling status when returned by the API.
+zcp kubernetes get <slug>
 
 # Lifecycle
 zcp kubernetes start <slug>
 zcp kubernetes stop <slug>
 zcp kubernetes scale <slug> --workers 5
+zcp kubernetes scale <slug> --enable-autoscaling --min-workers 2 --max-workers 5
+zcp kubernetes scale <slug> --disable-autoscaling --workers 3
 zcp kubernetes upgrade <slug> --plan k8s-xla-yul-1
-zcp kubernetes upgrade-version <slug> --version v1.36.1
+zcp kubernetes upgrade-version <slug> --version v1.37.0
 
 # Delete a cluster
 zcp kubernetes delete <slug>

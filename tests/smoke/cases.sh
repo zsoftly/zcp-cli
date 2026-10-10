@@ -132,12 +132,13 @@ _read_objectstorage() {
 # ═══════════════════════════════════════════════════════════════════════════
 # FIXTURES (created once, reused, torn down at the end)
 # ═══════════════════════════════════════════════════════════════════════════
-FX_SSHKEY=""; FX_NETWORK=""; FX_IP=""; FX_VM=""; FX_VMIP=""; FX_VOLUME=""
+FX_SSHKEY=""; FX_SSHKEY_NAME=""; FX_NETWORK=""; FX_IP=""; FX_VM=""; FX_VMIP=""; FX_VOLUME=""
 
 fx_sshkey() {
-  [[ -n "$FX_SSHKEY" ]] && return 0
+  [[ -n "$FX_SSHKEY" && -n "$FX_SSHKEY_NAME" ]] && return 0
   local name pub out
   name="$(rname k)"
+  FX_SSHKEY_NAME="$name"
   # ephemeral throwaway key
   pub="$(ssh-keygen -t ed25519 -N '' -C "$name" -f "/tmp/${name}" >/dev/null 2>&1 && cat "/tmp/${name}.pub")"
   rm -f "/tmp/${name}" "/tmp/${name}.pub" 2>/dev/null
@@ -426,20 +427,12 @@ lc_backup() {
 
 lc_vmbackup() {
   local vm out s; fx_vm; vm="$FX_VM"; [[ -z "$vm" ]] && { _mark_skip "vm-backup (no VM fixture)"; return; }
-  capture out -- zcp vm-backup create "$vm" --at 3 --immediate 0 \
+  capture out -- zcp vm-backup create "$vm" --interval dailyAt --at 3 --immediate 0 \
     --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
     --billing-cycle "$(det_billing_cycle)" --plan "$(det_backup_plan)" \
-    --pseudo-service "Virtual Machine Backup"
-  # The create response carries no slug, so resolve it from the list by the
-  # VM it was scheduled for.
-  # CLI json keys derive from the table headers (vm, slug, created); the raw API
-  # nests the VM under virtual_machine. Accept both and take the newest match.
-  s="$(zcp vm-backup list -o json 2>/dev/null | jq -r --arg v "$vm" \
-    '[(if type=="array" then .[] else (.data // [])[] end)
-      | select((.vm // .virtual_machine.slug // .virtual_machine_id)==$v)]
-     | sort_by(.created // .created_at) | last | .slug // empty')"
-  if [[ -n "$s" && "$s" != "null" ]]; then _mark_pass "vm-backup → $s"; defer vm-backup "$s"
-  else _mark_skip "vm-backup (create flags vary by env)"; fi
+    --pseudo-service "vm-backup" -o json || { _mark_fail "vm-backup create"; return; }
+  s="$(_jq_slug <<<"$out")"
+  _lc_result "vm-backup" "$s" && defer vm-backup "$s"
 }
 
 lc_loadbalancer() {
@@ -545,14 +538,21 @@ lc_iso() {
 }
 
 lc_kubernetes() {
-  local out; local ver plan setup
-  ver="$(api_get '/kubernetes-clusters/versions' | jq -r --arg rid "$(det_region_id)" '.data[]|select(.region_id==$rid)|.slug' | head -1)"
-  plan="$(api_get "/plans/service/Kubernetes?region=$(det_region)" | jq -r '.data[]|select((.name//"")|test("YUL|YOW";"i"))|.slug' | head -1)"
+  local out plans storage_plans ver master_plan worker_plan storage_plan storage_category setup
+  fx_sshkey || { _mark_skip "kubernetes (could not create SSH-key fixture)"; return; }
+  ver="$(api_get '/kubernetes-clusters/versions' | jq -r --arg rid "$(det_region_id)" '.data[]|select(.region_id==$rid and (.version // "") != "")|.version' | head -1)"
+  plans="$(api_get "/plans/service/Kubernetes?filter%5Bregion%5D=$(det_region)")"
+  worker_plan="$(jq -r '.data[]|select(.attribute.package_for=="worker")|.slug' <<<"$plans" | head -1)"
+  storage_category="$(jq -r --arg worker "$worker_plan" '.data[]|select(.slug==$worker)|.storage_category.slug' <<<"$plans")"
+  master_plan="$(jq -r --arg category "$storage_category" '.data[]|select(.attribute.package_for=="master" and .storage_category.slug==$category)|.slug' <<<"$plans" | head -1)"
+  storage_plans="$(api_get "/plans/service/Block%20Storage?filter%5Bregion%5D=$(det_region)&filter%5Bstorage_category%5D=$storage_category")"
+  storage_plan="$(jq -r '.data[]|.slug' <<<"$storage_plans" | head -1)"
   setup="$(api_get '/regions' | jq -r --arg s "$(det_region)" '.data[]|select(.slug==$s)|.cloud_provider_setup.slug' | head -1)"
-  [[ -z "$ver" || -z "$plan" ]] && { _mark_skip "kubernetes (no version/plan for region)"; return; }
-  out="$(zcp kubernetes create --name "$(rname k8s)" --version "$ver" --plan "$plan" \
+  [[ -z "$ver" || -z "$master_plan" || -z "$worker_plan" || -z "$storage_plan" || -z "$storage_category" ]] && { _mark_skip "kubernetes (no compatible control-plane, worker, and storage plans for region)"; return; }
+  out="$(zcp kubernetes create --name "$(rname k8s)" --version "$ver" \
+    --control-plane-plan "$master_plan" --worker-plan "$worker_plan" --storage-plan "$storage_plan" --storage-category "$storage_category" \
     --region "$(det_region)" --project "$(det_project)" --cloud-provider "$(det_cp)" \
-    --billing-cycle "$(det_billing_cycle)" --workers 1 --cloud-provider-setup "${setup:-zcp-apc}" -y 2>&1)"; local rc=$?
+    --billing-cycle "$(det_billing_cycle)" --workers 1 --ssh-key "$FX_SSHKEY_NAME" --cloud-provider-setup "${setup:-zcp-apc}" -y 2>&1)"; local rc=$?
   if [[ $rc -ne 0 ]]; then
     if grep -qiE 'quota not found' <<<"$out"; then
       _mark_skip "kubernetes (account has no k8s quota — env limitation)"

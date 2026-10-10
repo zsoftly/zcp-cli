@@ -7,6 +7,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Added
+
+- **Kubernetes create uses separate control-plane, worker, and root-volume plans.** `zcp kubernetes create` now requires `--control-plane-plan`, `--worker-plan`, and `--storage-plan`, alongside `--storage-category`. The command sends the ZCP API `master_plan`, `worker_plan`, and `blockstorage_plan` fields instead of a single cluster plan. The root-volume plan applies to every node. The selected billing cycle applies to the resulting resource subscriptions: every control-plane and worker VM, and every root volume. The cluster object itself is not billed. Network, load balancer, and public-IP billing remains conditional on enabled platform packages and feature flags. Use `--enable-csi` to request Cloud Storage Integration for a supported cluster. `zcp kubernetes get` now shows resource totals and configuration. `zcp kubernetes scale` enables autoscaling with minimum and maximum worker counts or disables it with a fixed worker count.
+- **Scheduler-backed VM backup policies.** `zcp vm-backup schedule` creates, lists, reads, updates, pauses, resumes, runs, and deletes VM backup policies. Policies support hourly, daily, weekly, and monthly intervals, IANA timezones, retention counts, names, and descriptions. Weekly policies select a weekday; monthly policies select a day of the month. Policies can request an immediate first backup.
+- **`everyOtherDay` policy warning.** The command exposes the API's `everyOtherDay` value. The current platform returns an error after persisting that policy, so the command directs users to list policies before retrying.
+
+### Fixed
+
+- **`vm-backup create` now reports the created schedule slug.** It prints the created schedule in table output and emits valid JSON or YAML for structured output. When the create endpoint returns only an acknowledgement, the command identifies the new schedule from a scoped pre-create snapshot and bounded read-only lookup. It never repeats an accepted create request. If the command cannot identify the schedule, the error tells you to list it before creating another one. _Fixes #76._
+- **DNS listings now retrieve every reported page.** `dns.Service.List` returns an error rather than a partial domain list if a later page fails or pagination metadata is inconsistent.
+- **`dns show` now resolves an omitted status from the matching domain in `dns list`.** An explicit status in the detail response is preserved. If the matching list entry also lacks status, output remains `-`. If the list lookup fails, the command returns an error. _Follow-up to #69._
+
+## [v0.0.31] - 2026-10-09
+
 ### Security
 
 - **Go toolchain `1.26.8` -> `1.26.9` and `golang.org/x/net` `v0.58.0` -> `v0.60.0`.** Resolves the reachable standard-library and `x/net` vulnerabilities reported by `govulncheck`.

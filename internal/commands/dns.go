@@ -84,9 +84,8 @@ func newDNSShowCmd() *cobra.Command {
 	return cmd
 }
 
-// domainStatusCell renders a domain's status for display. The show endpoint
-// does not return a status field, so print "-" rather than a misleading
-// "false" (see issue #51); the list endpoint does return one.
+// domainStatusCell renders a domain's status for display. A missing status is
+// displayed as "-" rather than being confused with an explicit false.
 func domainStatusCell(d *dns.Domain) string {
 	if !d.StatusKnown {
 		return "-"
@@ -107,6 +106,11 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 	domain, err := svc.Show(ctx, slug)
 	if err != nil {
 		return fmt.Errorf("dns show: %w", err)
+	}
+	if !domain.StatusKnown {
+		if err := resolveDNSDomainStatus(ctx, svc, domain); err != nil {
+			return fmt.Errorf("dns show: %w", err)
+		}
 	}
 
 	// Print domain details
@@ -141,6 +145,24 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 		return printer.PrintTable(recHeaders, recRows)
 	}
 
+	return nil
+}
+
+// resolveDNSDomainStatus fills a status omitted by the detail endpoint from a
+// matching list entry that reports it. A missing matching entry remains unknown
+// rather than being guessed from another field.
+func resolveDNSDomainStatus(ctx context.Context, svc *dns.Service, domain *dns.Domain) error {
+	domains, err := svc.List(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving status for DNS domain %s: %w", domain.Slug, err)
+	}
+	for i := range domains {
+		if domains[i].Slug == domain.Slug && domains[i].StatusKnown {
+			domain.Status = domains[i].Status
+			domain.StatusKnown = true
+			break
+		}
+	}
 	return nil
 }
 

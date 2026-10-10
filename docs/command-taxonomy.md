@@ -189,11 +189,11 @@ zcp
 │
 ├── kubernetes (alias: k8s)            Kubernetes cluster operations
 │   ├── list                           List Kubernetes clusters
-│   ├── get                            Show details for a single cluster
-│   ├── create                         Create a Kubernetes cluster
+│   ├── get                            Show details and returned resource overview for a single cluster
+│   ├── create                         Create a Kubernetes cluster (--control-plane-plan, --worker-plan, --storage-plan; optional --enable-csi)
 │   ├── start                          Start a stopped cluster
 │   ├── stop                           Stop a running cluster
-│   ├── scale                          Scale worker node count (--workers N, --wait)
+│   ├── scale                          Set worker count or autoscaling (--workers N, --enable-autoscaling --min-workers N --max-workers N, --disable-autoscaling --workers N)
 │   ├── upgrade                        Change the compute plan of a cluster (--plan)
 │   ├── upgrade-version                Upgrade the Kubernetes version (--version v1.x.y)
 │   ├── get-config                     Download kubeconfig (--output path, --print)
@@ -401,7 +401,16 @@ zcp
 ├── vm-backup                          VM backup operations
 │   ├── list                           List VM backups
 │   ├── create                         Create a VM backup (--interval dailyAt|hourlyAt)
-│   └── delete                         Delete a VM backup by submitting a service-cancellation request (--yes to skip prompt)
+│   ├── delete                         Delete a VM backup by submitting a service-cancellation request (--yes to skip prompt)
+│   └── schedule                        Scheduler-backed VM backup policies
+│       ├── list                        List policies
+│       ├── get <id>                    Show a policy
+│       ├── create <vm-slug>            Create a policy (--interval, --timezone, --retention; --at for non-hourly; --day for weekly/monthly; --name and --immediate optional)
+│       ├── update <id>                 Update interval, time, timezone, retention, and day
+│       ├── pause <id>                  Pause a policy
+│       ├── resume <id>                 Resume a policy
+│       ├── run-now <id>                Request an immediate backup
+│       └── delete <id>                 Delete a policy (--yes to skip prompt)
 │
 ├── cloud-provider                     Cloud provider operations
 │   └── list                           List available cloud providers
