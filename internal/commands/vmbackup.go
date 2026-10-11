@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/api/vmbackup"
 )
@@ -23,6 +25,7 @@ func NewVMBackupCmd() *cobra.Command {
 	cmd.AddCommand(newVMBackupListCmd())
 	cmd.AddCommand(newVMBackupCreateCmd())
 	cmd.AddCommand(newVMBackupDeleteCmd())
+	cmd.AddCommand(newVMBackupScheduleCmd())
 	return cmd
 }
 
@@ -217,7 +220,7 @@ func runVMBackupDelete(cmd *cobra.Command, slug string) error {
 }
 
 func runVMBackupCreate(cmd *cobra.Command, vmSlug string, req vmbackup.CreateRequest) error {
-	_, client, _, err := buildClientAndPrinter(cmd)
+	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
 	}
@@ -226,12 +229,118 @@ func runVMBackupCreate(cmd *cobra.Command, vmSlug string, req vmbackup.CreateReq
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
+	// The create endpoint usually returns only an acknowledgement. Take a scoped
+	// baseline before creating. Use a later list to identify the new schedule
+	// without adopting an existing matching schedule.
+	before, err := svc.List(ctx, req.Region, req.Project)
+	if err != nil {
+		return fmt.Errorf("vm-backup create: listing existing backups before create: %w", err)
+	}
+	known := make(map[string]struct{}, len(before))
+	for _, backup := range before {
+		if backup.Slug != "" {
+			known[backup.Slug] = struct{}{}
+		}
+	}
+
 	resp, err := svc.Create(ctx, vmSlug, req)
 	if err != nil {
 		return fmt.Errorf("vm-backup create: %w", err)
 	}
 
-	fmt.Fprintf(cmd.ErrOrStderr(), "VM backup created: %s. %s\n", resp.Status, resp.Message)
-	fmt.Fprintln(cmd.ErrOrStderr(), "Run 'zcp vm-backup list' to see the schedule slug.")
-	return nil
+	if slug := vmBackupActionSlug(resp); slug != "" {
+		if _, exists := known[slug]; !exists {
+			return printVMBackupCreated(printer, &vmbackup.VMBackup{
+				Slug:           slug,
+				VirtualMachine: &vmbackup.VMRef{Slug: vmSlug},
+				Interval:       req.Interval,
+				At:             req.At,
+			})
+		}
+	}
+
+	created, err := findCreatedVMBackup(ctx, svc, known, vmSlug, req)
+	if err != nil {
+		return fmt.Errorf("VM backup for %q was created, but its schedule slug could not be determined: %w. Run 'zcp vm-backup list' to find it before creating another schedule", vmSlug, err)
+	}
+	return printVMBackupCreated(printer, created)
+}
+
+// vmBackupCreateLookupAttempts bounds the read-only discovery performed after
+// the API accepts a create request. A create is never retried.
+const vmBackupCreateLookupAttempts = 3
+
+// vmBackupActionSlug returns a slug only from an object response containing a
+// non-empty slug. The current API commonly returns an empty data field, which
+// is why runVMBackupCreate also resolves the new schedule through the list
+// endpoint.
+func vmBackupActionSlug(resp *vmbackup.ActionResponse) string {
+	if resp == nil {
+		return ""
+	}
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	slug, _ := data["slug"].(string)
+	return strings.TrimSpace(slug)
+}
+
+func findCreatedVMBackup(ctx context.Context, svc *vmbackup.Service, known map[string]struct{}, vmSlug string, req vmbackup.CreateRequest) (*vmbackup.VMBackup, error) {
+	candidates := make(map[string]*vmbackup.VMBackup)
+	for attempt := 0; attempt < vmBackupCreateLookupAttempts; attempt++ {
+		backups, err := svc.List(ctx, req.Region, req.Project)
+		if err != nil {
+			return nil, fmt.Errorf("listing backups after create: %w", err)
+		}
+
+		for i := range backups {
+			backup := &backups[i]
+			if backup.Slug == "" || backup.VMSlug() != vmSlug || backup.Interval != req.Interval || backup.At != req.At {
+				continue
+			}
+			if _, exists := known[backup.Slug]; exists {
+				continue
+			}
+			candidates[backup.Slug] = backup
+		}
+		if attempt+1 < vmBackupCreateLookupAttempts {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+	}
+	if len(candidates) == 1 {
+		for _, backup := range candidates {
+			return backup, nil
+		}
+	}
+	if len(candidates) > 1 {
+		slugs := make([]string, 0, len(candidates))
+		for slug := range candidates {
+			slugs = append(slugs, slug)
+		}
+		sort.Strings(slugs)
+		return nil, fmt.Errorf("%d new matching backups appeared (%s); cannot determine which schedule was created", len(slugs), strings.Join(slugs, ", "))
+	}
+	return nil, fmt.Errorf("the new schedule did not appear in %d list attempts", vmBackupCreateLookupAttempts)
+}
+
+func printVMBackupCreated(printer *output.Printer, backup *vmbackup.VMBackup) error {
+	if printer.Format() == output.FormatJSON || printer.Format() == output.FormatYAML {
+		return printer.Print(backup)
+	}
+	return printer.PrintTable(
+		[]string{"FIELD", "VALUE"},
+		[][]string{
+			{"Slug", backup.Slug},
+			{"Name", backup.Name},
+			{"VM", backup.VMSlug()},
+			{"Interval", backup.Interval},
+			{"At", strconv.Itoa(backup.At)},
+			{"Scheduled At", backup.ScheduledAt},
+		},
+	)
 }

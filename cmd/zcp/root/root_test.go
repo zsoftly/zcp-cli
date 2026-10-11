@@ -44,7 +44,7 @@ profiles:
 
 	rootCmd.SetOut(&bytes.Buffer{})
 	rootCmd.SetErr(&bytes.Buffer{})
-	rootCmd.SetArgs([]string{"instance", "create", "--name", "test-vm"})
+	rootCmd.SetArgs([]string{"instance", "create", "--name", "test-vm", "--plan", "ca2sxs"})
 
 	err := rootCmd.Execute()
 	if err == nil {

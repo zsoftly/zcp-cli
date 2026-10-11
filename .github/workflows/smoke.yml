@@ -111,6 +111,7 @@ jobs:
           ZCP_SMOKE_REGION: ${{ vars.ZCP_SMOKE_REGION }}
           ZCP_SMOKE_PROJECT: ${{ vars.ZCP_SMOKE_PROJECT }}
           ZCP_SMOKE_CLOUD_PROVIDER: ${{ vars.ZCP_SMOKE_CLOUD_PROVIDER }}
+          ZCP_SMOKE_ROOT_DISK_SIZE: ${{ vars.ZCP_SMOKE_ROOT_DISK_SIZE }}
         run: |
           if [ "${{ needs.preflight.outputs.services }}" = "all" ]; then
             ARGS=(--bin ./bin/zcp)

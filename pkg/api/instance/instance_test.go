@@ -49,13 +49,15 @@ func TestCreate(t *testing.T) {
 
 	svc := instance.NewService(newClient(srv.URL))
 	req := instance.CreateRequest{
-		Name:           "test-vm",
-		BillingCycle:   "hourly",
-		IsPublic:       true,
-		NetworkType:    "Vpc",
-		Networks:       []string{"Vpc-1", "Vpc-2"},
-		VrPlan:         "vpc-net",
-		DefaultNetwork: "Vpc-1",
+		Name:                   "test-vm",
+		BillingCycle:           "hourly",
+		IsPublic:               true,
+		NetworkType:            "Vpc",
+		Networks:               []string{"Vpc-1", "Vpc-2"},
+		VrPlan:                 "vpc-net",
+		DefaultNetwork:         "Vpc-1",
+		BlockstoragePlan:       "b2g1",
+		BlockstorageCustomPlan: &instance.BlockstorageCustomPlan{Storage: 100},
 	}
 	vm, err := svc.Create(context.Background(), req)
 	if err != nil {
@@ -88,6 +90,24 @@ func TestCreate(t *testing.T) {
 	}
 	if gotBody["default_network"] != "Vpc-1" {
 		t.Errorf("default_network = %v, want %q", gotBody["default_network"], "Vpc-1")
+	}
+	rootDisk, ok := gotBody["blockstorage_custom_plan"].(map[string]interface{})
+	if !ok || rootDisk["storage"] != float64(100) {
+		t.Errorf("blockstorage_custom_plan = %#v, want storage=100", gotBody["blockstorage_custom_plan"])
+	}
+}
+
+func TestCreateOmitsRootDiskCapacityWhenUnset(t *testing.T) {
+	b, err := json.Marshal(instance.CreateRequest{Name: "test-vm"})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(b, &body); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if _, ok := body["blockstorage_custom_plan"]; ok {
+		t.Errorf("payload includes unset blockstorage_custom_plan = %#v", body["blockstorage_custom_plan"])
 	}
 }
 

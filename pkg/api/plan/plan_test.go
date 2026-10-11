@@ -173,7 +173,9 @@ func TestParsedTag(t *testing.T) {
 		want string
 	}{
 		{"empty array", `[]`, "-"},
+		{"object with tag", `{"tag":"Recommended"}`, "Recommended"},
 		{"object with label", `{"label":"Recommended","value":"Recommended","color":"red"}`, "Recommended"},
+		{"object with tag and label", `{"tag":"Recommended","label":"Legacy"}`, "Recommended"},
 		{"empty object", `{}`, "-"},
 		{"null-like", ``, "-"},
 	}

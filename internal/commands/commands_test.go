@@ -150,9 +150,10 @@ func TestK8sCreateRequiresBillingCycle(t *testing.T) {
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs([]string{"kubernetes", "create",
-		"--name", "test", "--version", "v1.28.4", "--plan", "k8s-1",
+		"--name", "test", "--version", "v1.28.4", "--control-plane-plan", "k8s-control-1", "--worker-plan", "k8s-worker-1", "--storage-plan", "k8s-root-volume-1",
+		"--root-disk-size", "100",
 		"--cloud-provider", "nimbo", "--region", "noida", "--project", "default-9",
-		"--workers", "1", "--ssh-key", "mykey"})
+		"--workers", "1", "--storage-category", "nvme", "--ssh-key", "mykey"})
 
 	err := root.Execute()
 	if err == nil {
@@ -267,13 +268,27 @@ func TestVMBackupAtOutOfRange(t *testing.T) {
 }
 
 func TestVMBackupAtValidValues(t *testing.T) {
-	// at=12, immediate=1 should pass validation and reach the API. A stub
-	// server stands in for the API so this test never touches the network.
+	// at=12, immediate=1 should pass validation, create the schedule, and
+	// resolve its slug through the scoped listing. A stub server stands in for
+	// the API so this test never touches the network.
 	var gotPath string
+	listCalls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"Success","message":"ok","data":null}`)
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/virtual-machines/backups":
+			listCalls++
+			if listCalls == 1 {
+				fmt.Fprint(w, `{"status":"Success","current_page":1,"last_page":1,"data":[]}`)
+				return
+			}
+			fmt.Fprint(w, `{"status":"Success","current_page":1,"last_page":1,"data":[{"slug":"vmb-new","virtual_machine":{"slug":"my-vm"},"interval":"dailyAt","at":12}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/virtual-machines/my-vm/backups":
+			gotPath = r.URL.Path
+			fmt.Fprint(w, `{"status":"Success","message":"ok","data":null}`)
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 

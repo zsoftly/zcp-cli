@@ -31,16 +31,17 @@ func TestKubernetesListClusters(t *testing.T) {
 			"message": "OK",
 			"data": []map[string]interface{}{
 				{
-					"id":            "abc-123",
-					"name":          "my-cluster",
-					"slug":          "my-cluster",
-					"state":         "Running",
-					"version":       "v1.28.4",
-					"node_size":     3,
-					"control_nodes": 1,
-					"enable_ha":     false,
-					"created_at":    "2026-04-04T17:09:26.000000Z",
-					"updated_at":    "2026-04-04T17:10:20.000000Z",
+					"id":               "abc-123",
+					"name":             "my-cluster",
+					"slug":             "my-cluster",
+					"state":            "Running",
+					"version":          "v1.28.4",
+					"node_size":        3,
+					"worker_node_size": 4,
+					"control_nodes":    1,
+					"enable_ha":        false,
+					"created_at":       "2026-04-04T17:09:26.000000Z",
+					"updated_at":       "2026-04-04T17:10:20.000000Z",
 				},
 			},
 			"current_page": 1,
@@ -75,6 +76,9 @@ func TestKubernetesListClusters(t *testing.T) {
 	}
 	if clusters[0].NodeSize != 3 {
 		t.Errorf("NodeSize = %d, want %d", clusters[0].NodeSize, 3)
+	}
+	if clusters[0].WorkerNodeSize != 4 {
+		t.Errorf("WorkerNodeSize = %d, want %d", clusters[0].WorkerNodeSize, 4)
 	}
 	if clusters[0].ControlNodes != 1 {
 		t.Errorf("ControlNodes = %d, want %d", clusters[0].ControlNodes, 1)
@@ -161,19 +165,24 @@ func TestKubernetesCreate(t *testing.T) {
 
 	svc := kubernetes.NewService(newTestClient(srv))
 	req := kubernetes.CreateRequest{
-		Name:          "test-cluster",
-		Version:       "v1.28.4",
-		NodeSize:      3,
-		ControlNodes:  1,
-		CloudProvider: "nimbo",
-		Region:        "noida",
-		Project:       "default-59",
-		BillingCycle:  "monthly",
-		EnableHA:      false,
-		Networks:      []string{},
-		Plan:          "k8s-plan-1",
-		SSHKey:        "mykey",
-		AuthMethod:    "ssh-key",
+		Name:                   "test-cluster",
+		Version:                "v1.28.4",
+		NodeSize:               3,
+		ControlNodes:           1,
+		CloudProvider:          "nimbo",
+		Region:                 "noida",
+		Project:                "default-59",
+		BillingCycle:           "monthly",
+		EnableHA:               false,
+		EnableCSI:              true,
+		Networks:               []string{},
+		Plan:                   "k8s-plan-1",
+		MasterPlan:             "k8s-control-1",
+		WorkerPlan:             "k8s-worker-1",
+		BlockstoragePlan:       "k8s-root-volume-1",
+		BlockstorageCustomPlan: &kubernetes.BlockstorageCustomPlan{Storage: 100},
+		SSHKey:                 "mykey",
+		AuthMethod:             "ssh-key",
 	}
 	cluster, err := svc.Create(context.Background(), req)
 	if err != nil {
@@ -201,9 +210,133 @@ func TestKubernetesCreate(t *testing.T) {
 	if gotBody["plan"] != "k8s-plan-1" {
 		t.Errorf("body plan = %v, want %q", gotBody["plan"], "k8s-plan-1")
 	}
+	if gotBody["master_plan"] != "k8s-control-1" {
+		t.Errorf("body master_plan = %v, want %q", gotBody["master_plan"], "k8s-control-1")
+	}
+	if gotBody["worker_plan"] != "k8s-worker-1" {
+		t.Errorf("body worker_plan = %v, want %q", gotBody["worker_plan"], "k8s-worker-1")
+	}
+	if gotBody["blockstorage_plan"] != "k8s-root-volume-1" {
+		t.Errorf("body blockstorage_plan = %v, want %q", gotBody["blockstorage_plan"], "k8s-root-volume-1")
+	}
+	rootDisk, ok := gotBody["blockstorage_custom_plan"].(map[string]interface{})
+	if !ok || rootDisk["storage"] != float64(100) {
+		t.Errorf("body blockstorage_custom_plan = %#v, want storage=100", gotBody["blockstorage_custom_plan"])
+	}
+	if gotBody["enable_csi"] != true {
+		t.Errorf("body enable_csi = %v, want true", gotBody["enable_csi"])
+	}
 	if gotBody["ssh_key"] != "mykey" {
 		t.Errorf("body ssh_key = %v, want %q", gotBody["ssh_key"], "mykey")
 	}
+}
+
+func TestKubernetesCreateModernPlanPayloadOmitsLegacyPlan(t *testing.T) {
+	var gotBody map[string]interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/kubernetes-clusters" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "Success",
+			"message": "OK",
+			"data":    map[string]interface{}{},
+		})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	_, err := svc.Create(context.Background(), kubernetes.CreateRequest{
+		Name:                   "test-cluster",
+		Version:                "v1.36.1",
+		NodeSize:               3,
+		WorkerNodeSize:         3,
+		ControlNodes:           1,
+		CloudProvider:          "nimbo",
+		Region:                 "yul-1",
+		Project:                "test",
+		BillingCycle:           "hourly",
+		Networks:               []string{},
+		MasterPlan:             "k8s-cpi-yul",
+		WorkerPlan:             "k8s-li-yul",
+		BlockstoragePlan:       "b2g1",
+		BlockstorageCustomPlan: &kubernetes.BlockstorageCustomPlan{Storage: 100},
+		IsK8sCustomPlan:        boolPointer(false),
+		MasterCustomPlan:       json.RawMessage("null"),
+		IsK8sMasterCustomPlan:  boolPointer(false),
+		WorkerCustomPlan:       json.RawMessage("null"),
+		IsK8sWorkerCustomPlan:  boolPointer(false),
+		StorageCategory:        "pro-nvme",
+		SSHKey:                 "mykey",
+		AuthMethod:             "ssh-key",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, ok := gotBody["plan"]; ok {
+		t.Errorf("body includes legacy plan = %v, want omitted", gotBody["plan"])
+	}
+	if gotBody["master_plan"] != "k8s-cpi-yul" {
+		t.Errorf("body master_plan = %v, want %q", gotBody["master_plan"], "k8s-cpi-yul")
+	}
+	if gotBody["worker_plan"] != "k8s-li-yul" {
+		t.Errorf("body worker_plan = %v, want %q", gotBody["worker_plan"], "k8s-li-yul")
+	}
+	if gotBody["blockstorage_plan"] != "b2g1" {
+		t.Errorf("body blockstorage_plan = %v, want %q", gotBody["blockstorage_plan"], "b2g1")
+	}
+	rootDisk, ok := gotBody["blockstorage_custom_plan"].(map[string]interface{})
+	if !ok || rootDisk["storage"] != float64(100) {
+		t.Errorf("body blockstorage_custom_plan = %#v, want storage=100", gotBody["blockstorage_custom_plan"])
+	}
+	for field, want := range map[string]bool{
+		"is_k8s_custom_plan":        false,
+		"is_k8s_master_custom_plan": false,
+		"is_k8s_worker_custom_plan": false,
+	} {
+		if got, ok := gotBody[field].(bool); !ok || got != want {
+			t.Errorf("body %s = %#v, want %#v", field, gotBody[field], want)
+		}
+	}
+	for _, field := range []string{"master_custom_plan", "worker_custom_plan"} {
+		if value, ok := gotBody[field]; !ok || value != nil {
+			t.Errorf("body %s = %#v, want null", field, value)
+		}
+	}
+}
+
+func TestKubernetesCreateOmitsRootDiskCapacityWhenUnset(t *testing.T) {
+	b, err := json.Marshal(kubernetes.CreateRequest{Name: "test-cluster"})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(b, &body); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if _, ok := body["blockstorage_custom_plan"]; ok {
+		t.Errorf("payload includes unset blockstorage_custom_plan = %#v", body["blockstorage_custom_plan"])
+	}
+	for _, field := range []string{
+		"is_k8s_custom_plan",
+		"master_custom_plan",
+		"is_k8s_master_custom_plan",
+		"worker_custom_plan",
+		"is_k8s_worker_custom_plan",
+	} {
+		if value, ok := body[field]; ok {
+			t.Errorf("payload includes unset %s = %#v", field, value)
+		}
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func TestKubernetesStart(t *testing.T) {
@@ -355,6 +488,73 @@ func TestKubernetesScale(t *testing.T) {
 	}
 	if int(gotBody["node_size"].(float64)) != 5 {
 		t.Errorf("body node_size = %v, want 5", gotBody["node_size"])
+	}
+}
+
+func TestKubernetesScaleRequestLegacyPayload(t *testing.T) {
+	payload, err := json.Marshal(kubernetes.ScaleRequest{NodeSize: 3})
+	if err != nil {
+		t.Fatalf("marshal ScaleRequest: %v", err)
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal ScaleRequest payload: %v", err)
+	}
+	if body["node_size"] != float64(3) {
+		t.Errorf("node_size = %#v, want 3", body["node_size"])
+	}
+}
+
+func TestKubernetesAutoscalingPayloads(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/kubernetes-clusters/my-cluster/scale" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		body := map[string]interface{}{}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		bodies = append(bodies, body)
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "Success"})
+	}))
+	defer srv.Close()
+
+	svc := kubernetes.NewService(newTestClient(srv))
+	if err := svc.EnableAutoscaling(context.Background(), "my-cluster", 2, 5); err != nil {
+		t.Fatalf("EnableAutoscaling() error = %v", err)
+	}
+	if err := svc.DisableAutoscaling(context.Background(), "my-cluster", 3); err != nil {
+		t.Fatalf("DisableAutoscaling() error = %v", err)
+	}
+	if len(bodies) != 2 {
+		t.Fatalf("requests = %d, want 2", len(bodies))
+	}
+	if got := bodies[0]; got["autoscale"] != float64(1) || got["min_cluster_size"] != float64(2) || got["max_cluster_size"] != float64(5) {
+		t.Errorf("enable payload = %#v", got)
+	} else if _, ok := got["node_size"]; ok {
+		t.Errorf("enable payload includes node_size = %#v", got["node_size"])
+	}
+	if got := bodies[1]; got["autoscale"] != float64(0) || got["node_size"] != float64(3) {
+		t.Errorf("disable payload = %#v", got)
+	}
+}
+
+func TestKubernetesGetDecodesNumericPlanCPU(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/kubernetes-clusters/my-cluster" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"status":"Success","data":{"slug":"my-cluster","offering":{"master_plan":{"slug":"k8s-cpi-yul","attribute":{"formatted_cpu":4,"cpu":4}}}}}`))
+	}))
+	defer srv.Close()
+
+	cluster, err := kubernetes.NewService(newTestClient(srv)).Get(context.Background(), "my-cluster")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if cluster.Offering == nil || cluster.Offering.MasterPlan == nil || string(cluster.Offering.MasterPlan.Attribute.FormattedCPU) != "4" {
+		t.Fatalf("Get() did not decode numeric formatted_cpu: %#v", cluster.Offering)
 	}
 }
 

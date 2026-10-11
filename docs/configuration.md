@@ -34,7 +34,7 @@ profiles:
   staging:
     name: staging
     bearer_token: STAGING_BEARER_TOKEN
-    api_url: https://staging-api.zcp.zsoftly.ca
+    api_url: https://stg-cloud.zcp.zsoftly.ca/backend/api
 
   production:
     name: production
@@ -153,8 +153,8 @@ zcp profile add default --region yul-1 --project default-9
 zcp profile add staging \
   --bearer-token YOUR_STAGING_TOKEN \
   --region yul-1 \
-  --project default-9 \
-  --api-url https://staging-api.zcp.zsoftly.ca
+  --project default \
+  --api-url-override https://stg-cloud.zcp.zsoftly.ca/backend/api
 ```
 
 ### Switching the Active Profile

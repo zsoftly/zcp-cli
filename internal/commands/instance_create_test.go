@@ -1,80 +1,113 @@
 package commands
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestResolveInstanceCreatePlanFixedPlan(t *testing.T) {
-	plan, customPlan, err := resolveInstanceCreatePlan("ca1hxs", 0, 0, 0, false, false, false)
-	if err != nil {
-		t.Fatalf("resolveInstanceCreatePlan() error = %v", err)
-	}
-	if plan != "ca1hxs" {
-		t.Fatalf("plan = %v, want ca1hxs", plan)
-	}
-	if customPlan != nil {
-		t.Fatalf("customPlan = %#v, want nil", customPlan)
-	}
-}
-
-func TestResolveInstanceCreatePlanCustomPlan(t *testing.T) {
-	plan, customPlan, err := resolveInstanceCreatePlan("", 2, 4, 45, true, true, true)
-	if err != nil {
-		t.Fatalf("resolveInstanceCreatePlan() error = %v", err)
-	}
-	if plan != "" {
-		t.Fatalf("plan = %v, want empty", plan)
-	}
-	if customPlan == nil {
-		t.Fatal("customPlan = nil, want custom sizing")
-	}
-	if customPlan.CPU != "2" || customPlan.Memory != "4" || customPlan.Storage != "45" {
-		t.Fatalf("customPlan = %#v, want cpu=2 memory=4 storage=45", customPlan)
+func instanceCreateArgs(apiURL string) []string {
+	return []string{
+		"--name", "new-vm",
+		"--cloud-provider", "test-cloud",
+		"--project", "test-project",
+		"--region", "test-region",
+		"--template", "ubuntu",
+		"--billing-cycle", "hourly",
+		"--storage-category", "premium-ssd",
+		"--network-plan", "network-plan",
+		"--api-url", apiURL,
 	}
 }
 
-func TestResolveInstanceCreatePlanRequiresPlanOrCompleteCustomPlan(t *testing.T) {
-	_, _, err := resolveInstanceCreatePlan("", 2, 4, 0, true, true, false)
+func TestInstanceCreateRequiresPlan(t *testing.T) {
+	_, _, err := execCmd(t, newInstanceCreateCmd(), instanceCreateArgs("http://example.invalid")...)
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected missing-plan error")
 	}
-	if !strings.Contains(err.Error(), "--plan is required unless --cpu, --memory, and --disk are all provided") {
-		t.Fatalf("error = %q", err)
-	}
-}
-
-func TestResolveInstanceCreatePlanRejectsMixedPlanAndCustomFlags(t *testing.T) {
-	_, _, err := resolveInstanceCreatePlan("ca1hxs", 2, 0, 0, true, false, false)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "--plan cannot be used with --cpu, --memory, or --disk") {
-		t.Fatalf("error = %q", err)
+	if !strings.Contains(err.Error(), "--plan is required") {
+		t.Fatalf("error = %q, want missing-plan error", err)
 	}
 }
 
-func TestResolveInstanceCreatePlanLocalCustomValidation(t *testing.T) {
+func TestInstanceCreateRejectsRetiredSizingFlags(t *testing.T) {
+	for _, flag := range []string{"--cpu", "--memory", "--disk"} {
+		t.Run(flag, func(t *testing.T) {
+			args := append(instanceCreateArgs("http://example.invalid"), "--plan", "ca2sxs", flag, "2")
+			_, _, err := execCmd(t, newInstanceCreateCmd(), args...)
+			if err == nil {
+				t.Fatalf("expected %s to be rejected", flag)
+			}
+			if !strings.Contains(err.Error(), "unknown flag") || !strings.Contains(err.Error(), flag) {
+				t.Fatalf("error = %q, want unknown %s flag", err, flag)
+			}
+		})
+	}
+}
+
+func TestInstanceCreateSendsNamedPlansAndRootDiskCapacity(t *testing.T) {
+	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+	var request map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/virtual-machines" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"Success","data":{"slug":"new-vm","name":"new-vm","state":"Creating"}}`))
+	}))
+	defer srv.Close()
+
+	args := append(instanceCreateArgs(srv.URL), "--plan", "ca2sxs", "--blockstorage-plan", "b2g1", "--root-disk-size", "100")
+	_, _, err := execCmd(t, newInstanceCreateCmd(), args...)
+	if err != nil {
+		t.Fatalf("instance create: %v", err)
+	}
+	if got := request["plan"]; got != "ca2sxs" {
+		t.Errorf("plan = %#v, want %q", got, "ca2sxs")
+	}
+	if got, ok := request["custom_plan"]; !ok || got != nil {
+		t.Errorf("custom_plan = %#v, want null", got)
+	}
+	if got := request["blockstorage_plan"]; got != "b2g1" {
+		t.Errorf("blockstorage_plan = %#v, want %q", got, "b2g1")
+	}
+	rootDisk, ok := request["blockstorage_custom_plan"].(map[string]any)
+	if !ok {
+		t.Fatalf("blockstorage_custom_plan = %#v, want object", request["blockstorage_custom_plan"])
+	}
+	if got := rootDisk["storage"]; got != float64(100) {
+		t.Errorf("blockstorage_custom_plan.storage = %#v, want %d", got, 100)
+	}
+}
+
+func TestInstanceCreateRequiresNamedRootStorageAndCapacity(t *testing.T) {
 	tests := []struct {
 		name string
-		cpu  int
-		mem  int
-		disk int
+		args []string
 		want string
 	}{
-		{name: "cpu below minimum", cpu: 1, mem: 4, disk: 45, want: "at least 2 vCPU"},
-		{name: "memory above maximum", cpu: 2, mem: 257, disk: 45, want: "less than or equal to 256 GB"},
-		{name: "disk non-positive", cpu: 2, mem: 4, disk: 0, want: "must be > 0 GB"},
+		{name: "both missing", want: "--blockstorage-plan and --root-disk-size are required"},
+		{name: "tier only", args: []string{"--blockstorage-plan", "b2g1"}, want: "--root-disk-size is required"},
+		{name: "capacity only", args: []string{"--root-disk-size", "100"}, want: "--blockstorage-plan is required"},
+		{name: "zero capacity", args: []string{"--blockstorage-plan", "b2g1", "--root-disk-size", "0"}, want: "--root-disk-size must be > 0"},
+		{name: "unnamed tier", args: []string{"--blockstorage-plan", "custom_plan", "--root-disk-size", "100"}, want: "must name a storage tier"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, err := resolveInstanceCreatePlan("", tt.cpu, tt.mem, tt.disk, true, true, true)
-			if err == nil {
-				t.Fatal("expected error")
-			}
-			if !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("error = %q, want containing %q", err, tt.want)
+			args := append(instanceCreateArgs("http://example.invalid"), "--plan", "ca2sxs")
+			args = append(args, tt.args...)
+			_, _, err := execCmd(t, newInstanceCreateCmd(), args...)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
 		})
 	}

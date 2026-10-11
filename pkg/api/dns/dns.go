@@ -119,7 +119,7 @@ type envelopeList struct {
 	Message     string   `json:"message"`
 	CurrentPage int      `json:"current_page"`
 	Data        []Domain `json:"data"`
-	Total       int      `json:"total"`
+	Total       *int     `json:"total"`
 }
 
 // envelopeSingle wraps a single-object response.
@@ -139,15 +139,94 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// List returns all DNS domains.
+const maxListPages = 1000
+
+// List returns all DNS domains. When the endpoint omits pagination metadata,
+// it preserves the legacy single-response behavior.
 func (s *Service) List(ctx context.Context) ([]Domain, error) {
-	q := url.Values{}
-	q.Set("include", "dns_provider")
-	var resp envelopeList
-	if err := s.client.Get(ctx, "/dns/domains", q, &resp); err != nil {
-		return nil, fmt.Errorf("listing DNS domains: %w", err)
+	return s.list(ctx, "")
+}
+
+// FindBySlug returns the DNS domain with the given slug, or nil when it is not
+// present. It stops fetching pages as soon as it finds a match.
+func (s *Service) FindBySlug(ctx context.Context, slug string) (*Domain, error) {
+	if slug == "" {
+		return nil, nil
 	}
-	return resp.Data, nil
+	domains, err := s.list(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return findDomain(domains, slug), nil
+}
+
+func (s *Service) list(ctx context.Context, slug string) ([]Domain, error) {
+	var domains []Domain
+	var reportedTotal *int
+
+	for page := 1; page <= maxListPages; page++ {
+		q := url.Values{}
+		q.Set("include", "dns_provider")
+		q.Set("page", strconv.Itoa(page))
+
+		var resp envelopeList
+		if err := s.client.Get(ctx, "/dns/domains", q, &resp); err != nil {
+			return nil, fmt.Errorf("listing DNS domains: %w", err)
+		}
+		if page > 1 && resp.CurrentPage == 0 {
+			return nil, fmt.Errorf("listing DNS domains: requested page %d but the API did not return pagination metadata", page)
+		}
+		if resp.CurrentPage > 0 && resp.CurrentPage != page {
+			return nil, fmt.Errorf("listing DNS domains: requested page %d but the API returned page %d", page, resp.CurrentPage)
+		}
+		if resp.Total != nil && *resp.Total < 0 {
+			return nil, fmt.Errorf("listing DNS domains: API returned invalid negative total %d", *resp.Total)
+		}
+		if reportedTotal == nil {
+			reportedTotal = resp.Total
+		} else if resp.Total == nil || *resp.Total != *reportedTotal {
+			return nil, fmt.Errorf("listing DNS domains: pagination total changed or was omitted on page %d", page)
+		}
+		if reportedTotal == nil {
+			if slug != "" {
+				if domain := findDomain(resp.Data, slug); domain != nil {
+					return []Domain{*domain}, nil
+				}
+				return nil, nil
+			}
+			return resp.Data, nil
+		}
+		if *reportedTotal == 0 && len(resp.Data) > 0 {
+			return nil, fmt.Errorf("listing DNS domains: API reported total 0 with %d domains", len(resp.Data))
+		}
+		if len(domains)+len(resp.Data) > *reportedTotal {
+			return nil, fmt.Errorf("listing DNS domains: API returned more domains than reported total %d", *reportedTotal)
+		}
+
+		if slug != "" {
+			if domain := findDomain(resp.Data, slug); domain != nil {
+				return []Domain{*domain}, nil
+			}
+		}
+		domains = append(domains, resp.Data...)
+		if len(domains) == *reportedTotal {
+			return domains, nil
+		}
+		if len(resp.Data) == 0 {
+			return nil, fmt.Errorf("listing DNS domains: page %d was empty before reaching reported total %d", page, *reportedTotal)
+		}
+	}
+
+	return nil, fmt.Errorf("listing DNS domains: exceeded %d pages without reaching the reported total", maxListPages)
+}
+
+func findDomain(domains []Domain, slug string) *Domain {
+	for i := range domains {
+		if domains[i].Slug == slug {
+			return &domains[i]
+		}
+	}
+	return nil
 }
 
 // Show returns details for a single DNS domain by slug, including records.

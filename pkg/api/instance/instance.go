@@ -254,39 +254,45 @@ type Addon struct {
 
 // CreateRequest holds parameters for creating a VM via STKCNSL.
 type CreateRequest struct {
-	Name                 string      `json:"name"`
-	CloudProvider        string      `json:"cloud_provider"`
-	Project              string      `json:"project"`
-	Region               string      `json:"region"`
-	BootSource           string      `json:"boot_source"`
-	Server               string      `json:"server,omitempty"`
-	Template             string      `json:"template"`
-	IsPublic             bool        `json:"is_public"`
-	NetworkType          string      `json:"network_type"`
-	Networks             []string    `json:"networks"`
-	BillingCycle         string      `json:"billing_cycle"`
-	SSHKey               *string     `json:"ssh_key"`
-	AuthMethod           string      `json:"authMethod,omitempty"`
-	Plan                 string      `json:"plan"`
-	CustomPlan           *CustomPlan `json:"custom_plan"`
-	OSFamily             string      `json:"os_family,omitempty"`
-	TemplateType         string      `json:"template_type,omitempty"`
-	Hostname             string      `json:"hostname"`
-	Username             string      `json:"username,omitempty"`
-	Password             *string     `json:"password"`
-	Coupon               *string     `json:"coupon"`
-	Addons               []string    `json:"addons"`
-	UserData             *string     `json:"user_data"`
-	StorageCategory      string      `json:"storage_category,omitempty"`
-	ComputeCategory      string      `json:"compute_category,omitempty"`
-	BlockstoragePlan     string      `json:"blockstorage_plan,omitempty"`
-	NetworkPlan          string      `json:"network_plan,omitempty"`
-	VrPlan               string      `json:"vr_plan,omitempty"`
-	DefaultNetwork       string      `json:"default_network,omitempty"`
-	IsVNF                bool        `json:"is_vnf"`
-	IsVMPasswordRequired bool        `json:"is_vm_password_required"`
-	IsVMSSHRequired      bool        `json:"is_vm_ssh_required"`
-	IsFreeTrial          bool        `json:"is_free_trial_plan"`
+	Name                   string                  `json:"name"`
+	CloudProvider          string                  `json:"cloud_provider"`
+	Project                string                  `json:"project"`
+	Region                 string                  `json:"region"`
+	BootSource             string                  `json:"boot_source"`
+	Server                 string                  `json:"server,omitempty"`
+	Template               string                  `json:"template"`
+	IsPublic               bool                    `json:"is_public"`
+	NetworkType            string                  `json:"network_type"`
+	Networks               []string                `json:"networks"`
+	BillingCycle           string                  `json:"billing_cycle"`
+	SSHKey                 *string                 `json:"ssh_key"`
+	AuthMethod             string                  `json:"authMethod,omitempty"`
+	Plan                   string                  `json:"plan"`
+	CustomPlan             *CustomPlan             `json:"custom_plan"`
+	OSFamily               string                  `json:"os_family,omitempty"`
+	TemplateType           string                  `json:"template_type,omitempty"`
+	Hostname               string                  `json:"hostname"`
+	Username               string                  `json:"username,omitempty"`
+	Password               *string                 `json:"password"`
+	Coupon                 *string                 `json:"coupon"`
+	Addons                 []string                `json:"addons"`
+	UserData               *string                 `json:"user_data"`
+	StorageCategory        string                  `json:"storage_category,omitempty"`
+	ComputeCategory        string                  `json:"compute_category,omitempty"`
+	BlockstoragePlan       string                  `json:"blockstorage_plan,omitempty"`
+	BlockstorageCustomPlan *BlockstorageCustomPlan `json:"blockstorage_custom_plan,omitempty"`
+	NetworkPlan            string                  `json:"network_plan,omitempty"`
+	VrPlan                 string                  `json:"vr_plan,omitempty"`
+	DefaultNetwork         string                  `json:"default_network,omitempty"`
+	IsVNF                  bool                    `json:"is_vnf"`
+	IsVMPasswordRequired   bool                    `json:"is_vm_password_required"`
+	IsVMSSHRequired        bool                    `json:"is_vm_ssh_required"`
+	IsFreeTrial            bool                    `json:"is_free_trial_plan"`
+}
+
+// BlockstorageCustomPlan holds the root-disk capacity in GB for a named storage tier.
+type BlockstorageCustomPlan struct {
+	Storage int `json:"storage"`
 }
 
 func (r CreateRequest) MarshalJSON() ([]byte, error) {

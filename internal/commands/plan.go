@@ -103,6 +103,9 @@ func newPlanVMCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "vm",
 		Short: "List Virtual Machine plans",
+		Long: `List Virtual Machine plans.
+
+For compute-only plans, root disks and network charges are separate.`,
 		Example: `  zcp plan vm --region yul-1
   zcp plan vm --region yul-1 --output json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -123,13 +126,14 @@ func newPlanVMCmd() *cobra.Command {
 				return fmt.Errorf("plan vm: %w", err)
 			}
 
-			headers := []string{"ID", "SLUG", "NAME", "CPU", "MEMORY", "STORAGE", "HOURLY", "MONTHLY", "ACTIVE"}
+			headers := []string{"ID", "SLUG", "NAME", "TAG", "CPU", "MEMORY", "STORAGE", "HOURLY", "MONTHLY", "ACTIVE"}
 			rows := make([][]string, 0, len(plans))
 			for _, p := range plans {
 				rows = append(rows, []string{
 					p.ID,
 					p.Slug,
 					p.Name,
+					p.ParsedTag(),
 					p.Attribute.FormattedCPU.String(),
 					p.Attribute.FormattedMemory,
 					p.Attribute.FormattedStorage,
