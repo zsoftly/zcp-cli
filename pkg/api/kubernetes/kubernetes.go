@@ -55,6 +55,7 @@ type NodePlan struct {
 
 // Offering describes the plans and custom resource values used by a Kubernetes cluster.
 type Offering struct {
+	BillingCycle                 *BillingCycle   `json:"billing_cycle,omitempty"`
 	CPU                          json.RawMessage `json:"cpu"`
 	Memory                       json.RawMessage `json:"memory"`
 	Storage                      json.RawMessage `json:"storage"`
@@ -80,11 +81,12 @@ type Network struct {
 	Slug string `json:"slug"`
 }
 
-// BlockStorage holds the safe volume identity returned with a cluster.
+// BlockStorage holds a volume identity and capacity returned with a cluster.
 type BlockStorage struct {
-	Name   string `json:"name"`
-	Slug   string `json:"slug"`
-	IsRoot bool   `json:"is_root"`
+	Name   string          `json:"name"`
+	Slug   string          `json:"slug"`
+	IsRoot bool            `json:"is_root"`
+	Size   json.RawMessage `json:"size"`
 }
 
 // Autoscale marks a cluster with autoscaling enabled in the portal response.
@@ -174,20 +176,31 @@ type CreateRequest struct {
 	// Plan is retained for API compatibility with older Kubernetes cluster
 	// creation flows. ZCP Kubernetes clusters use MasterPlan and
 	// WorkerPlan instead.
-	Plan             string      `json:"plan,omitempty"`
-	MasterPlan       string      `json:"master_plan,omitempty"`
-	WorkerPlan       string      `json:"worker_plan,omitempty"`
-	BlockstoragePlan string      `json:"blockstorage_plan,omitempty"`
-	WithPoolCard     bool        `json:"with_pool_card"`
-	IsCustomPlan     bool        `json:"is_custom_plan"`
-	CustomPlan       interface{} `json:"custom_plan"`
-	VirtualMachine   string      `json:"virtual_machine"`
-	Coupon           *string     `json:"coupon"`
-	StorageCategory  string      `json:"storage_category"`
-	SSHKey           string      `json:"ssh_key"`
-	AuthMethod       string      `json:"authMethod"`
-	Username         string      `json:"username"`
-	Password         string      `json:"password"`
+	Plan                   string                  `json:"plan,omitempty"`
+	MasterPlan             string                  `json:"master_plan,omitempty"`
+	WorkerPlan             string                  `json:"worker_plan,omitempty"`
+	BlockstoragePlan       string                  `json:"blockstorage_plan,omitempty"`
+	BlockstorageCustomPlan *BlockstorageCustomPlan `json:"blockstorage_custom_plan,omitempty"`
+	IsK8sCustomPlan        *bool                   `json:"is_k8s_custom_plan,omitempty"`
+	MasterCustomPlan       json.RawMessage         `json:"master_custom_plan,omitempty"`
+	IsK8sMasterCustomPlan  *bool                   `json:"is_k8s_master_custom_plan,omitempty"`
+	WorkerCustomPlan       json.RawMessage         `json:"worker_custom_plan,omitempty"`
+	IsK8sWorkerCustomPlan  *bool                   `json:"is_k8s_worker_custom_plan,omitempty"`
+	WithPoolCard           bool                    `json:"with_pool_card"`
+	IsCustomPlan           bool                    `json:"is_custom_plan"`
+	CustomPlan             interface{}             `json:"custom_plan"`
+	VirtualMachine         string                  `json:"virtual_machine"`
+	Coupon                 *string                 `json:"coupon"`
+	StorageCategory        string                  `json:"storage_category"`
+	SSHKey                 string                  `json:"ssh_key"`
+	AuthMethod             string                  `json:"authMethod"`
+	Username               string                  `json:"username"`
+	Password               string                  `json:"password"`
+}
+
+// BlockstorageCustomPlan holds the root-volume capacity in GB for a named storage tier.
+type BlockstorageCustomPlan struct {
+	Storage int `json:"storage"`
 }
 
 // UpgradeRequest holds parameters for upgrading (changing plan of) a Kubernetes cluster.

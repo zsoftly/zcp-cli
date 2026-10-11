@@ -179,11 +179,12 @@ fx_ip() {
 # IP). Waits up to ~3min for Running. Its SourceNAT IP is cached in FX_VMIP.
 fx_vm() {
   [[ -n "$FX_VM" ]] && return 0
-  local name out; name="$(rname vm)"
+  local name out root_disk_size; name="$(rname vm)"; root_disk_size="$(det_root_disk_size)"
+  [[ -z "$root_disk_size" ]] && { echo "[fx_vm] set ZCP_SMOKE_ROOT_DISK_SIZE to create a root disk"; return 1; }
   capture out -- zcp instance create --name "$name" \
     --cloud-provider "$(det_cp)" --project "$(det_project)" --region "$(det_region)" \
     --template "$(det_template)" --plan "$(det_vm_plan)" \
-    --storage-category "$(det_storage_cat)" --blockstorage-plan "$(det_blockstorage_plan)" \
+    --storage-category "$(det_storage_cat)" --blockstorage-plan "$(det_blockstorage_plan)" --root-disk-size "$root_disk_size" \
     --network-plan "$(det_network_plan)" --billing-cycle "$(det_billing_cycle)" -y -o json \
     || { echo "[fx_vm] instance create failed: ${out:0:200}"; return 1; }
   FX_VM="$(_jq_slug <<<"$out")"
@@ -538,7 +539,7 @@ lc_iso() {
 }
 
 lc_kubernetes() {
-  local out plans storage_plans ver master_plan worker_plan storage_plan storage_category setup
+  local out plans storage_plans ver master_plan worker_plan storage_plan storage_category setup root_disk_size name s matches rc
   fx_sshkey || { _mark_skip "kubernetes (could not create SSH-key fixture)"; return; }
   ver="$(api_get '/kubernetes-clusters/versions' | jq -r --arg rid "$(det_region_id)" '.data[]|select(.region_id==$rid and (.version // "") != "")|.version' | head -1)"
   plans="$(api_get "/plans/service/Kubernetes?filter%5Bregion%5D=$(det_region)")"
@@ -548,11 +549,13 @@ lc_kubernetes() {
   storage_plans="$(api_get "/plans/service/Block%20Storage?filter%5Bregion%5D=$(det_region)&filter%5Bstorage_category%5D=$storage_category")"
   storage_plan="$(jq -r '.data[]|.slug' <<<"$storage_plans" | head -1)"
   setup="$(api_get '/regions' | jq -r --arg s "$(det_region)" '.data[]|select(.slug==$s)|.cloud_provider_setup.slug' | head -1)"
-  [[ -z "$ver" || -z "$master_plan" || -z "$worker_plan" || -z "$storage_plan" || -z "$storage_category" ]] && { _mark_skip "kubernetes (no compatible control-plane, worker, and storage plans for region)"; return; }
-  out="$(zcp kubernetes create --name "$(rname k8s)" --version "$ver" \
-    --control-plane-plan "$master_plan" --worker-plan "$worker_plan" --storage-plan "$storage_plan" --storage-category "$storage_category" \
+  root_disk_size="$(det_root_disk_size)"
+  [[ -z "$ver" || -z "$master_plan" || -z "$worker_plan" || -z "$storage_plan" || -z "$storage_category" || -z "$root_disk_size" ]] && { _mark_skip "kubernetes (no compatible control-plane, worker, storage plans, and root disk capacity for region)"; return; }
+  name="$(rname k8s)"
+  out="$(zcp kubernetes create --name "$name" --version "$ver" \
+    --control-plane-plan "$master_plan" --worker-plan "$worker_plan" --storage-plan "$storage_plan" --root-disk-size "$root_disk_size" --storage-category "$storage_category" \
     --region "$(det_region)" --project "$(det_project)" --cloud-provider "$(det_cp)" \
-    --billing-cycle "$(det_billing_cycle)" --workers 1 --ssh-key "$FX_SSHKEY_NAME" --cloud-provider-setup "${setup:-zcp-apc}" -y 2>&1)"; local rc=$?
+    --billing-cycle "$(det_billing_cycle)" --workers 1 --ssh-key "$FX_SSHKEY_NAME" --cloud-provider-setup "${setup:-zcp-apc}" -y -o json 2>&1)"; rc=$?
   if [[ $rc -ne 0 ]]; then
     if grep -qiE 'quota not found' <<<"$out"; then
       _mark_skip "kubernetes (account has no k8s quota — env limitation)"
@@ -560,8 +563,16 @@ lc_kubernetes() {
       _mark_fail "kubernetes create"; sed -n '1,2p' <<<"$out" | sed 's/^/        /'
     fi
   else
-    local s; s="$(zcp kubernetes list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
-    _mark_pass "kubernetes create"; [[ -n "$s" ]] && defer cancel "$s" "Kubernetes"
+    s="$(_jq_slug <<<"$out")"
+    if [[ -z "$s" ]]; then
+      matches="$(zcp kubernetes list -o json 2>/dev/null | jq -r --arg n "$name" '(.[]//.data[])|select(.name==$n)|.slug' | sort -u)"
+      if [[ $(wc -l <<<"$matches") -ne 1 || -z "$matches" ]]; then
+        _mark_fail "kubernetes create returned no unique owned slug"
+        return
+      fi
+      s="$matches"
+    fi
+    _mark_pass "kubernetes create"; defer cancel "$s" "Kubernetes"
   fi
 }
 

@@ -16,8 +16,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Fixed
 
 - **`vm-backup create` now reports the created schedule slug.** It prints the created schedule in table output and emits valid JSON or YAML for structured output. When the create endpoint returns only an acknowledgement, the command identifies the new schedule from a scoped pre-create snapshot and bounded read-only lookup. It never repeats an accepted create request. If the command cannot identify the schedule, the error tells you to list it before creating another one. _Fixes #76._
+- **`kubernetes delete` now submits an immediate service-cancellation request.** The command reads the cluster first, uses its reported billing cycle when available, and reports that deletion was requested rather than completed.
 - **DNS listings now retrieve every reported page.** `dns.Service.List` returns an error rather than a partial domain list if a later page fails or pagination metadata is inconsistent.
 - **`dns show` now resolves an omitted status from the matching domain in `dns list`.** It stops reading pages as soon as it finds that domain. An explicit status in the detail response is preserved. If the matching list entry also lacks status, output remains `-`. If the list lookup fails, the command returns an error. _Follow-up to #69._
+
+### Changed
+
+- **Instance and Kubernetes creation now select root storage separately.** `zcp instance create` requires a named `--plan`, `--blockstorage-plan`, and `--root-disk-size`. `zcp kubernetes create` requires `--control-plane-plan`, `--worker-plan`, `--storage-plan`, and `--root-disk-size`. The root storage tier and capacity are sent separately from fixed compute plans. `zcp kubernetes get` lists each root volume's reported capacity separately from compute-plan storage. The retired instance `--cpu`, `--memory`, and `--disk` flags no longer select custom compute. Use `zcp plan vm` to choose a plan; its output includes `TAG`.
 
 ## [v0.0.31] - 2026-10-09
 

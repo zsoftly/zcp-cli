@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
+	"github.com/zsoftly/zcp-cli/pkg/api/billing"
 	"github.com/zsoftly/zcp-cli/pkg/api/kubernetes"
 )
 
@@ -211,18 +212,23 @@ func runK8sClusterGet(cmd *cobra.Command, slug string) error {
 			[]string{"Control-plane plan", controlPlan},
 			[]string{"Control-plane CPU", controlCPU},
 			[]string{"Control-plane memory", controlMemory},
-			[]string{"Control-plane storage", controlStorage},
+			[]string{"Control-plane plan storage", controlStorage},
 			[]string{"Worker plan", workerPlan},
 			[]string{"Worker CPU", workerCPU},
 			[]string{"Worker memory", workerMemory},
-			[]string{"Worker storage", workerStorage},
+			[]string{"Worker plan storage", workerStorage},
 		)
 	}
 	rootVolumes := 0
 	for _, volume := range c.BlockStorages {
-		if volume.IsRoot {
-			rootVolumes++
+		if !volume.IsRoot {
+			continue
 		}
+		rootVolumes++
+		rows = append(rows, []string{
+			"Root volume " + k8sFirstNonEmpty(volume.Name, volume.Slug, "-"),
+			k8sFirstNonEmpty(k8sStorageValue("", volume.Size), "-"),
+		})
 	}
 	if rootVolumes > 0 {
 		rows = append(rows, []string{"Root volumes", strconv.Itoa(rootVolumes)})
@@ -375,6 +381,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 		controlPlanePlan   string
 		workerPlan         string
 		storagePlan        string
+		rootDiskSize       int
 		storageCategory    string
 		sshKey             string
 		authMethod         string
@@ -385,8 +392,8 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new Kubernetes cluster",
-		Example: `  zcp kubernetes create --name my-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-li-yul --storage-plan b2g1 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --ssh-key mykey
-		  zcp kubernetes create --name ha-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-4xli-yul --storage-plan b2g1 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --control-nodes 3 --ha --ssh-key mykey`,
+		Example: `  zcp kubernetes create --name my-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-li-yul --storage-plan b2g1 --root-disk-size 100 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --ssh-key mykey
+		  zcp kubernetes create --name ha-cluster --version v1.37.0 --control-plane-plan k8s-cpi-yul --worker-plan k8s-4xli-yul --storage-plan b2g1 --root-disk-size 100 --storage-category pro-nvme --region yul-1 --project default-9 --billing-cycle hourly --workers 3 --control-nodes 3 --ha --ssh-key mykey`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
@@ -402,6 +409,15 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			}
 			if storagePlan == "" {
 				return fmt.Errorf("--storage-plan is required")
+			}
+			if storagePlan == "custom_plan" {
+				return fmt.Errorf("--storage-plan must name a storage tier; custom_plan is not supported")
+			}
+			if !cmd.Flags().Changed("root-disk-size") {
+				return fmt.Errorf("--root-disk-size is required when --storage-plan is set")
+			}
+			if rootDiskSize <= 0 {
+				return fmt.Errorf("--root-disk-size must be > 0")
 			}
 			cloudProvider = resolveCloudProvider(cmd, cloudProvider)
 			if cloudProvider == "" {
@@ -431,33 +447,40 @@ func newK8sClusterCreateCmd() *cobra.Command {
 			if enableHA && controlNodes < 2 {
 				return fmt.Errorf("--control-nodes must be >= 2 when --ha is set")
 			}
+			fixedPlan := false
 			return runK8sClusterCreate(cmd, kubernetes.CreateRequest{
-				Name:               name,
-				Version:            version,
-				NodeSize:           nodeSize,
-				WorkerNodeSize:     nodeSize,
-				ControlNodes:       controlNodes,
-				CloudProvider:      cloudProvider,
-				CloudProviderSetup: cloudProviderSetup,
-				Region:             region,
-				Project:            project,
-				BillingCycle:       billingCycle,
-				EnableHA:           enableHA,
-				EnableCSI:          enableCSI,
-				Networks:           []string{},
-				MasterPlan:         controlPlanePlan,
-				WorkerPlan:         workerPlan,
-				BlockstoragePlan:   storagePlan,
-				WithPoolCard:       false,
-				IsCustomPlan:       false,
-				CustomPlan:         nil,
-				VirtualMachine:     "",
-				Coupon:             nil,
-				StorageCategory:    storageCategory,
-				SSHKey:             sshKey,
-				AuthMethod:         authMethod,
-				Username:           username,
-				Password:           password,
+				Name:                   name,
+				Version:                version,
+				NodeSize:               nodeSize,
+				WorkerNodeSize:         nodeSize,
+				ControlNodes:           controlNodes,
+				CloudProvider:          cloudProvider,
+				CloudProviderSetup:     cloudProviderSetup,
+				Region:                 region,
+				Project:                project,
+				BillingCycle:           billingCycle,
+				EnableHA:               enableHA,
+				EnableCSI:              enableCSI,
+				Networks:               []string{},
+				MasterPlan:             controlPlanePlan,
+				WorkerPlan:             workerPlan,
+				BlockstoragePlan:       storagePlan,
+				BlockstorageCustomPlan: &kubernetes.BlockstorageCustomPlan{Storage: rootDiskSize},
+				IsK8sCustomPlan:        &fixedPlan,
+				MasterCustomPlan:       json.RawMessage("null"),
+				IsK8sMasterCustomPlan:  &fixedPlan,
+				WorkerCustomPlan:       json.RawMessage("null"),
+				IsK8sWorkerCustomPlan:  &fixedPlan,
+				WithPoolCard:           false,
+				IsCustomPlan:           false,
+				CustomPlan:             nil,
+				VirtualMachine:         "",
+				Coupon:                 nil,
+				StorageCategory:        storageCategory,
+				SSHKey:                 sshKey,
+				AuthMethod:             authMethod,
+				Username:               username,
+				Password:               password,
 			})
 		},
 	}
@@ -475,6 +498,7 @@ func newK8sClusterCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&controlPlanePlan, "control-plane-plan", "", "Control-plane node plan slug (required)")
 	cmd.Flags().StringVar(&workerPlan, "worker-plan", "", "Worker node plan slug (required)")
 	cmd.Flags().StringVar(&storagePlan, "storage-plan", "", "Root-volume plan slug applied to each control-plane and worker node (required)")
+	cmd.Flags().IntVar(&rootDiskSize, "root-disk-size", 0, "Root-volume capacity in GB for the selected storage tier (required)")
 	cmd.Flags().StringVar(&storageCategory, "storage-category", "", "Storage category slug, e.g. pro-nvme, nvme, ssd (required)")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "SSH key name")
 	cmd.Flags().StringVar(&authMethod, "auth-method", "ssh-key", "Authentication method: ssh-key or password")
@@ -826,26 +850,72 @@ func newK8sClusterDeleteCmd() *cobra.Command {
 					return nil
 				}
 			}
-			_, client, _, err := buildClientAndPrinter(cmd)
-			if err != nil {
-				return err
-			}
-			svc := kubernetes.NewService(client)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
-			defer cancel()
-			if err := svc.Delete(ctx, slug); err != nil {
-				if apierrors.IsResourceNotFound(err) {
-					fmt.Fprintf(os.Stderr, "Kubernetes cluster %q not found — already deleted.\n", slug)
-					return nil
-				}
-				return fmt.Errorf("kubernetes delete: %w", err)
-			}
-			fmt.Fprintf(os.Stdout, "Kubernetes cluster %q deletion requested.\n", slug)
-			return nil
+			return runK8sClusterDelete(cmd, slug)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
 	return cmd
+}
+
+func runK8sClusterDelete(cmd *cobra.Command, slug string) error {
+	_, client, printer, err := buildClientAndPrinter(cmd)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	defer cancel()
+
+	cluster, err := kubernetes.NewService(client).Get(ctx, slug)
+	if err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Kubernetes cluster %q not found — already deleted.\n", slug)
+			return nil
+		}
+		return fmt.Errorf("kubernetes delete: %w", err)
+	}
+
+	deletePublicIP := true
+	req := billing.CancelServiceRequest{
+		ServiceName:    "Kubernetes",
+		Reason:         "not_needed_anymore",
+		Type:           "Immediate",
+		Status:         "Pending",
+		BillingCycle:   k8sCancelBillingCycle(cluster),
+		DeletePublicIP: &deletePublicIP,
+	}
+	if err := billing.NewService(client).CancelService(ctx, cluster.Slug, req); err != nil {
+		if apierrors.IsResourceNotFound(err) {
+			fmt.Fprintf(os.Stderr, "Kubernetes cluster %q not found — already deleted.\n", cluster.Slug)
+			return nil
+		}
+		return fmt.Errorf("kubernetes delete: %w", err)
+	}
+
+	printer.Fprintf("Deletion requested for %q; the Kubernetes cluster is being removed in the background.\n", cluster.Slug)
+	return nil
+}
+
+func k8sCancelBillingCycle(cluster *kubernetes.Cluster) string {
+	if cluster == nil {
+		return ""
+	}
+	cycles := make([]*kubernetes.BillingCycle, 0, 2)
+	if cluster.Offering != nil {
+		cycles = append(cycles, cluster.Offering.BillingCycle)
+	}
+	cycles = append(cycles, cluster.BillingCycle)
+	for _, cycle := range cycles {
+		if cycle == nil {
+			continue
+		}
+		for _, value := range []string{cycle.Unit, cycle.Slug, cycle.Name} {
+			if unit, ok := billingCycleUnit(value); ok {
+				return unit
+			}
+		}
+	}
+	return ""
 }
 
 func newK8sClusterUpgradeVersionCmd() *cobra.Command {

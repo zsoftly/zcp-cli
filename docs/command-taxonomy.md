@@ -64,7 +64,7 @@ zcp
 ├── instance                           VM instance operations
 │   ├── list                           List instances
 │   ├── get                            Show details for a single instance
-│   ├── create                         Create a new instance (--plan for fixed plans, or --cpu/--memory/--disk for custom plans; --network-type Isolated|L2|Vpc; --network-plan for Isolated/L2, --vr-plan for Vpc, or --networks to attach existing ones with --default-network)
+│   ├── create                         Create a new instance (--plan, --blockstorage-plan, and --root-disk-size required; --network-type Isolated|L2|Vpc; --network-plan for Isolated/L2, --vr-plan for Vpc, or --networks to attach existing ones with --default-network)
 │   ├── start                          Start a stopped instance
 │   ├── stop                           Stop a running instance
 │   ├── reboot                         Reboot a running instance
@@ -190,7 +190,7 @@ zcp
 ├── kubernetes (alias: k8s)            Kubernetes cluster operations
 │   ├── list                           List Kubernetes clusters
 │   ├── get                            Show details and returned resource overview for a single cluster
-│   ├── create                         Create a Kubernetes cluster (--control-plane-plan, --worker-plan, --storage-plan; optional --enable-csi)
+│   ├── create                         Create a Kubernetes cluster (--control-plane-plan, --worker-plan, --storage-plan, --root-disk-size; optional --enable-csi)
 │   ├── start                          Start a stopped cluster
 │   ├── stop                           Stop a running cluster
 │   ├── scale                          Set worker count or autoscaling (--workers N, --enable-autoscaling --min-workers N --max-workers N, --disable-autoscaling --workers N)
@@ -330,7 +330,7 @@ zcp
 │   └── cancel-service                 Submit a service cancellation request
 │
 ├── plan                               List service plans and pricing
-│   ├── vm                             List Virtual Machine plans
+│   ├── vm                             List Virtual Machine plans, including TAG
 │   ├── router                         List Virtual Router plans
 │   ├── storage                        List Block Storage plans
 │   ├── lb                             List Load Balancer plans

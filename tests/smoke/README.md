@@ -73,12 +73,17 @@ ZCP_SMOKE_PROJECT           project slug                 (default: first project
 ZCP_SMOKE_TEMPLATE          region-scoped template slug  (default: an Ubuntu image in region)
 ZCP_SMOKE_VM_PLAN           VM plan slug                 (default: cheapest active plan)
 ZCP_SMOKE_BLOCKSTORAGE_PLAN block storage plan slug
+ZCP_SMOKE_ROOT_DISK_SIZE    root disk capacity in GB for lifecycle fixtures (default: 100)
 ZCP_SMOKE_IP_PLAN           IP plan slug
 ZCP_SMOKE_NETWORK_PLAN      network/internet plan slug   (default: inet-<region-prefix>)
 ZCP_SMOKE_STORAGE_CAT       storage category slug        (default: pro-nvme)
 ZCP_SMOKE_BILLING_CYCLE     billing cycle slug           (default: hourly)
 ZCP_SMOKE_LIFECYCLE=1       same as passing --lifecycle
 ```
+
+The 100 GB fallback applies only to disposable smoke fixtures. It is not a
+default in `zcp instance create` or `zcp kubernetes create`; both commands
+require an explicit root-disk capacity.
 
 > **Slug gotcha:** create endpoints want the _slug_, not the display name
 > (`ca2s`, not `ca2.s`). Since v0.0.16 every `zcp plan <svc>` table includes a

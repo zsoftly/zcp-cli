@@ -3,15 +3,26 @@
 The next release will include the following fixes. No release version or date
 has been selected.
 
+## Fixed compute plans for instances
+
+`zcp instance create` now requires a named `--plan`. The `--cpu`, `--memory`,
+and `--disk` flags have been retired. Use `zcp plan vm` to select a plan; its
+output includes `TAG`.
+
+For compute-only plans, the price covers compute only. Root disks and network
+resources are billed separately. Every new instance now requires
+`--blockstorage-plan` and `--root-disk-size` alongside its compute plan.
+
 ## Kubernetes resource plans and billing
 
-`zcp kubernetes create` now requires separate resource selections for the
-control plane, worker nodes, and one root-volume plan used for every node:
+`zcp kubernetes create` now requires separate selections for the control-plane
+plan, worker plan, root-storage tier, and root-disk capacity used for every
+node:
 
 ```bash
 zcp kubernetes create --name my-cluster --version v1.37.0 \
   --control-plane-plan k8s-cpi-yul --worker-plan k8s-li-yul \
-  --storage-plan b2g1 --storage-category pro-nvme \
+  --storage-plan b2g1 --root-disk-size 100 --storage-category pro-nvme \
   --region yul-1 --project default-9 --billing-cycle hourly \
   --workers 3 --enable-csi --ssh-key mykey
 ```
@@ -22,10 +33,15 @@ volume. Network, load balancer, and public-IP subscriptions depend on the
 platform packages and feature flags enabled for those resources.
 
 `zcp kubernetes get` now shows resource totals, separate control-plane and
-worker configuration, root-volume count, network, and autoscaling status when
+worker configuration, root-volume count, and per-volume capacities separately
+from compute-plan storage. It also shows network and autoscaling status when
 the API returns them. `zcp kubernetes scale` supports manual worker counts,
 enabling autoscaling with `--min-workers` and `--max-workers`, and disabling
 autoscaling with an explicit `--workers` count.
+
+`zcp kubernetes delete` submits an immediate cancellation request. A successful
+response confirms that the request was accepted; removal completes in the
+background.
 
 Use `--enable-csi` to request Cloud Storage Integration for a supported
 cluster. Creating a high-availability cluster requires at least two control

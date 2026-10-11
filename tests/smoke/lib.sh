@@ -234,8 +234,12 @@ det_vm_plan() {
 }
 det_blockstorage_plan() {
   if [[ -n "${ZCP_SMOKE_BLOCKSTORAGE_PLAN:-}" ]]; then printf '%s' "$ZCP_SMOKE_BLOCKSTORAGE_PLAN"; return; fi
-  api_get "/plans/service/Block%20Storage?region=$(det_region)" | jq -r '.data[0].slug // .data[0].name' | head -1
+  api_get "/plans/service/Block%20Storage?filter%5Bregion%5D=$(det_region)&filter%5Bstorage_category%5D=$(det_storage_cat)" \
+    | jq -r '.data[0].slug // empty' | head -1
 }
+# The smoke suite uses 100 GB only as its disposable fixture capacity. It is
+# not a CLI default; instance and Kubernetes create always require the flag.
+det_root_disk_size() { printf '%s' "${ZCP_SMOKE_ROOT_DISK_SIZE:-100}"; }
 det_router_plan() {
   api_get "/plans/service/Virtual%20Router?region=$(det_region)" | jq -r '.data[0].slug // .data[0].name' | head -1
 }

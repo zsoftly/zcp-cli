@@ -151,6 +151,7 @@ func TestK8sCreateRequiresBillingCycle(t *testing.T) {
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs([]string{"kubernetes", "create",
 		"--name", "test", "--version", "v1.28.4", "--control-plane-plan", "k8s-control-1", "--worker-plan", "k8s-worker-1", "--storage-plan", "k8s-root-volume-1",
+		"--root-disk-size", "100",
 		"--cloud-provider", "nimbo", "--region", "noida", "--project", "default-9",
 		"--workers", "1", "--storage-category", "nvme", "--ssh-key", "mykey"})
 

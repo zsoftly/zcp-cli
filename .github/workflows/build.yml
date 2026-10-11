@@ -40,6 +40,7 @@ jobs:
               - 'go.mod'
               - 'go.sum'
               - 'Makefile'
+              - 'tests/smoke/**'
             scripts:
               - 'scripts/**'
             workflow:
@@ -131,11 +132,20 @@ jobs:
       - name: Get dependencies
         run: go mod download
 
+      - name: Install jq
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Run go vet
         run: go vet ./...
 
       - name: Run tests
         run: go test -v ./...
+
+      - name: Test smoke ownership checks
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: bash tests/smoke/cases_test.sh
 
       - name: Run tests (race detector)
         run: go test -race ./...

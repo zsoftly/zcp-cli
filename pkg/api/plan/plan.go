@@ -93,6 +93,7 @@ type Attribute struct {
 // Tag holds optional marketing label data.
 type Tag struct {
 	Label string `json:"label"`
+	Tag   string `json:"tag"`
 	Value string `json:"value"`
 	Color string `json:"color"`
 }
@@ -143,16 +144,21 @@ type Plan struct {
 	UpdatedAt         string          `json:"updated_at"`
 }
 
-// ParsedTag returns the tag label if present, or "-" if the tag field is an
-// empty array or missing.
+// ParsedTag returns the tag string, falling back to the legacy label, or "-"
+// if the tag field is an empty array or missing.
 func (p *Plan) ParsedTag() string {
 	if len(p.Tag) == 0 {
 		return "-"
 	}
 	// Try object first
 	var t Tag
-	if err := json.Unmarshal(p.Tag, &t); err == nil && t.Label != "" {
-		return t.Label
+	if err := json.Unmarshal(p.Tag, &t); err == nil {
+		if t.Tag != "" {
+			return t.Tag
+		}
+		if t.Label != "" {
+			return t.Label
+		}
 	}
 	return "-"
 }
