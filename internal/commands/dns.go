@@ -152,16 +152,13 @@ func runDNSShow(cmd *cobra.Command, slug string) error {
 // matching list entry that reports it. A missing matching entry remains unknown
 // rather than being guessed from another field.
 func resolveDNSDomainStatus(ctx context.Context, svc *dns.Service, domain *dns.Domain) error {
-	domains, err := svc.List(ctx)
+	listed, err := svc.FindBySlug(ctx, domain.Slug)
 	if err != nil {
 		return fmt.Errorf("resolving status for DNS domain %s: %w", domain.Slug, err)
 	}
-	for i := range domains {
-		if domains[i].Slug == domain.Slug && domains[i].StatusKnown {
-			domain.Status = domains[i].Status
-			domain.StatusKnown = true
-			break
-		}
+	if listed != nil && listed.StatusKnown {
+		domain.Status = listed.Status
+		domain.StatusKnown = true
 	}
 	return nil
 }

@@ -17,7 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **`vm-backup create` now reports the created schedule slug.** It prints the created schedule in table output and emits valid JSON or YAML for structured output. When the create endpoint returns only an acknowledgement, the command identifies the new schedule from a scoped pre-create snapshot and bounded read-only lookup. It never repeats an accepted create request. If the command cannot identify the schedule, the error tells you to list it before creating another one. _Fixes #76._
 - **DNS listings now retrieve every reported page.** `dns.Service.List` returns an error rather than a partial domain list if a later page fails or pagination metadata is inconsistent.
-- **`dns show` now resolves an omitted status from the matching domain in `dns list`.** An explicit status in the detail response is preserved. If the matching list entry also lacks status, output remains `-`. If the list lookup fails, the command returns an error. _Follow-up to #69._
+- **`dns show` now resolves an omitted status from the matching domain in `dns list`.** It stops reading pages as soon as it finds that domain. An explicit status in the detail response is preserved. If the matching list entry also lacks status, output remains `-`. If the list lookup fails, the command returns an error. _Follow-up to #69._
 
 ## [v0.0.31] - 2026-10-09
 

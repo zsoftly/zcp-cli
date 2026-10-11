@@ -17,7 +17,11 @@ func TestDNSShowResolvesOmittedStatusFromList(t *testing.T) {
 			fmt.Fprint(w, `{"status":"Success","data":{"slug":"example-com-1","name":"example.com"}}`)
 		case "/dns/domains":
 			listCalls++
-			fmt.Fprint(w, `{"status":"Success","current_page":1,"total":1,"data":[{"slug":"example-com-1","status":false}]}`)
+			if r.URL.Query().Get("page") != "1" {
+				http.Error(w, "later page must not be requested", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, `{"status":"Success","current_page":1,"total":2,"data":[{"slug":"example-com-1","status":false}]}`)
 		default:
 			http.NotFound(w, r)
 		}

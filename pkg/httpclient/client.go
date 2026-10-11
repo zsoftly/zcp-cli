@@ -26,7 +26,7 @@ type Options struct {
 	// DebugOut is where debug output is written (defaults to os.Stderr in New).
 	DebugOut io.Writer
 	// MaxRetries is the number of times to retry GET requests on transient failures.
-	// Default is 3. Set to 0 to disable retries.
+	// Default is 3 when zero. Set a negative value to disable retries.
 	MaxRetries int
 	// RetryGETs controls whether GET requests are retried on transient failures.
 	// Default is true.

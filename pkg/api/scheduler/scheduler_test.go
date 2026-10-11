@@ -13,7 +13,7 @@ import (
 )
 
 func testService(s *httptest.Server) *Service {
-	return NewService(httpclient.New(httpclient.Options{BaseURL: s.URL, BearerToken: "test", MaxRetries: 0}))
+	return NewService(httpclient.New(httpclient.Options{BaseURL: s.URL, BearerToken: "test", MaxRetries: -1}))
 }
 
 func TestListFetchesAllPages(t *testing.T) {
@@ -41,7 +41,9 @@ func TestListFetchesAllPages(t *testing.T) {
 }
 
 func TestListReturnsNoPartialResultsWhenLaterPageFails(t *testing.T) {
+	var requests int
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
 		if r.URL.Query().Get("page") == "1" {
 			fmt.Fprint(w, `{"current_page":1,"total":2,"data":[{"id":"1"}]}`)
 			return
@@ -52,6 +54,9 @@ func TestListReturnsNoPartialResultsWhenLaterPageFails(t *testing.T) {
 	got, err := testService(s).List(context.Background(), "", "")
 	if err == nil || got != nil {
 		t.Fatalf("got=%+v err=%v, want nil/error", got, err)
+	}
+	if requests != 2 {
+		t.Errorf("requests = %d, want 2", requests)
 	}
 }
 
@@ -77,6 +82,9 @@ func TestMutationsUseSchedulerRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"PUT /scheduler-actions/policy", "PATCH /scheduler-actions/policy/pause", "PATCH /scheduler-actions/policy/resume", "POST /scheduler/policy/run-now"}
+	if len(paths) != len(want) {
+		t.Fatalf("request count = %d, want %d", len(paths), len(want))
+	}
 	for i := range want {
 		if paths[i] != want[i] {
 			t.Errorf("path %d = %q, want %q", i, paths[i], want[i])

@@ -144,6 +144,23 @@ const maxListPages = 1000
 // List returns all DNS domains. When the endpoint omits pagination metadata,
 // it preserves the legacy single-response behavior.
 func (s *Service) List(ctx context.Context) ([]Domain, error) {
+	return s.list(ctx, "")
+}
+
+// FindBySlug returns the DNS domain with the given slug, or nil when it is not
+// present. It stops fetching pages as soon as it finds a match.
+func (s *Service) FindBySlug(ctx context.Context, slug string) (*Domain, error) {
+	if slug == "" {
+		return nil, nil
+	}
+	domains, err := s.list(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return findDomain(domains, slug), nil
+}
+
+func (s *Service) list(ctx context.Context, slug string) ([]Domain, error) {
 	var domains []Domain
 	var reportedTotal *int
 
@@ -171,6 +188,12 @@ func (s *Service) List(ctx context.Context) ([]Domain, error) {
 			return nil, fmt.Errorf("listing DNS domains: pagination total changed or was omitted on page %d", page)
 		}
 		if reportedTotal == nil {
+			if slug != "" {
+				if domain := findDomain(resp.Data, slug); domain != nil {
+					return []Domain{*domain}, nil
+				}
+				return nil, nil
+			}
 			return resp.Data, nil
 		}
 		if *reportedTotal == 0 && len(resp.Data) > 0 {
@@ -180,6 +203,11 @@ func (s *Service) List(ctx context.Context) ([]Domain, error) {
 			return nil, fmt.Errorf("listing DNS domains: API returned more domains than reported total %d", *reportedTotal)
 		}
 
+		if slug != "" {
+			if domain := findDomain(resp.Data, slug); domain != nil {
+				return []Domain{*domain}, nil
+			}
+		}
 		domains = append(domains, resp.Data...)
 		if len(domains) == *reportedTotal {
 			return domains, nil
@@ -190,6 +218,15 @@ func (s *Service) List(ctx context.Context) ([]Domain, error) {
 	}
 
 	return nil, fmt.Errorf("listing DNS domains: exceeded %d pages without reaching the reported total", maxListPages)
+}
+
+func findDomain(domains []Domain, slug string) *Domain {
+	for i := range domains {
+		if domains[i].Slug == slug {
+			return &domains[i]
+		}
+	}
+	return nil
 }
 
 // Show returns details for a single DNS domain by slug, including records.
