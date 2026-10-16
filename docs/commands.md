@@ -439,9 +439,13 @@ zcp dns create --name example.com --project default-9
 # Create a record
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
 zcp dns record-create --domain <domain-slug> --name @ --type MX --content mail.example.com. --priority 10 --ttl 3600
+# Record creation and deletion show only the affected values; use --show-zone
+# to print every record in the resulting zone.
+zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1 --show-zone
 
 # Delete a record set (records are addressed by name and type) or a domain
 zcp dns record-delete --domain <domain-slug> --name www --type A
+zcp dns record-delete --domain <domain-slug> --name www --type A --show-zone
 zcp dns delete <domain-slug>
 ```
 
