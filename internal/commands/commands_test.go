@@ -1806,7 +1806,7 @@ func TestDNSRecordCreateMXSendsPriorityEndToEnd(t *testing.T) {
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/records") {
 			json.NewDecoder(r.Body).Decode(&gotBody)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"status":"Success","message":"Created","data":{"id":"1","name":"example.com","slug":"example-com-1"}}`)
+			fmt.Fprint(w, `{"status":"Success","message":"Created","data":{"id":"1","name":"example.com","slug":"example-com-1","records":[{"name":"example.com.","type":"MX","ttl":14400,"contents":["10 mail.example.com."]}]}}`)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

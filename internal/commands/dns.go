@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/zsoftly/zcp-cli/internal/output"
 	"github.com/zsoftly/zcp-cli/pkg/api/apierrors"
 	"github.com/zsoftly/zcp-cli/pkg/api/dns"
 )
@@ -293,6 +295,7 @@ func runDNSDelete(cmd *cobra.Command, slug string, yes bool) error {
 func newDNSRecordCreateCmd() *cobra.Command {
 	var domain, name, recordType, content string
 	var ttl, priority int
+	var showZone bool
 
 	cmd := &cobra.Command{
 		Use:   "record-create",
@@ -345,7 +348,7 @@ func newDNSRecordCreateCmd() *cobra.Command {
 				p := priority
 				req.Priority = &p
 			}
-			return runDNSRecordCreate(cmd, domain, req)
+			return runDNSRecordCreate(cmd, domain, req, showZone)
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
@@ -354,10 +357,11 @@ func newDNSRecordCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&content, "content", "", "Record content / value (required)")
 	cmd.Flags().IntVar(&ttl, "ttl", 14400, "Time-to-live in seconds (default: 14400)")
 	cmd.Flags().IntVar(&priority, "priority", 0, "Preference for MX records, 0-65535 (required for MX)")
+	cmd.Flags().BoolVar(&showZone, "show-zone", false, "Show all records in the resulting zone")
 	return cmd
 }
 
-func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRecordRequest) error {
+func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRecordRequest, showZone bool) error {
 	_, client, printer, err := buildClientAndPrinter(cmd)
 	if err != nil {
 		return err
@@ -372,29 +376,35 @@ func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRec
 		return fmt.Errorf("dns record-create: %w", err)
 	}
 
-	// Show the record table for the domain
-	if len(domain.Records) > 0 {
-		headers := []string{"NAME", "TYPE", "CONTENT", "TTL"}
-		rows := make([][]string, 0, len(domain.Records))
-		for _, r := range domain.Records {
-			rows = append(rows, []string{
-				r.Name,
-				r.Type,
-				r.Content,
-				strconv.Itoa(r.TTL),
-			})
+	if showZone {
+		if len(domain.Records) == 0 {
+			domain, err = svc.Show(ctx, domainSlug)
+			if err != nil {
+				return fmt.Errorf("dns record-create: record created but could not verify resulting zone: %w", err)
+			}
 		}
-		return printer.PrintTable(headers, rows)
+		return printDNSRecordRows(printer, domain.Records)
 	}
 
-	printer.Fprintf("Record created on domain %q.\n", domainSlug)
-	return nil
+	created := findCreatedDNSRecord(domain, req)
+	if created == nil {
+		domain, err = svc.Show(ctx, domainSlug)
+		if err != nil {
+			return fmt.Errorf("dns record-create: record created but output verification failed: %w", err)
+		}
+		created = findCreatedDNSRecord(domain, req)
+	}
+	if created == nil {
+		return fmt.Errorf("dns record-create: record created but output verification failed; use dns show %q to inspect the zone", domainSlug)
+	}
+	return printDNSRecordRows(printer, []dns.Record{*created})
 }
 
 func newDNSRecordDeleteCmd() *cobra.Command {
 	var domain, name, recordType string
 	var recordID int
 	var yes bool
+	var showZone bool
 
 	cmd := &cobra.Command{
 		Use:   "record-delete",
@@ -408,12 +418,12 @@ func newDNSRecordDeleteCmd() *cobra.Command {
 			if recordID > 0 {
 				// Legacy numeric-ID path; only works on deployments whose DNS
 				// backend exposes record IDs.
-				return runDNSRecordDelete(cmd, domain, recordID, yes)
+				return runDNSRecordDelete(cmd, domain, recordID, yes, showZone)
 			}
 			if name == "" || recordType == "" {
 				return fmt.Errorf("--name and --type are required (records are addressed by name and type)")
 			}
-			return runDNSRecordDeleteByName(cmd, domain, name, recordType, yes)
+			return runDNSRecordDeleteByName(cmd, domain, name, recordType, yes, showZone)
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "Domain slug (required)")
@@ -421,10 +431,11 @@ func newDNSRecordDeleteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recordType, "type", "", "Record type: A, AAAA, CNAME, MX, TXT, etc.")
 	cmd.Flags().IntVar(&recordID, "record-id", 0, "Legacy: numeric record ID (most deployments do not expose IDs)")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolVar(&showZone, "show-zone", false, "Show all records in the resulting zone")
 	return cmd
 }
 
-func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType string, yes bool) error {
+func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType string, yes, showZone bool) error {
 	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete DNS record %s %q on domain %q? [y/N]: ", recordType, name, domainSlug)
 		scanner := bufio.NewScanner(os.Stdin)
@@ -451,20 +462,27 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 		return fmt.Errorf("dns record-delete: resolving domain %s: %w", domainSlug, err)
 	}
 	fqdn := dns.CanonicalRecordFQDN(name, domain.Name)
+	removed := findDNSRecordsByNameAndType(domain.Records, domain.Name, fqdn, recordType)
 
 	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "DNS record %s %q not found (already deleted).\n", recordType, fqdn)
-			return nil
+			return printDNSRecordRows(printer, nil)
 		}
 		return fmt.Errorf("dns record-delete: %w", err)
 	}
 
-	printer.Fprintf("DNS record %s %q deleted from domain %q.\n", recordType, fqdn, domainSlug)
-	return nil
+	if showZone {
+		domain, err = svc.Show(ctx, domainSlug)
+		if err != nil {
+			return fmt.Errorf("dns record-delete: record deleted but could not verify resulting zone: %w", err)
+		}
+		return printDNSRecordRows(printer, domain.Records)
+	}
+	return printDNSRecordRows(printer, removed)
 }
 
-func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes bool) error {
+func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes, showZone bool) error {
 	if !yes && !autoApproved(cmd) {
 		fmt.Fprintf(os.Stderr, "Delete DNS record %d on domain %q? [y/N]: ", recordID, domainSlug)
 		scanner := bufio.NewScanner(os.Stdin)
@@ -485,15 +503,186 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
+	domain, err := svc.Show(ctx, domainSlug)
+	if err != nil {
+		return fmt.Errorf("dns record-delete: resolving domain %s: %w", domainSlug, err)
+	}
+	var removed *dns.Record
+	for i := range domain.Records {
+		if domain.Records[i].ID == strconv.Itoa(recordID) {
+			removed = &domain.Records[i]
+			break
+		}
+	}
+
 	//lint:ignore SA1019 --record-id intentionally supports legacy DNS deployments that expose numeric record IDs.
 	if err := svc.DeleteRecord(ctx, domainSlug, recordID); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "DNS record %d not found (already deleted).\n", recordID)
-			return nil
+			return printDNSRecordRows(printer, nil)
 		}
 		return fmt.Errorf("dns record-delete: %w", err)
 	}
 
-	printer.Fprintf("DNS record %d deleted from domain %q.\n", recordID, domainSlug)
+	if showZone {
+		domain, err = svc.Show(ctx, domainSlug)
+		if err != nil {
+			return fmt.Errorf("dns record-delete: record deleted but could not verify resulting zone: %w", err)
+		}
+		return printDNSRecordRows(printer, domain.Records)
+	}
+	if removed == nil {
+		return fmt.Errorf("dns record-delete: record deleted but output verification failed; use dns show %q to inspect the zone", domainSlug)
+	}
+	return printDNSRecordRows(printer, []dns.Record{*removed})
+}
+
+var dnsRecordHeaders = []string{"NAME", "TYPE", "CONTENT", "TTL", "PRIORITY"}
+
+func printDNSRecordRows(printer *output.Printer, records []dns.Record) error {
+	rows := make([][]string, 0, len(records))
+	for _, record := range records {
+		for _, content := range recordContents(&record) {
+			content, priority := dnsRecordContentAndPriority(record, content)
+			rows = append(rows, []string{record.Name, record.Type, content, strconv.Itoa(record.TTL), priority})
+		}
+	}
+	return printer.PrintTable(dnsRecordHeaders, rows)
+}
+
+func dnsRecordContentAndPriority(record dns.Record, content string) (string, string) {
+	if !strings.EqualFold(record.Type, "MX") {
+		return content, "-"
+	}
+	fields := strings.Fields(content)
+	if len(fields) > 1 {
+		if priority, err := strconv.Atoi(fields[0]); err == nil {
+			return strings.Join(fields[1:], " "), strconv.Itoa(priority)
+		}
+	}
+	return content, strconv.Itoa(record.Priority)
+}
+
+func findCreatedDNSRecord(domain *dns.Domain, req dns.CreateRecordRequest) *dns.Record {
+	fqdn := dns.CanonicalRecordFQDN(req.Name, domain.Name)
+	for i := range domain.Records {
+		record := &domain.Records[i]
+		if !strings.EqualFold(dns.CanonicalRecordFQDN(record.Name, domain.Name), fqdn) || !strings.EqualFold(record.Type, req.Type) {
+			continue
+		}
+		for _, content := range recordContents(record) {
+			if dnsRecordMatchesRequest(*record, content, req) {
+				copy := *record
+				copy.Contents = []string{content}
+				copy.Content = content
+				return &copy
+			}
+		}
+	}
 	return nil
+}
+
+func recordContents(record *dns.Record) []string {
+	if len(record.Contents) > 0 {
+		return record.Contents
+	}
+	return []string{record.Content}
+}
+
+func dnsRecordMatchesRequest(record dns.Record, content string, req dns.CreateRecordRequest) bool {
+	actual, actualPriority := dnsRecordContentAndPriority(record, content)
+	actual = comparableDNSRecordContent(record.Type, actual)
+	expected := comparableDNSRecordContent(record.Type, req.Content)
+	if actual != expected {
+		return false
+	}
+	if req.Priority == nil {
+		return true
+	}
+	return actualPriority == strconv.Itoa(*req.Priority)
+}
+
+func normalizeTXTContent(content string) string {
+	decoded, ok := decodeQuotedTXTContent(content)
+	if ok {
+		return decoded
+	}
+	return content
+}
+
+// decodeQuotedTXTContent decodes PowerDNS TXT presentation syntax only when
+// the entire value is a sequence of quoted chunks. Whitespace outside chunks
+// is ignored; whitespace inside chunks is part of the value. Invalid or
+// unquoted values are left to callers unchanged.
+func decodeQuotedTXTContent(content string) (string, bool) {
+	var decoded strings.Builder
+	sawChunk := false
+	for i := 0; i < len(content); {
+		for i < len(content) && (content[i] == ' ' || content[i] == '\t' || content[i] == '\n' || content[i] == '\r') {
+			i++
+		}
+		if i == len(content) {
+			return decoded.String(), sawChunk
+		}
+		if content[i] != '"' {
+			return content, false
+		}
+		sawChunk = true
+		i++
+		for i < len(content) && content[i] != '"' {
+			if content[i] != '\\' {
+				decoded.WriteByte(content[i])
+				i++
+				continue
+			}
+			i++
+			if i == len(content) {
+				return content, false
+			}
+			if i+2 < len(content) && isASCIIDigit(content[i]) && isASCIIDigit(content[i+1]) && isASCIIDigit(content[i+2]) {
+				octet, err := strconv.Atoi(content[i : i+3])
+				if err != nil || octet > 255 {
+					return content, false
+				}
+				decoded.WriteByte(byte(octet))
+				i += 3
+				continue
+			}
+			decoded.WriteByte(content[i])
+			i++
+		}
+		if i == len(content) {
+			return content, false
+		}
+		i++
+	}
+	return decoded.String(), true
+}
+
+func isASCIIDigit(value byte) bool {
+	return value >= '0' && value <= '9'
+}
+
+func comparableDNSRecordContent(recordType, content string) string {
+	switch strings.ToUpper(recordType) {
+	case "TXT":
+		return normalizeTXTContent(content)
+	case "MX", "CNAME", "NS":
+		return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(content), "."))
+	case "A", "AAAA":
+		if address, err := netip.ParseAddr(strings.TrimSpace(content)); err == nil {
+			return address.String()
+		}
+	}
+	return content
+}
+
+func findDNSRecordsByNameAndType(records []dns.Record, zoneName, fqdn, recordType string) []dns.Record {
+	matched := make([]dns.Record, 0)
+	for _, record := range records {
+		if strings.EqualFold(dns.CanonicalRecordFQDN(record.Name, zoneName), fqdn) && strings.EqualFold(record.Type, recordType) {
+			matched = append(matched, record)
+		}
+	}
+	return matched
 }
