@@ -454,16 +454,34 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 	}
 
 	svc := dns.NewService(client)
+
+	// Read the record set before deleting it so successful commands can report
+	// a pre-delete snapshot. A fully qualified name does not need the zone name
+	// to address the DELETE endpoint, so preserve that operation when this best-
+	// effort read is unavailable. Relative names and the zone apex require the
+	// read to determine their FQDN and must therefore fail closed.
+	preReadCtx, cancelPreRead := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+	domain, showErr := svc.Show(preReadCtx, domainSlug)
+	cancelPreRead()
+
+	fqdn, suppliedFQDN := suppliedDNSRecordFQDN(name)
+	var snapshot []dns.Record
+	if showErr == nil {
+		if !suppliedFQDN {
+			fqdn = dns.CanonicalRecordFQDN(name, domain.Name)
+		}
+		snapshot = findDNSRecordsByNameAndType(domain.Records, domain.Name, fqdn, recordType)
+	} else {
+		if apierrors.IsUnauthorized(showErr) || apierrors.IsForbidden(showErr) {
+			return fmt.Errorf("dns record-delete: resolving domain %s: %w", domainSlug, showErr)
+		}
+		if !suppliedFQDN {
+			return fmt.Errorf("dns record-delete: could not resolve relative record name %q because reading domain %q failed: %w; use a fully qualified name ending in a dot", name, domainSlug, showErr)
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
-
-	// Resolve the stored FQDN: the backend appends the zone to relative names.
-	domain, err := svc.Show(ctx, domainSlug)
-	if err != nil {
-		return fmt.Errorf("dns record-delete: resolving domain %s: %w", domainSlug, err)
-	}
-	fqdn := dns.CanonicalRecordFQDN(name, domain.Name)
-	removed := findDNSRecordsByNameAndType(domain.Records, domain.Name, fqdn, recordType)
 
 	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
 		if apierrors.IsResourceNotFound(err) {
@@ -483,10 +501,27 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 		}
 		return printDNSRecordRows(printer, domain.Records)
 	}
-	if len(removed) == 0 {
+	if len(snapshot) == 0 {
 		fmt.Fprintf(os.Stderr, "DNS record deleted, but its previous values are unavailable. Use dns show %q to inspect the remaining zone.\n", domainSlug)
+	} else {
+		fmt.Fprintln(os.Stderr, "DNS record deleted; output is a snapshot read before deletion and may not match values removed if the record changed concurrently.")
 	}
-	return printDNSRecordRows(printer, removed)
+	return printDNSRecordRows(printer, snapshot)
+}
+
+// suppliedDNSRecordFQDN returns a normalized FQDN only when the caller made
+// its absolute form explicit with a trailing dot. It never derives a name from
+// a domain slug, because slugs are not DNS zone names.
+func suppliedDNSRecordFQDN(name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if !strings.HasSuffix(name, ".") {
+		return "", false
+	}
+	name = strings.TrimSuffix(name, ".")
+	if name == "" || name == "@" {
+		return "", false
+	}
+	return strings.ToLower(name) + ".", true
 }
 
 func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes, showZone bool) error {
@@ -508,14 +543,14 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 
 	svc := dns.NewService(client)
 
-	var removed *dns.Record
+	var snapshot *dns.Record
 	preReadCtx, cancelPreRead := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	domain, showErr := svc.Show(preReadCtx, domainSlug)
 	cancelPreRead()
 	if showErr == nil {
 		for i := range domain.Records {
 			if domain.Records[i].ID == strconv.Itoa(recordID) {
-				removed = &domain.Records[i]
+				snapshot = &domain.Records[i]
 				break
 			}
 		}
@@ -542,11 +577,12 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 		}
 		return printDNSRecordRows(printer, domain.Records)
 	}
-	if removed == nil {
+	if snapshot == nil {
 		fmt.Fprintf(os.Stderr, "DNS record deleted, but its previous values are unavailable. Use dns show %q to inspect the remaining zone.\n", domainSlug)
 		return printDNSRecordRows(printer, nil)
 	}
-	return printDNSRecordRows(printer, []dns.Record{*removed})
+	fmt.Fprintln(os.Stderr, "DNS record deleted; output is a snapshot read before deletion and may not match values removed if the record changed concurrently.")
+	return printDNSRecordRows(printer, []dns.Record{*snapshot})
 }
 
 var dnsRecordHeaders = []string{"NAME", "TYPE", "CONTENT", "TTL", "PRIORITY"}
