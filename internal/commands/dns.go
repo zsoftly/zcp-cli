@@ -468,9 +468,12 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "DNS record %s %q not found (already deleted).\n", recordType, fqdn)
-			return printDNSRecordRows(printer, nil)
+			if !showZone {
+				return printDNSRecordRows(printer, nil)
+			}
+		} else {
+			return fmt.Errorf("dns record-delete: %w", err)
 		}
-		return fmt.Errorf("dns record-delete: %w", err)
 	}
 
 	if showZone {
@@ -521,9 +524,12 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 	if err := svc.DeleteRecord(ctx, domainSlug, recordID); err != nil {
 		if apierrors.IsResourceNotFound(err) {
 			fmt.Fprintf(os.Stderr, "DNS record %d not found (already deleted).\n", recordID)
-			return printDNSRecordRows(printer, nil)
+			if !showZone {
+				return printDNSRecordRows(printer, nil)
+			}
+		} else {
+			return fmt.Errorf("dns record-delete: %w", err)
 		}
-		return fmt.Errorf("dns record-delete: %w", err)
 	}
 
 	if showZone {

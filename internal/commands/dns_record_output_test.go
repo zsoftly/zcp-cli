@@ -353,6 +353,100 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 	})
 }
 
+func TestDNSRecordDeleteAlreadyDeletedShowZone(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		showZone      bool
+		postShowError bool
+	}{
+		{
+			name: "name and type without show zone",
+			args: []string{"--name", "www", "--type", "A"},
+		},
+		{
+			name:     "name and type with show zone",
+			args:     []string{"--name", "www", "--type", "A"},
+			showZone: true,
+		},
+		{
+			name:          "name and type with show zone post read failure",
+			args:          []string{"--name", "www", "--type", "A"},
+			showZone:      true,
+			postShowError: true,
+		},
+		{
+			name: "record ID without show zone",
+			args: []string{"--record-id", "42"},
+		},
+		{
+			name:     "record ID with show zone",
+			args:     []string{"--record-id", "42"},
+			showZone: true,
+		},
+		{
+			name:          "record ID with show zone post read failure",
+			args:          []string{"--record-id", "42"},
+			showZone:      true,
+			postShowError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var showCalls int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					showCalls++
+					if showCalls > 1 && tt.postShowError {
+						http.Error(w, "post-read unavailable", http.StatusServiceUnavailable)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					if showCalls > 1 {
+						fmt.Fprint(w, `{"status":"Success","data":{"name":"example.com","records":[{"name":"remaining.example.com.","type":"A","ttl":60,"contents":["192.0.2.2"]}]}}`)
+						return
+					}
+					fmt.Fprint(w, `{"status":"Success","data":{"name":"example.com","records":[{"id":"42","name":"www.example.com.","type":"A","ttl":60,"contents":["192.0.2.1"]}]}}`)
+				case http.MethodDelete:
+					http.NotFound(w, r)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+			args := append([]string{"record-delete", "--domain", "example-com-1", "--yes"}, tt.args...)
+			if tt.showZone {
+				args = append(args, "--show-zone")
+			}
+			args = append(args, "--api-url", srv.URL, "--output", "json")
+			out, _, err := execCmd(t, NewDNSCmd(), args...)
+
+			if tt.postShowError {
+				if err == nil || showCalls < 2 || strings.Contains(out, "remaining.example.com") {
+					t.Errorf("error=%v show=%d output=%q, want post-read error without rows", err, showCalls, out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("record-delete error = %v", err)
+			}
+			if tt.showZone {
+				if showCalls != 2 || !strings.Contains(out, "remaining.example.com") {
+					t.Errorf("show=%d output=%q, want remaining zone", showCalls, out)
+				}
+				return
+			}
+			if showCalls != 1 || strings.TrimSpace(out) != "[]" {
+				t.Errorf("show=%d output=%q, want empty output without show zone", showCalls, out)
+			}
+		})
+	}
+}
+
 func TestDNSRecordDeleteLegacyIDReportsRecord(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
