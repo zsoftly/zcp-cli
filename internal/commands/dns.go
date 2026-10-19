@@ -410,6 +410,7 @@ func newDNSRecordDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "record-delete",
 		Short: "Delete a DNS record set by name and type",
+		Long:  "Delete a DNS record set by name and type. By default, successful deletion output is a pre-delete snapshot, marked with SOURCE. Use --show-zone to show the resulting zone.",
 		Example: `  zcp dns record-delete --domain example-com-1 --name www --type A
   zcp dns record-delete --domain example-com-1 --name www --type A --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -506,7 +507,7 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 	} else {
 		fmt.Fprintln(os.Stderr, "DNS record deleted; output is a snapshot read before deletion and may not match values removed if the record changed concurrently.")
 	}
-	return printDNSRecordRows(printer, snapshot)
+	return printDNSRecordSnapshotRows(printer, snapshot)
 }
 
 // suppliedDNSRecordFQDN returns a normalized FQDN only when the caller made
@@ -582,20 +583,41 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 		return printDNSRecordRows(printer, nil)
 	}
 	fmt.Fprintln(os.Stderr, "DNS record deleted; output is a snapshot read before deletion and may not match values removed if the record changed concurrently.")
-	return printDNSRecordRows(printer, []dns.Record{*snapshot})
+	return printDNSRecordSnapshotRows(printer, []dns.Record{*snapshot})
 }
 
 var dnsRecordHeaders = []string{"NAME", "TYPE", "CONTENT", "TTL", "PRIORITY"}
+var dnsRecordSnapshotHeaders = append(append([]string(nil), dnsRecordHeaders...), "SOURCE")
 
 func printDNSRecordRows(printer *output.Printer, records []dns.Record) error {
 	rows := make([][]string, 0, len(records))
 	for _, record := range records {
-		for _, content := range recordContents(&record) {
-			content, priority := dnsRecordContentAndPriority(record, content)
-			rows = append(rows, []string{record.Name, record.Type, content, strconv.Itoa(record.TTL), priority})
-		}
+		rows = append(rows, dnsRecordRows(record)...)
 	}
 	return printer.PrintTable(dnsRecordHeaders, rows)
+}
+
+func printDNSRecordSnapshotRows(printer *output.Printer, records []dns.Record) error {
+	source := "Pre-delete snapshot"
+	if printer.Format() == output.FormatJSON || printer.Format() == output.FormatYAML {
+		source = "pre_delete_snapshot"
+	}
+	rows := make([][]string, 0, len(records))
+	for _, record := range records {
+		for _, row := range dnsRecordRows(record) {
+			rows = append(rows, append(row, source))
+		}
+	}
+	return printer.PrintTable(dnsRecordSnapshotHeaders, rows)
+}
+
+func dnsRecordRows(record dns.Record) [][]string {
+	rows := make([][]string, 0, len(recordContents(&record)))
+	for _, content := range recordContents(&record) {
+		content, priority := dnsRecordContentAndPriority(record, content)
+		rows = append(rows, []string{record.Name, record.Type, content, strconv.Itoa(record.TTL), priority})
+	}
+	return rows
 }
 
 func dnsRecordContentAndPriority(record dns.Record, content string) (string, string) {

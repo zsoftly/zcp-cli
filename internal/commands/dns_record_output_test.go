@@ -38,6 +38,9 @@ func TestDNSRecordCreatePrintsOnlyCreatedValue(t *testing.T) {
 	if rows[0]["priority"] != "-" {
 		t.Errorf("priority = %q, want '-'", rows[0]["priority"])
 	}
+	if _, ok := rows[0]["source"]; ok {
+		t.Errorf("source = %q, want absent for created record", rows[0]["source"])
+	}
 }
 
 func TestDNSRecordCreateNormalizesTXTAndMXOutput(t *testing.T) {
@@ -85,6 +88,10 @@ func TestDNSRecordCreateNormalizesTXTAndMXOutput(t *testing.T) {
 			}
 			if len(rows) != 1 || rows[0]["content"] != tt.want["content"] || rows[0]["priority"] != tt.want["priority"] {
 				t.Errorf("rows = %#v, want %#v", rows, tt.want)
+				return
+			}
+			if _, hasSource := rows[0]["source"]; hasSource {
+				t.Errorf("rows = %#v, want no source for created record", rows)
 			}
 		})
 	}
@@ -182,18 +189,32 @@ func TestDNSRecordCreateNormalizesCAAOutput(t *testing.T) {
 			const want = `0 ISSUE "letsencrypt.org"`
 			switch format {
 			case "table":
-				if !strings.Contains(out, want) || strings.Contains(out, "other.example") || strings.Contains(out, "LetsEncrypt.org") {
+				if !strings.Contains(out, want) || strings.Contains(out, "other.example") || strings.Contains(out, "LetsEncrypt.org") || strings.Contains(out, "Pre-delete snapshot") {
 					t.Errorf("table output = %q, want only %q", out, want)
 				}
 			case "json":
 				var rows []map[string]string
-				if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != want {
+				if err := json.Unmarshal([]byte(out), &rows); err != nil {
+					t.Fatalf("JSON output = %q: %v", out, err)
+				}
+				if len(rows) != 1 || rows[0]["content"] != want {
 					t.Errorf("JSON output = %q rows=%#v error=%v, want only %q", out, rows, err, want)
+					return
+				}
+				if _, hasSource := rows[0]["source"]; hasSource {
+					t.Errorf("JSON output = %q rows=%#v, want no source", out, rows)
 				}
 			case "yaml":
 				var rows []map[string]string
-				if err := yaml.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != want {
+				if err := yaml.Unmarshal([]byte(out), &rows); err != nil {
+					t.Fatalf("YAML output = %q: %v", out, err)
+				}
+				if len(rows) != 1 || rows[0]["content"] != want {
 					t.Errorf("YAML output = %q rows=%#v error=%v, want only %q", out, rows, err, want)
+					return
+				}
+				if _, hasSource := rows[0]["source"]; hasSource {
+					t.Errorf("YAML output = %q rows=%#v, want no source", out, rows)
 				}
 			}
 		})
@@ -309,7 +330,7 @@ func TestDNSRecordCreateUnverifiedOutputWarnsAndReturnsEmptyStructuredRows(t *te
 	}
 }
 
-func TestDNSRecordDeleteReportsRemovedValuesAndShowZone(t *testing.T) {
+func TestDNSRecordDeleteReportsSnapshotAndShowZone(t *testing.T) {
 	var getCalls, deleteCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -335,12 +356,12 @@ func TestDNSRecordDeleteReportsRemovedValuesAndShowZone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("record-delete error = %v", err)
 	}
-	var removed []map[string]string
-	if err := json.Unmarshal([]byte(out), &removed); err != nil {
+	var snapshot []map[string]string
+	if err := json.Unmarshal([]byte(out), &snapshot); err != nil {
 		t.Fatalf("JSON output = %q: %v", out, err)
 	}
-	if deleteCalls != 1 || getCalls != 1 || len(removed) != 2 || removed[1]["content"] != "192.0.2.2" || !strings.Contains(stderr, "snapshot read before deletion") {
-		t.Errorf("get=%d delete=%d removed=%#v, want both values", getCalls, deleteCalls, removed)
+	if deleteCalls != 1 || getCalls != 1 || len(snapshot) != 2 || snapshot[1]["content"] != "192.0.2.2" || snapshot[0]["source"] != "pre_delete_snapshot" || snapshot[1]["source"] != "pre_delete_snapshot" || !strings.Contains(stderr, "snapshot read before deletion") {
+		t.Errorf("get=%d delete=%d snapshot=%#v, want marked pre-delete values", getCalls, deleteCalls, snapshot)
 	}
 
 	getCalls = 0
@@ -354,6 +375,8 @@ func TestDNSRecordDeleteReportsRemovedValuesAndShowZone(t *testing.T) {
 	}
 	if len(remaining) != 1 || remaining[0]["name"] != "other.example.com." || strings.Contains(stderr, "snapshot read before deletion") {
 		t.Errorf("remaining = %#v, want resulting zone", remaining)
+	} else if _, hasSource := remaining[0]["source"]; hasSource {
+		t.Errorf("remaining = %#v, want no source for resulting zone", remaining)
 	}
 }
 
@@ -448,18 +471,18 @@ func TestDNSRecordDeletePrintsPreDeleteSnapshot(t *testing.T) {
 			}
 			switch format {
 			case "table":
-				if !strings.Contains(out, "192.0.2.1") {
-					t.Errorf("table output = %q, want pre-delete value", out)
+				if !strings.Contains(out, "192.0.2.1") || !strings.Contains(out, "Pre-delete snapshot") {
+					t.Errorf("table output = %q, want marked pre-delete snapshot", out)
 				}
 			case "json":
 				var rows []map[string]string
-				if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" {
-					t.Errorf("JSON output = %q rows=%#v error=%v, want pre-delete value", out, rows, err)
+				if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" || rows[0]["source"] != "pre_delete_snapshot" {
+					t.Errorf("JSON output = %q rows=%#v error=%v, want marked pre-delete snapshot", out, rows, err)
 				}
 			case "yaml":
 				var rows []map[string]string
-				if err := yaml.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" {
-					t.Errorf("YAML output = %q rows=%#v error=%v, want pre-delete value", out, rows, err)
+				if err := yaml.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" || rows[0]["source"] != "pre_delete_snapshot" {
+					t.Errorf("YAML output = %q rows=%#v error=%v, want marked pre-delete snapshot", out, rows, err)
 				}
 			}
 		})
@@ -677,7 +700,8 @@ func TestDNSRecordDeleteLegacyIDReportsRecord(t *testing.T) {
 	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
 	out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--record-id", "42", "--yes", "--api-url", srv.URL, "--output", "json")
-	if err != nil || !strings.Contains(out, "192.0.2.1") || !strings.Contains(stderr, "snapshot read before deletion") {
+	var rows []map[string]string
+	if json.Unmarshal([]byte(out), &rows) != nil || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" || rows[0]["source"] != "pre_delete_snapshot" || err != nil || !strings.Contains(stderr, "snapshot read before deletion") {
 		t.Errorf("error=%v output=%q stderr=%q, want legacy record snapshot and warning", err, out, stderr)
 	}
 }
