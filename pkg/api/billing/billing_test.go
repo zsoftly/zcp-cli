@@ -311,7 +311,7 @@ func TestListActiveSubscriptions(t *testing.T) {
 			Name:               "demo-vm",
 			Product:            "Virtual Machine",
 			ProductDisplayName: "Instances",
-			Price:              "9.40",
+			Price:              9.40,
 			TotalUsage:         554.54,
 		},
 	}

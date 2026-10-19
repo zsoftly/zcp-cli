@@ -11,6 +11,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects VM policies and policies outside the selected region and project before writing.
 
+### Fixed
+
+- **`zcp billing subscriptions inactive` now displays inactive subscriptions correctly.** which previously aborted with an unmarshal error on `price` value.
+
 ## [v1.0.1] - 2026-10-11
 
 ### Fixed
