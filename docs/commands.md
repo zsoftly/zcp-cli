@@ -441,6 +441,8 @@ zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0
 zcp dns record-create --domain <domain-slug> --name @ --type MX --content mail.example.com. --priority 10 --ttl 3600
 # Record creation and deletion show only the affected values; use --show-zone
 # to print every record in the resulting zone.
+# CAA create matching accepts equivalent numeric flags, tag case, and quoted values.
+# If a successful delete cannot identify removed values, it prints an empty result and a warning.
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1 --show-zone
 
 # Delete a record set (records are addressed by name and type) or a domain

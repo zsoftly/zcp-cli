@@ -137,6 +137,69 @@ func TestDNSRecordMatchesRequestDecodesQuotedTXT(t *testing.T) {
 	}
 }
 
+func TestDNSRecordMatchesRequestNormalizesCAA(t *testing.T) {
+	tests := []struct {
+		name     string
+		actual   string
+		expected string
+		match    bool
+	}{
+		{"quoted API value, unquoted request", `0 ISSUE "letsencrypt.org"`, "000 issue letsencrypt.org", true},
+		{"value preserves internal spaces", `128 iodef "mailto:security@example.com urgent"`, `128 IODEF "mailto:security@example.com urgent"`, true},
+		{"different flag", `128 issue "letsencrypt.org"`, "0 issue letsencrypt.org", false},
+		{"different tag", `0 iodef "letsencrypt.org"`, "0 issue letsencrypt.org", false},
+		{"different value case", `0 issue "LetsEncrypt.org"`, "0 issue letsencrypt.org", false},
+		{"different value", `0 issue "other.example"`, "0 issue letsencrypt.org", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := dnsRecordMatchesRequest(dnsRecord("CAA"), tt.actual, dnsRequest("CAA", tt.expected))
+			if got != tt.match {
+				t.Errorf("dnsRecordMatchesRequest(%q, %q) = %v, want %v", tt.actual, tt.expected, got, tt.match)
+			}
+		})
+	}
+}
+
+func TestDNSRecordCreateNormalizesCAAOutput(t *testing.T) {
+	for _, format := range []string{"table", "json", "yaml"} {
+		t.Run(format, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"status":"Success","data":{"name":"example.com","records":[{"name":"caa.example.com.","type":"CAA","ttl":3600,"contents":["128 issue \"letsencrypt.org\"","0 iodef \"letsencrypt.org\"","0 issue \"LetsEncrypt.org\"","0 issue \"other.example\"","0 ISSUE \"letsencrypt.org\""]}]}}`)
+			}))
+			defer srv.Close()
+			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+			out, _, err := execCmd(t, NewDNSCmd(), "record-create", "--domain", "example-com-1", "--name", "caa", "--type", "CAA", "--content", "000 issue letsencrypt.org", "--api-url", srv.URL, "--output", format)
+			if err != nil {
+				t.Fatalf("record-create error = %v", err)
+			}
+			const want = `0 ISSUE "letsencrypt.org"`
+			switch format {
+			case "table":
+				if !strings.Contains(out, want) || strings.Contains(out, "other.example") || strings.Contains(out, "LetsEncrypt.org") {
+					t.Errorf("table output = %q, want only %q", out, want)
+				}
+			case "json":
+				var rows []map[string]string
+				if err := json.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != want {
+					t.Errorf("JSON output = %q rows=%#v error=%v, want only %q", out, rows, err, want)
+				}
+			case "yaml":
+				var rows []map[string]string
+				if err := yaml.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 1 || rows[0]["content"] != want {
+					t.Errorf("YAML output = %q rows=%#v error=%v, want only %q", out, rows, err, want)
+				}
+			}
+		})
+	}
+}
+
 func dnsRecord(recordType string) dns.Record {
 	return dns.Record{Type: recordType}
 }
@@ -310,9 +373,9 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 		defer srv.Close()
 		t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-		out, _, err := execCmd(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
-		if err != nil || strings.TrimSpace(out) != "[]" || deleteCalls != 1 {
-			t.Errorf("error=%v output=%q deleteCalls=%d, want empty result after delete", err, out, deleteCalls)
+		out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
+		if err != nil || strings.TrimSpace(out) != "[]" || deleteCalls != 1 || !strings.Contains(stderr, "previous values are unavailable") {
+			t.Errorf("error=%v output=%q stderr=%q deleteCalls=%d, want empty result and warning after delete", err, out, stderr, deleteCalls)
 		}
 	})
 
@@ -328,9 +391,9 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 		defer srv.Close()
 		t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-		out, _, err := execCmd(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
-		if err != nil || strings.TrimSpace(out) != "[]" {
-			t.Errorf("error=%v output=%q, want empty result for an already deleted record", err, out)
+		out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
+		if err != nil || strings.TrimSpace(out) != "[]" || strings.Contains(stderr, "previous values are unavailable") {
+			t.Errorf("error=%v output=%q stderr=%q, want empty result without missing-details warning for an already deleted record", err, out, stderr)
 		}
 	})
 
@@ -346,9 +409,9 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 		defer srv.Close()
 		t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-		out, _, err := execCmd(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
-		if err == nil || strings.Contains(out, "192.0.2.1") {
-			t.Errorf("error=%v output=%q, want failure with no record result", err, out)
+		out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
+		if err == nil || strings.Contains(out, "192.0.2.1") || strings.Contains(stderr, "previous values are unavailable") {
+			t.Errorf("error=%v output=%q stderr=%q, want failure with no record result or missing-details warning", err, out, stderr)
 		}
 	})
 }
@@ -423,11 +486,11 @@ func TestDNSRecordDeleteAlreadyDeletedShowZone(t *testing.T) {
 				args = append(args, "--show-zone")
 			}
 			args = append(args, "--api-url", srv.URL, "--output", "json")
-			out, _, err := execCmd(t, NewDNSCmd(), args...)
+			out, stderr, err := execCaptureStdio(t, NewDNSCmd(), args...)
 
 			if tt.postShowError {
-				if err == nil || showCalls < 2 || strings.Contains(out, "remaining.example.com") {
-					t.Errorf("error=%v show=%d output=%q, want post-read error without rows", err, showCalls, out)
+				if err == nil || showCalls < 2 || strings.Contains(out, "remaining.example.com") || strings.Contains(stderr, "previous values are unavailable") {
+					t.Errorf("error=%v show=%d output=%q stderr=%q, want post-read error without rows or missing-details warning", err, showCalls, out, stderr)
 				}
 				return
 			}
@@ -435,13 +498,13 @@ func TestDNSRecordDeleteAlreadyDeletedShowZone(t *testing.T) {
 				t.Fatalf("record-delete error = %v", err)
 			}
 			if tt.showZone {
-				if showCalls != 2 || !strings.Contains(out, "remaining.example.com") {
-					t.Errorf("show=%d output=%q, want remaining zone", showCalls, out)
+				if showCalls != 2 || !strings.Contains(out, "remaining.example.com") || strings.Contains(stderr, "previous values are unavailable") {
+					t.Errorf("show=%d output=%q stderr=%q, want remaining zone without missing-details warning", showCalls, out, stderr)
 				}
 				return
 			}
-			if showCalls != 1 || strings.TrimSpace(out) != "[]" {
-				t.Errorf("show=%d output=%q, want empty output without show zone", showCalls, out)
+			if showCalls != 1 || strings.TrimSpace(out) != "[]" || strings.Contains(stderr, "previous values are unavailable") {
+				t.Errorf("show=%d output=%q stderr=%q, want empty output without missing-details warning", showCalls, out, stderr)
 			}
 		})
 	}
@@ -521,10 +584,10 @@ func TestDNSRecordDeleteLegacyIDPreReadIsBestEffort(t *testing.T) {
 			if tt.showZone {
 				args = append(args, "--show-zone")
 			}
-			out, _, err := execCmd(t, NewDNSCmd(), args...)
+			out, stderr, err := execCaptureStdio(t, NewDNSCmd(), args...)
 			if tt.deleteCode != http.StatusOK || tt.postShow != http.StatusOK {
-				if err == nil || deleteCalls != 1 || strings.Contains(out, "remaining.example.com") {
-					t.Errorf("error=%v delete=%d output=%q, want error without rows", err, deleteCalls, out)
+				if err == nil || deleteCalls != 1 || strings.Contains(out, "remaining.example.com") || strings.Contains(stderr, "previous values are unavailable") {
+					t.Errorf("error=%v delete=%d output=%q stderr=%q, want error without rows or missing-details warning", err, deleteCalls, out, stderr)
 				}
 				return
 			}
@@ -532,11 +595,11 @@ func TestDNSRecordDeleteLegacyIDPreReadIsBestEffort(t *testing.T) {
 				t.Fatalf("error=%v delete=%d, want successful delete", err, deleteCalls)
 			}
 			if tt.showZone {
-				if showCalls < 2 || !strings.Contains(out, "remaining.example.com") {
-					t.Errorf("show=%d output=%q, want post-delete zone", showCalls, out)
+				if showCalls < 2 || !strings.Contains(out, "remaining.example.com") || strings.Contains(stderr, "previous values are unavailable") {
+					t.Errorf("show=%d output=%q stderr=%q, want post-delete zone without missing-details warning", showCalls, out, stderr)
 				}
-			} else if strings.TrimSpace(out) != "[]" {
-				t.Errorf("output=%q, want empty rows when pre-read could not identify record", out)
+			} else if strings.TrimSpace(out) != "[]" || !strings.Contains(stderr, "previous values are unavailable") {
+				t.Errorf("output=%q stderr=%q, want empty rows and warning when pre-read could not identify record", out, stderr)
 			}
 		})
 	}
@@ -559,8 +622,8 @@ func TestDNSRecordDeleteLegacyIDGetsFreshTimeoutAfterPreRead(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-	out, _, err := execCmd(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--record-id", "42", "--yes", "--timeout", "1", "--api-url", srv.URL, "--output", "json")
-	if err != nil || deleteCalls != 1 || strings.TrimSpace(out) != "[]" {
-		t.Errorf("error=%v delete=%d output=%q, want successful delete with empty rows", err, deleteCalls, out)
+	out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--record-id", "42", "--yes", "--timeout", "1", "--api-url", srv.URL, "--output", "json")
+	if err != nil || deleteCalls != 1 || strings.TrimSpace(out) != "[]" || !strings.Contains(stderr, "previous values are unavailable") {
+		t.Errorf("error=%v delete=%d output=%q stderr=%q, want successful delete with empty rows and warning", err, deleteCalls, out, stderr)
 	}
 }

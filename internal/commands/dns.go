@@ -483,6 +483,9 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 		}
 		return printDNSRecordRows(printer, domain.Records)
 	}
+	if len(removed) == 0 {
+		fmt.Fprintf(os.Stderr, "DNS record deleted, but its previous values are unavailable. Use dns show %q to inspect the remaining zone.\n", domainSlug)
+	}
 	return printDNSRecordRows(printer, removed)
 }
 
@@ -540,6 +543,7 @@ func runDNSRecordDelete(cmd *cobra.Command, domainSlug string, recordID int, yes
 		return printDNSRecordRows(printer, domain.Records)
 	}
 	if removed == nil {
+		fmt.Fprintf(os.Stderr, "DNS record deleted, but its previous values are unavailable. Use dns show %q to inspect the remaining zone.\n", domainSlug)
 		return printDNSRecordRows(printer, nil)
 	}
 	return printDNSRecordRows(printer, []dns.Record{*removed})
@@ -598,6 +602,10 @@ func recordContents(record *dns.Record) []string {
 }
 
 func dnsRecordMatchesRequest(record dns.Record, content string, req dns.CreateRecordRequest) bool {
+	if strings.EqualFold(record.Type, "CAA") {
+		return caaRecordMatches(content, req.Content)
+	}
+
 	actual, actualPriority := dnsRecordContentAndPriority(record, content)
 	actual = comparableDNSRecordContent(record.Type, actual)
 	expected := comparableDNSRecordContent(record.Type, req.Content)
@@ -608,6 +616,58 @@ func dnsRecordMatchesRequest(record dns.Record, content string, req dns.CreateRe
 		return true
 	}
 	return actualPriority == strconv.Itoa(*req.Priority)
+}
+
+func caaRecordMatches(actual, expected string) bool {
+	actualFlags, actualTag, actualValue, actualOK := parseCAAContent(actual)
+	expectedFlags, expectedTag, expectedValue, expectedOK := parseCAAContent(expected)
+	if !actualOK || !expectedOK {
+		return actual == expected
+	}
+	return actualFlags == expectedFlags && strings.EqualFold(actualTag, expectedTag) && actualValue == expectedValue
+}
+
+func parseCAAContent(content string) (uint8, string, string, bool) {
+	content = strings.TrimSpace(content)
+	flagsEnd := strings.IndexAny(content, " \t\n\r")
+	if flagsEnd <= 0 {
+		return 0, "", "", false
+	}
+	flags, err := strconv.ParseUint(content[:flagsEnd], 10, 8)
+	if err != nil {
+		return 0, "", "", false
+	}
+
+	content = strings.TrimLeft(content[flagsEnd:], " \t\n\r")
+	tagEnd := strings.IndexAny(content, " \t\n\r")
+	if tagEnd <= 0 {
+		return 0, "", "", false
+	}
+	tag := content[:tagEnd]
+	if !isCAATag(tag) {
+		return 0, "", "", false
+	}
+
+	value := strings.TrimSpace(content[tagEnd:])
+	if value == "" {
+		return 0, "", "", false
+	}
+	if decoded, ok := decodeQuotedTXTContent(value); ok {
+		return uint8(flags), tag, decoded, true
+	}
+	if strings.ContainsAny(value, " \t\n\r") {
+		return 0, "", "", false
+	}
+	return uint8(flags), tag, value, true
+}
+
+func isCAATag(tag string) bool {
+	for i := range tag {
+		if (tag[i] < 'a' || tag[i] > 'z') && (tag[i] < 'A' || tag[i] > 'Z') && (tag[i] < '0' || tag[i] > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeTXTContent(content string) string {
