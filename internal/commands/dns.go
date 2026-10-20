@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"os"
@@ -315,6 +316,11 @@ func newDNSRecordCreateCmd() *cobra.Command {
 			if content == "" {
 				return fmt.Errorf("--content is required")
 			}
+			if strings.EqualFold(recordType, "CAA") {
+				if err := validateCAARecordContent(content); err != nil {
+					return err
+				}
+			}
 			if ttl <= 0 {
 				ttl = 14400
 			}
@@ -484,14 +490,36 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 	defer cancel()
 
-	if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
-		if apierrors.IsResourceNotFound(err) {
-			fmt.Fprintf(os.Stderr, "DNS record %s %q not found (already deleted).\n", recordType, fqdn)
-			if !showZone {
-				return printDNSRecordRows(printer, nil)
+	if showErr == nil && len(snapshot) == 0 {
+		if showZone {
+			return printDNSRecordRows(printer, domain.Records)
+		}
+		return printDNSRecordRows(printer, nil)
+	}
+
+	if len(snapshot) == 0 {
+		if err := svc.DeleteRecordByName(ctx, domainSlug, fqdn, recordType); err != nil {
+			if isDNSRecordNotFound(err) {
+				fmt.Fprintf(os.Stderr, "DNS record %s %q not found (already deleted).\n", recordType, fqdn)
+				if !showZone {
+					return printDNSRecordRows(printer, nil)
+				}
+			} else {
+				return fmt.Errorf("dns record-delete: %w", err)
 			}
-		} else {
-			return fmt.Errorf("dns record-delete: %w", err)
+		}
+	} else {
+		values := dnsRecordValues(snapshot)
+		deleted := 0
+		for _, value := range values {
+			if err := svc.DeleteRecordValueByName(ctx, domainSlug, fqdn, recordType, value); err != nil {
+				if isDNSRecordNotFound(err) {
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "DNS record-delete stopped after deleting %d of %d values from the pre-delete snapshot; remaining snapshot values may still exist.\n", deleted, len(values))
+				return fmt.Errorf("dns record-delete: %w", err)
+			}
+			deleted++
 		}
 	}
 
@@ -508,6 +536,18 @@ func runDNSRecordDeleteByName(cmd *cobra.Command, domainSlug, name, recordType s
 		fmt.Fprintln(os.Stderr, "DNS record deleted; output is a snapshot read before deletion and may not match values removed if the record changed concurrently.")
 	}
 	return printDNSRecordSnapshotRows(printer, snapshot)
+}
+
+// isDNSRecordNotFound handles the DNS endpoint's verified idempotency
+// response. Unlike the normal API not-found status, it reports an absent DNS
+// record as HTTP 500 with this exact message. Do not broaden this exception:
+// other 500 responses remain failures.
+func isDNSRecordNotFound(err error) bool {
+	if apierrors.IsResourceNotFound(err) {
+		return true
+	}
+	var apiErr *apierrors.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == 500 && strings.TrimSpace(apiErr.Message) == "DNS record not found."
 }
 
 // suppliedDNSRecordFQDN returns a normalized FQDN only when the caller made
@@ -659,6 +699,14 @@ func recordContents(record *dns.Record) []string {
 	return []string{record.Content}
 }
 
+func dnsRecordValues(records []dns.Record) []string {
+	values := make([]string, 0)
+	for i := range records {
+		values = append(values, recordContents(&records[i])...)
+	}
+	return values
+}
+
 func dnsRecordMatchesRequest(record dns.Record, content string, req dns.CreateRecordRequest) bool {
 	if strings.EqualFold(record.Type, "CAA") {
 		return caaRecordMatches(content, req.Content)
@@ -717,6 +765,27 @@ func parseCAAContent(content string) (uint8, string, string, bool) {
 		return 0, "", "", false
 	}
 	return uint8(flags), tag, value, true
+}
+
+func validateCAARecordContent(content string) error {
+	original := strings.TrimSpace(content)
+	flagsEnd := strings.IndexAny(original, " \t\n\r")
+	if flagsEnd <= 0 {
+		return fmt.Errorf(`CAA --content must use a quoted value (e.g. 0 issue "letsencrypt.org")`)
+	}
+	remainder := strings.TrimLeft(original[flagsEnd:], " \t\n\r")
+	tagEnd := strings.IndexAny(remainder, " \t\n\r")
+	if tagEnd <= 0 {
+		return fmt.Errorf(`CAA --content must use a quoted value (e.g. 0 issue "letsencrypt.org")`)
+	}
+	value := strings.TrimSpace(remainder[tagEnd:])
+	if _, ok := decodeQuotedTXTContent(value); !ok {
+		return fmt.Errorf(`CAA --content value must be quoted (e.g. 0 issue "letsencrypt.org")`)
+	}
+	if _, _, _, ok := parseCAAContent(original); !ok {
+		return fmt.Errorf(`CAA --content must use the form <flags> <tag> "value" (e.g. 0 issue "letsencrypt.org")`)
+	}
+	return nil
 }
 
 func isCAATag(tag string) bool {
