@@ -439,9 +439,20 @@ zcp dns create --name example.com --project default-9
 # Create a record
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1
 zcp dns record-create --domain <domain-slug> --name @ --type MX --content mail.example.com. --priority 10 --ttl 3600
+# Record creation shows the affected value. By default, deletion prints a pre-delete
+# snapshot, marked as `Pre-delete snapshot` in table output and
+# `source: pre_delete_snapshot` in JSON/YAML, and warns on stderr that concurrent
+# changes may make it differ from values actually removed. With --show-zone, deletion
+# prints the resulting zone without the snapshot label or warning.
+# CAA create matching accepts equivalent numeric flags, tag case, and quoted values.
+# If a successful delete cannot identify previous values, it prints an empty result and a warning.
+zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1 --show-zone
 
 # Delete a record set (records are addressed by name and type) or a domain
 zcp dns record-delete --domain <domain-slug> --name www --type A
+# A fully qualified name ending in a dot can be deleted when the pre-delete read is unavailable.
+zcp dns record-delete --domain <domain-slug> --name www.example.com. --type A
+zcp dns record-delete --domain <domain-slug> --name www --type A --show-zone
 zcp dns delete <domain-slug>
 ```
 

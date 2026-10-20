@@ -11,6 +11,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects VM policies and policies outside the selected region and project before writing.
 
+### Fixed
+
+- `dns record-create` prints one row for the value it created. `dns record-delete` prints a pre-delete snapshot of the selected record set in table, JSON, and YAML output, marked by a `SOURCE` column in tables and `source: pre_delete_snapshot` in structured output. The snapshot may differ from the values deleted if the record set changes concurrently, and the CLI warns when it prints one. Both commands support `--show-zone` to print the resulting zone. CAA matching accepts equivalent numeric flags, tag case, and quoted values. MX output includes its preference, including `0`. `dns show` remains the full-zone read command. If a successful delete cannot identify the previous values, the CLI prints an empty result and a warning.
+
 ## [v1.0.1] - 2026-10-11
 
 ### Fixed
