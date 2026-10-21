@@ -7,6 +7,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Fixed
+
+- `dns record-create` now returns an error, with `dns show` guidance, when the API accepts creation but the created value cannot be verified. It does not print an empty successful result or retry the create request.
+
 ## [v1.1.0] - 2026-10-21
 
 ### Added
