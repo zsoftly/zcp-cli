@@ -627,6 +627,30 @@ func TestDNSDeleteRecordByName(t *testing.T) {
 	}
 }
 
+func TestDNSDeleteRecordValueByName(t *testing.T) {
+	var gotPath, gotName, gotType, gotContent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotName = r.URL.Query().Get("name")
+		gotType = r.URL.Query().Get("type")
+		gotContent = r.URL.Query().Get("content")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"status": "Success", "message": "deleted"})
+	}))
+	defer srv.Close()
+
+	svc := dns.NewService(newClient(srv.URL))
+	if err := svc.DeleteRecordValueByName(context.Background(), "example-com-1", "mail.example.com.", "MX", "0 mail.example.com."); err != nil {
+		t.Fatalf("DeleteRecordValueByName() error = %v", err)
+	}
+	if gotPath != "/dns/domains/example-com-1/records" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotName != "mail.example.com." || gotType != "MX" || gotContent != "0 mail.example.com." {
+		t.Errorf("query = name %q type %q content %q, want mail.example.com. / MX / 0 mail.example.com.", gotName, gotType, gotContent)
+	}
+}
+
 func TestCanonicalRecordFQDN(t *testing.T) {
 	cases := []struct{ name, zone, want string }{
 		{"www", "example.com", "www.example.com."},

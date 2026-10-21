@@ -182,7 +182,7 @@ func TestDNSRecordCreateNormalizesCAAOutput(t *testing.T) {
 			defer srv.Close()
 			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-			out, _, err := execCmd(t, NewDNSCmd(), "record-create", "--domain", "example-com-1", "--name", "caa", "--type", "CAA", "--content", "000 issue letsencrypt.org", "--api-url", srv.URL, "--output", format)
+			out, _, err := execCmd(t, NewDNSCmd(), "record-create", "--domain", "example-com-1", "--name", "caa", "--type", "CAA", "--content", `000 issue "letsencrypt.org"`, "--api-url", srv.URL, "--output", format)
 			if err != nil {
 				t.Fatalf("record-create error = %v", err)
 			}
@@ -360,7 +360,7 @@ func TestDNSRecordDeleteReportsSnapshotAndShowZone(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &snapshot); err != nil {
 		t.Fatalf("JSON output = %q: %v", out, err)
 	}
-	if deleteCalls != 1 || getCalls != 1 || len(snapshot) != 2 || snapshot[1]["content"] != "192.0.2.2" || snapshot[0]["source"] != "pre_delete_snapshot" || snapshot[1]["source"] != "pre_delete_snapshot" || !strings.Contains(stderr, "snapshot read before deletion") {
+	if deleteCalls != 2 || getCalls != 1 || len(snapshot) != 2 || snapshot[1]["content"] != "192.0.2.2" || snapshot[0]["source"] != "pre_delete_snapshot" || snapshot[1]["source"] != "pre_delete_snapshot" || !strings.Contains(stderr, "snapshot read before deletion") {
 		t.Errorf("get=%d delete=%d snapshot=%#v, want marked pre-delete values", getCalls, deleteCalls, snapshot)
 	}
 
@@ -397,8 +397,8 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 		t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
 		out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
-		if err != nil || strings.TrimSpace(out) != "[]" || deleteCalls != 1 || !strings.Contains(stderr, "previous values are unavailable") || strings.Contains(stderr, "snapshot read before deletion") {
-			t.Errorf("error=%v output=%q stderr=%q deleteCalls=%d, want empty result and warning after delete", err, out, stderr, deleteCalls)
+		if err != nil || strings.TrimSpace(out) != "[]" || deleteCalls != 0 || stderr != "" {
+			t.Errorf("error=%v output=%q stderr=%q deleteCalls=%d, want empty result without a delete request", err, out, stderr, deleteCalls)
 		}
 	})
 
@@ -415,8 +415,8 @@ func TestDNSRecordDeleteMissingAndFailureDoNotFabricateRows(t *testing.T) {
 		t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
 		out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
-		if err != nil || strings.TrimSpace(out) != "[]" || strings.Contains(stderr, "previous values are unavailable") || strings.Contains(stderr, "snapshot read before deletion") {
-			t.Errorf("error=%v output=%q stderr=%q, want empty result without missing-details warning for an already deleted record", err, out, stderr)
+		if err != nil || !strings.Contains(out, "192.0.2.1") || !strings.Contains(stderr, "snapshot read before deletion") {
+			t.Errorf("error=%v output=%q stderr=%q, want the pre-delete snapshot when the value disappears after the read", err, out, stderr)
 		}
 	})
 
@@ -599,10 +599,12 @@ func TestDNSRecordDeleteAlreadyDeletedShowZone(t *testing.T) {
 		args          []string
 		showZone      bool
 		postShowError bool
+		wantSnapshot  bool
 	}{
 		{
-			name: "name and type without show zone",
-			args: []string{"--name", "www", "--type", "A"},
+			name:         "name and type without show zone",
+			args:         []string{"--name", "www", "--type", "A"},
+			wantSnapshot: true,
 		},
 		{
 			name:     "name and type with show zone",
@@ -677,6 +679,13 @@ func TestDNSRecordDeleteAlreadyDeletedShowZone(t *testing.T) {
 			if tt.showZone {
 				if showCalls != 2 || !strings.Contains(out, "remaining.example.com") || strings.Contains(stderr, "previous values are unavailable") || strings.Contains(stderr, "snapshot read before deletion") {
 					t.Errorf("show=%d output=%q stderr=%q, want remaining zone without missing-details warning", showCalls, out, stderr)
+				}
+				return
+			}
+			if tt.wantSnapshot {
+				var rows []map[string]string
+				if json.Unmarshal([]byte(out), &rows) != nil || showCalls != 1 || len(rows) != 1 || rows[0]["content"] != "192.0.2.1" || rows[0]["source"] != "pre_delete_snapshot" || strings.Contains(stderr, "previous values are unavailable") || !strings.Contains(stderr, "snapshot read before deletion") {
+					t.Errorf("show=%d output=%q stderr=%q, want pre-delete snapshot and warning when the value was already deleted", showCalls, out, stderr)
 				}
 				return
 			}
@@ -803,5 +812,177 @@ func TestDNSRecordDeleteLegacyIDGetsFreshTimeoutAfterPreRead(t *testing.T) {
 	out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--record-id", "42", "--yes", "--timeout", "1", "--api-url", srv.URL, "--output", "json")
 	if err != nil || deleteCalls != 1 || strings.TrimSpace(out) != "[]" || !strings.Contains(stderr, "previous values are unavailable") || strings.Contains(stderr, "snapshot read before deletion") {
 		t.Errorf("error=%v delete=%d output=%q stderr=%q, want successful delete with empty rows and warning", err, deleteCalls, out, stderr)
+	}
+}
+
+func TestDNSRecordDeleteUsesRawInitialSnapshotValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		recordType string
+		contents   []string
+	}{
+		{"A", "A", []string{"192.0.2.10", "192.0.2.11"}},
+		{"MX", "MX", []string{"0 mail.example.com.", "10 backup.example.com."}},
+		{"TXT", "TXT", []string{`"one"`, `"two"`}},
+		{"CAA", "CAA", []string{`0 issue "letsencrypt.org"`, `0 iodef "mailto:security@example.com"`}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var contents []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.Method {
+				case http.MethodGet:
+					payload, err := json.Marshal(tt.contents)
+					if err != nil {
+						t.Fatal(err)
+					}
+					fmt.Fprintf(w, `{"status":"Success","data":{"name":"example.com","records":[{"name":"value.example.com.","type":%q,"ttl":60,"contents":%s}]}}`, tt.recordType, payload)
+				case http.MethodDelete:
+					content := r.URL.Query().Get("content")
+					if content == "" {
+						w.WriteHeader(http.StatusInternalServerError)
+						fmt.Fprint(w, `{"status":"Error","message":"Content is required to delete a record from a multi-value record set."}`)
+						return
+					}
+					contents = append(contents, content)
+					fmt.Fprint(w, `{"status":"Success"}`)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+			out, _, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "value", "--type", tt.recordType, "--yes", "--api-url", srv.URL, "--output", "json")
+			if err != nil {
+				t.Fatalf("record-delete error = %v", err)
+			}
+			if got, want := strings.Join(contents, "|"), strings.Join(tt.contents, "|"); got != want {
+				t.Errorf("delete content = %q, want %q", got, want)
+			}
+			if !strings.Contains(out, "pre_delete_snapshot") {
+				t.Errorf("output = %q, want snapshot rows", out)
+			}
+		})
+	}
+}
+
+func TestDNSRecordDeleteStopsOnPartialFailureWithoutSnapshotOutput(t *testing.T) {
+	var contents []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			fmt.Fprint(w, `{"status":"Success","data":{"name":"example.com","records":[{"name":"www.example.com.","type":"A","ttl":60,"contents":["192.0.2.10","192.0.2.11"]}]}}`)
+		case http.MethodDelete:
+			contents = append(contents, r.URL.Query().Get("content"))
+			if len(contents) == 2 {
+				http.Error(w, "backend unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			fmt.Fprint(w, `{"status":"Success"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+	out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
+	if err == nil || !strings.Contains(stderr, "stopped after deleting 1 of 2 values") || strings.Contains(out, "pre_delete_snapshot") {
+		t.Errorf("error=%v output=%q stderr=%q, want partial failure without success output", err, out, stderr)
+	}
+	if got := strings.Join(contents, "|"); got != "192.0.2.10|192.0.2.11" {
+		t.Errorf("delete content = %q, want both initial values in order", got)
+	}
+}
+
+func TestDNSRecordDeleteDoesNotDrainConcurrentValues(t *testing.T) {
+	var deleteCalls, showCalls int
+	remaining := []string{"192.0.2.10"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodGet:
+			showCalls++
+			payload, err := json.Marshal(remaining)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fmt.Fprintf(w, `{"status":"Success","data":{"name":"example.com","records":[{"name":"www.example.com.","type":"A","ttl":60,"contents":%s}]}}`, payload)
+		case http.MethodDelete:
+			deleteCalls++
+			if r.URL.Query().Get("content") != "192.0.2.10" {
+				http.Error(w, "unexpected value", http.StatusBadRequest)
+				return
+			}
+			remaining = []string{"192.0.2.99"}
+			fmt.Fprint(w, `{"status":"Success"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+	out, _, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www", "--type", "A", "--yes", "--show-zone", "--api-url", srv.URL, "--output", "json")
+	if err != nil || deleteCalls != 1 || showCalls != 2 || !strings.Contains(out, "192.0.2.99") {
+		t.Errorf("error=%v deleteCalls=%d showCalls=%d output=%q, want only the initial value deleted and the concurrent value preserved", err, deleteCalls, showCalls, out)
+	}
+}
+
+func TestDNSRecordDeleteTreatsOnlyExactDNS500AsAbsent(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		message   string
+		wantError bool
+	}{
+		{"verified absent response", "DNS record not found.", false},
+		{"unrelated server failure", "database unavailable", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					http.Error(w, "pre-read unavailable", http.StatusServiceUnavailable)
+				case http.MethodDelete:
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusInternalServerError)
+					fmt.Fprintf(w, `{"status":"Error","message":%q}`, tt.message)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+			out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-delete", "--domain", "example-com-1", "--name", "www.example.com.", "--type", "A", "--yes", "--api-url", srv.URL, "--output", "json")
+			if tt.wantError {
+				if err == nil || strings.Contains(out, "pre_delete_snapshot") {
+					t.Errorf("error=%v output=%q, want unrelated 500 to fail", err, out)
+				}
+				return
+			}
+			if err != nil || strings.TrimSpace(out) != "[]" || !strings.Contains(stderr, "not found (already deleted)") {
+				t.Errorf("error=%v output=%q stderr=%q, want idempotent absent result", err, out, stderr)
+			}
+		})
+	}
+}
+
+func TestDNSRecordCreateRejectsUnquotedCAABeforeHTTP(t *testing.T) {
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "must not be called", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+
+	_, _, err := execCaptureStdio(t, NewDNSCmd(), "record-create", "--domain", "example-com-1", "--name", "caa", "--type", "CAA", "--content", "0 issue letsencrypt.org", "--api-url", srv.URL)
+	if err == nil || !strings.Contains(err.Error(), `0 issue "letsencrypt.org"`) || calls != 0 {
+		t.Errorf("error=%v calls=%d, want local quoted-CAA validation without HTTP", err, calls)
 	}
 }

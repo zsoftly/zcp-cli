@@ -294,6 +294,20 @@ func (s *Service) DeleteRecordByName(ctx context.Context, domainSlug, name, reco
 	return nil
 }
 
+// DeleteRecordValueByName removes one value from a DNS record set identified
+// by its fully qualified name, type, and backend-returned raw content. The
+// PowerDNS-backed API requires content when deleting a multi-value record set.
+func (s *Service) DeleteRecordValueByName(ctx context.Context, domainSlug, name, recordType, content string) error {
+	q := url.Values{}
+	q.Set("name", name)
+	q.Set("type", recordType)
+	q.Set("content", content)
+	if err := s.client.Delete(ctx, "/dns/domains/"+domainSlug+"/records", q); err != nil {
+		return fmt.Errorf("deleting DNS record value %s %s on domain %s: %w", recordType, name, domainSlug, err)
+	}
+	return nil
+}
+
 // CanonicalRecordFQDN builds the backend's stored record name for a record in
 // the given zone: relative labels get the zone appended, absolute names are
 // normalized, and the result always carries a trailing dot.

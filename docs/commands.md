@@ -442,9 +442,11 @@ zcp dns record-create --domain <domain-slug> --name @ --type MX --content mail.e
 # Record creation shows the affected value. By default, deletion prints a pre-delete
 # snapshot, marked as `Pre-delete snapshot` in table output and
 # `source: pre_delete_snapshot` in JSON/YAML, and warns on stderr that concurrent
-# changes may make it differ from values actually removed. With --show-zone, deletion
+# changes may make it differ from values actually removed. When the selected record set
+# has several values, deletion sends one request for each value in that initial snapshot;
+# values added concurrently are left alone. With --show-zone, deletion
 # prints the resulting zone without the snapshot label or warning.
-# CAA create matching accepts equivalent numeric flags, tag case, and quoted values.
+# CAA values must be quoted, for example: --content '0 issue "letsencrypt.org"'.
 # If a successful delete cannot identify previous values, it prints an empty result and a warning.
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1 --show-zone
 
