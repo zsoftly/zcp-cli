@@ -7,9 +7,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-10-21
+
 ### Added
 
-- **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects VM policies and policies outside the selected region and project before writing.
+- **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects non-snapshot policies and policies outside the selected region and project before writing.
 
 ### Fixed
 
