@@ -19,10 +19,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ### Fixed
 
-- `dns record-create` now returns an error, with `dns show` guidance, when the API accepts creation but the created value cannot be verified. It does not print an empty successful result or retry the create request.
-- `dns record-delete` now deletes each value in the finite pre-delete snapshot with the raw content required by the DNS API, fixing multi-value record-set deletion. Values added after the read are left alone. A failure after partial deletion returns an error and identifies the partial progress instead of reporting a successful snapshot. An already absent DNS record is handled idempotently when the DNS API returns its verified `DNS record not found.` response.
-- `dns record-create` now rejects unquoted CAA values before sending a request; use `--content '0 issue "letsencrypt.org"'`.
-- `dns record-create` prints one row for the value it created. `dns record-delete` prints a pre-delete snapshot of the selected record set in table, JSON, and YAML output, marked by a `SOURCE` column in tables and `source: pre_delete_snapshot` in structured output. Both commands support `--show-zone` to print the resulting zone. MX output includes its preference, including `0`. `dns show` remains the full-zone read command.
+- **Created DNS records are verified before output.** `dns record-create` now returns an error, with `dns show` guidance, when the API accepts creation but the created value cannot be verified. It does not print an empty successful result or retry the create request.
+- **DNS record deletion handles values individually.** `dns record-delete` now deletes each value in the finite pre-delete snapshot with the raw content required by the DNS API, fixing multi-value record-set deletion. Values added after the read are left alone. A failure after partial deletion returns an error and identifies the partial progress instead of reporting a successful snapshot. An already absent DNS record is handled idempotently when the DNS API returns its verified `DNS record not found.` response.
+- **CAA values must be quoted.** `dns record-create` now rejects unquoted CAA values before sending a request; use `--content '0 issue "letsencrypt.org"'`.
+- **DNS output identifies its source.** `dns record-create` prints one row for the value it created. `dns record-delete` prints a pre-delete snapshot of the selected record set in table, JSON, and YAML output, marked by a `SOURCE` column in tables and `source: pre_delete_snapshot` in structured output. Both commands support `--show-zone` to print the resulting zone. MX output includes its preference, including `0`. `dns show` remains the full-zone read command.
 
 ## [v1.0.1] - 2026-10-11
 

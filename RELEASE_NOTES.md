@@ -1,13 +1,14 @@
 # zcp v1.1.0 Release Notes
 
-zcp v1.1.0 adds scheduled snapshots for block storage volumes. Create a policy
-for a volume, then list, inspect, update, pause, resume, run, or delete it from
-the CLI. The examples use the region and project in your active profile; replace
+zcp v1.1.0 adds scheduled snapshots for block storage volumes, improves DNS
+record creation and deletion, and includes a certificate-verification security
+fix. The examples use the region and project in your active profile; replace
 each quoted placeholder with a value from your account.
 
-## Added
+## Highlights
 
-`zcp snapshot schedule` supports hourly, daily, weekly, and monthly policies.
+**Scheduled block storage snapshots.** `zcp snapshot schedule` supports hourly,
+daily, weekly, and monthly policies.
 Schedules use the selected region and project, an IANA timezone, a whole-hour
 time, and a retention count. `--immediate` requests the first snapshot when the
 policy is created. `run-now` requests another snapshot without waiting for its
@@ -39,8 +40,6 @@ through `28`. `--at` accepts whole hours in `HH:00` format. Use `pause` to keep
 existing snapshots while stopping future runs. The platform rejects deletion of
 a schedule while its snapshots remain, so remove those snapshots before running
 `zcp snapshot schedule delete "<schedule-id>" --yes`.
-
-## Fixed
 
 ### DNS record operations
 
