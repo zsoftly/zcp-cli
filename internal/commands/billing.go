@@ -469,7 +469,7 @@ func runBillingSubscriptionsActive(cmd *cobra.Command, page int) error {
 		rows = append(rows, []string{
 			sub.Name,
 			sub.ProductDisplayName,
-			sub.Price,
+			sub.Price.String(),
 			sub.TotalUsage.String(),
 			sub.BillingCycle.Name,
 			sub.Project.Name,
@@ -520,7 +520,7 @@ func runBillingSubscriptionsInactive(cmd *cobra.Command, page int) error {
 		rows = append(rows, []string{
 			sub.Name,
 			sub.ProductDisplayName,
-			sub.Price,
+			sub.Price.String(),
 			sub.TotalUsage.String(),
 			sub.BillingCycle.Name,
 			sub.Project.Name,

@@ -111,7 +111,7 @@ type Subscription struct {
 	InvoiceItemsCount  int                 `json:"invoice_items_count"`
 	RenewAt            string              `json:"renew_at"`
 	Quantity           string              `json:"quantity"`
-	Price              string              `json:"price"`
+	Price              FlexFloat           `json:"price"`
 	TotalUsage         FlexFloat           `json:"total_usage"`
 	TotalUsageWithTax  FlexFloat           `json:"total_usage_with_tax"`
 	Project            SubscriptionProject `json:"project"`
