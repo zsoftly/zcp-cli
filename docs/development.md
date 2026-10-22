@@ -9,7 +9,7 @@ This guide explains how to set up a development environment for ZCP CLI, underst
 | Tool         | Version | Notes                                                 |
 | ------------ | ------- | ----------------------------------------------------- |
 | Go language  | 1.26.0  | Language minimum, from the `go` directive in `go.mod` |
-| Go toolchain | 1.26.9  | Selected by the `toolchain` directive in `go.mod`     |
+| Go toolchain | 1.26.10 | Selected by the `toolchain` directive in `go.mod`     |
 | Make         | Any     | GNU Make for build targets                            |
 | Git          | Any     | Required for version embedding via `git describe`     |
 
@@ -17,7 +17,7 @@ Install Go from [https://go.dev/dl/](https://go.dev/dl/). Verify your installati
 
 ```bash
 go version
-# go version go1.26.9 linux/amd64
+# go version go1.26.10 linux/amd64
 ```
 
 ---
