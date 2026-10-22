@@ -40,6 +40,37 @@ existing snapshots while stopping future runs. The platform rejects deletion of
 a schedule while its snapshots remain, so remove those snapshots before running
 `zcp snapshot schedule delete "<schedule-id>" --yes`.
 
+## Fixed
+
+### DNS record operations
+
+`zcp dns record-create` prints only the value it created. Use `--show-zone` on
+record creation or deletion to print the resulting zone. If the API accepts a
+create request but the CLI cannot verify the new value, the command returns an
+error and tells you to inspect the zone with `zcp dns show "<domain-slug>"`
+before retrying. It does not retry the create request.
+
+`zcp dns record-delete` normally prints a labelled pre-delete snapshot. Table
+output adds a `SOURCE` column. JSON and YAML set `source` to
+`pre_delete_snapshot`. This is a read taken before deletion, not a guarantee of
+which values were removed. A warning explains that concurrent changes can make
+the snapshot differ from the deleted values. It deletes the values from its
+initial snapshot one by one. If a deletion fails, it stops and reports partial
+progress. Values added after the read are left alone. Deleting an already absent
+record is idempotent.
+
+CAA values must quote their value:
+
+```bash
+zcp dns record-create --domain "<domain-slug>" --name @ --type CAA \
+  --content '0 issue "letsencrypt.org"'
+```
+
+### Build security
+
+The release build uses Go 1.26.10, which fixes the reachable
+certificate-verification vulnerability reported by `govulncheck`.
+
 ## Installation and upgrade
 
 The install scripts install the latest release and upgrade an existing

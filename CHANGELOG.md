@@ -7,6 +7,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.1.0] - 2026-10-21
+
+### Added
+
+- **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects non-snapshot policies and policies outside the selected region and project before writing.
+
 ### Security
 
 - **Go toolchain `1.26.9` -> `1.26.10`.** Fixes GO-2026-6809, a reachable `crypto/x509` certificate-verification vulnerability reported by `govulncheck`.
@@ -14,15 +20,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Fixed
 
 - `dns record-create` now returns an error, with `dns show` guidance, when the API accepts creation but the created value cannot be verified. It does not print an empty successful result or retry the create request.
-
-## [v1.1.0] - 2026-10-21
-
-### Added
-
-- **Block-storage snapshot schedules.** `zcp snapshot schedule` manages policies for a scoped volume. It supports creation, listing, reading, updates, pausing, resuming, immediate runs, and deletion. The CLI rejects non-snapshot policies and policies outside the selected region and project before writing.
-
-### Fixed
-
 - `dns record-delete` now deletes each value in the finite pre-delete snapshot with the raw content required by the DNS API, fixing multi-value record-set deletion. Values added after the read are left alone. A failure after partial deletion returns an error and identifies the partial progress instead of reporting a successful snapshot. An already absent DNS record is handled idempotently when the DNS API returns its verified `DNS record not found.` response.
 - `dns record-create` now rejects unquoted CAA values before sending a request; use `--content '0 issue "letsencrypt.org"'`.
 - `dns record-create` prints one row for the value it created. `dns record-delete` prints a pre-delete snapshot of the selected record set in table, JSON, and YAML output, marked by a `SOURCE` column in tables and `source: pre_delete_snapshot` in structured output. Both commands support `--show-zone` to print the resulting zone. MX output includes its preference, including `0`. `dns show` remains the full-zone read command.
