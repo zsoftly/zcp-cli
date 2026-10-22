@@ -290,8 +290,8 @@ func TestDNSRecordCreateFallsBackOnceAndSelectsCreatedValue(t *testing.T) {
 	}
 }
 
-func TestDNSRecordCreateUnverifiedOutputWarnsAndReturnsEmptyStructuredRows(t *testing.T) {
-	for _, format := range []string{"json", "yaml"} {
+func TestDNSRecordCreateUnverifiedOutputReturnsErrorWithoutOutput(t *testing.T) {
+	for _, format := range []string{"table", "json", "yaml"} {
 		t.Run(format, func(t *testing.T) {
 			var postCalls, showCalls int
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -310,21 +310,23 @@ func TestDNSRecordCreateUnverifiedOutputWarnsAndReturnsEmptyStructuredRows(t *te
 			defer srv.Close()
 			t.Setenv("ZCP_BEARER_TOKEN", "test-token")
 
-			out, stderr, err := execCaptureStdio(t, NewDNSCmd(), "record-create", "--domain", "example-com-1", "--name", "created", "--type", "A", "--content", "192.0.2.1", "--api-url", srv.URL, "--output", format)
-			if err != nil {
-				t.Fatalf("record-create error = %v", err)
+			cmd := newDNSRecordCreateCmd()
+			cmd.SilenceUsage = true
+			out, stderr, err := execCaptureStdio(t, cmd, "--domain", "example-com-1", "--name", "created", "--type", "A", "--content", "192.0.2.1", "--api-url", srv.URL, "--output", format)
+			if err == nil {
+				t.Fatal("record-create error = nil, want verification error")
 			}
-			if postCalls != 1 || showCalls != 1 || !strings.Contains(stderr, "could not be matched") {
-				t.Errorf("post=%d show=%d stderr=%q, want one write, one lookup, and warning", postCalls, showCalls, stderr)
+			if !strings.Contains(err.Error(), "API accepted creation") || !strings.Contains(err.Error(), `dns show "example-com-1"`) || !strings.Contains(err.Error(), "before retrying") {
+				t.Errorf("error = %q, want accepted-creation error that directs dns show before retrying", err)
 			}
-			if format == "json" && strings.TrimSpace(out) != "[]" {
-				t.Errorf("JSON output = %q, want []", out)
+			if postCalls != 1 || showCalls != 1 {
+				t.Errorf("post=%d show=%d, want one write and one lookup", postCalls, showCalls)
 			}
-			if format == "yaml" {
-				var rows []map[string]string
-				if err := yaml.Unmarshal([]byte(out), &rows); err != nil || len(rows) != 0 {
-					t.Errorf("YAML output = %q rows=%#v error=%v, want empty list", out, rows, err)
-				}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("stdout = %q, want empty output", out)
+			}
+			if !strings.Contains(stderr, "Error: "+err.Error()) {
+				t.Errorf("stderr = %q, want Cobra error output", stderr)
 			}
 		})
 	}

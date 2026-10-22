@@ -447,6 +447,8 @@ zcp dns record-create --domain <domain-slug> --name @ --type MX --content mail.e
 # values added concurrently are left alone. With --show-zone, deletion
 # prints the resulting zone without the snapshot label or warning.
 # CAA values must be quoted, for example: --content '0 issue "letsencrypt.org"'.
+# If the created value is missing from both the response and follow-up lookup, the command
+# returns an error and directs you to inspect the zone with `dns show` before retrying.
 # If a successful delete cannot identify previous values, it prints an empty result and a warning.
 zcp dns record-create --domain <domain-slug> --name www --type A --content 192.0.2.1 --show-zone
 

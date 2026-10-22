@@ -401,8 +401,7 @@ func runDNSRecordCreate(cmd *cobra.Command, domainSlug string, req dns.CreateRec
 		created = findCreatedDNSRecord(domain, req)
 	}
 	if created == nil {
-		fmt.Fprintf(os.Stderr, "DNS record created, but its value could not be matched. Use dns show %q to inspect the zone.\n", domainSlug)
-		return printDNSRecordRows(printer, nil)
+		return fmt.Errorf("dns record-create: API accepted creation, but the created record could not be verified; inspect with dns show %q before retrying", domainSlug)
 	}
 	return printDNSRecordRows(printer, []dns.Record{*created})
 }
