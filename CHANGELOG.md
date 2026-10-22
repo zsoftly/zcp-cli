@@ -7,6 +7,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Security
+
+- **Go toolchain `1.26.9` -> `1.26.10`.** Fixes GO-2026-6809, a reachable `crypto/x509` certificate-verification vulnerability reported by `govulncheck`.
+
 ### Fixed
 
 - `dns record-create` now returns an error, with `dns show` guidance, when the API accepts creation but the created value cannot be verified. It does not print an empty successful result or retry the create request.
