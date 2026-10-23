@@ -43,11 +43,12 @@ a schedule while its snapshots remain, so remove those snapshots before running
 
 ### DNS record operations
 
-`zcp dns record-create` prints only the value it created. Use `--show-zone` on
-record creation or deletion to print the resulting zone. If the API accepts a
-create request but the CLI cannot verify the new value, the command returns an
-error and tells you to inspect the zone with `zcp dns show "<domain-slug>"`
-before retrying. It does not retry the create request.
+By default, `zcp dns record-create` prints only the value it created. If the API
+accepts a create request but the CLI cannot verify the new value, the command
+returns an error and tells you to inspect the zone with `zcp dns show "<domain-slug>"` before
+retrying. It does not retry the create request. Use `--show-zone` on record creation or deletion to
+print the resulting zone. For creation, `--show-zone` prints the zone without this created-value
+check.
 
 `zcp dns record-delete` normally prints a labelled pre-delete snapshot. Table
 output adds a `SOURCE` column. JSON and YAML set `source` to
