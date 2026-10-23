@@ -1,13 +1,14 @@
 # zcp v1.1.0 Release Notes
 
-zcp v1.1.0 adds scheduled snapshots for block storage volumes. Create a policy
-for a volume, then list, inspect, update, pause, resume, run, or delete it from
-the CLI. The examples use the region and project in your active profile; replace
+zcp v1.1.0 adds scheduled snapshots for block storage volumes, improves DNS
+record creation and deletion, and includes a certificate-verification security
+fix. The examples use the region and project in your active profile; replace
 each quoted placeholder with a value from your account.
 
-## Added
+## Highlights
 
-`zcp snapshot schedule` supports hourly, daily, weekly, and monthly policies.
+**Scheduled block storage snapshots.** `zcp snapshot schedule` supports hourly,
+daily, weekly, and monthly policies.
 Schedules use the selected region and project, an IANA timezone, a whole-hour
 time, and a retention count. `--immediate` requests the first snapshot when the
 policy is created. `run-now` requests another snapshot without waiting for its
@@ -39,6 +40,36 @@ through `28`. `--at` accepts whole hours in `HH:00` format. Use `pause` to keep
 existing snapshots while stopping future runs. The platform rejects deletion of
 a schedule while its snapshots remain, so remove those snapshots before running
 `zcp snapshot schedule delete "<schedule-id>" --yes`.
+
+### DNS record operations
+
+By default, `zcp dns record-create` prints only the value it created. If the API
+accepts a create request but the CLI cannot verify the new value, the command
+returns an error and tells you to inspect the zone with `zcp dns show "<domain-slug>"` before
+retrying. It does not retry the create request. Use `--show-zone` on record creation or deletion to
+print the resulting zone. For creation, `--show-zone` prints the zone without this created-value
+check.
+
+`zcp dns record-delete` normally prints a labelled pre-delete snapshot. Table
+output adds a `SOURCE` column. JSON and YAML set `source` to
+`pre_delete_snapshot`. This is a read taken before deletion, not a guarantee of
+which values were removed. A warning explains that concurrent changes can make
+the snapshot differ from the deleted values. It deletes the values from its
+initial snapshot one by one. If a deletion fails, it stops and reports partial
+progress. Values added after the read are left alone. Deleting an already absent
+record is idempotent.
+
+CAA values must quote their value:
+
+```bash
+zcp dns record-create --domain "<domain-slug>" --name @ --type CAA \
+  --content '0 issue "letsencrypt.org"'
+```
+
+### Build security
+
+The release build uses Go 1.26.10, which fixes the reachable
+certificate-verification vulnerability reported by `govulncheck`.
 
 ## Installation and upgrade
 
