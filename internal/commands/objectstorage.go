@@ -868,7 +868,7 @@ func newOSBucketTagCmd() *cobra.Command {
 }
 
 func newOSBucketEncryptionCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "encryption", Short: "Manage default bucket encryption (SSE-S3)"}
+	cmd := &cobra.Command{Use: "encryption", Short: "Manage default bucket encryption (SSE-S3 or SSE-KMS)"}
 	cmd.AddCommand(&cobra.Command{
 		Use:   "status <storage-slug> <bucket-slug>",
 		Short: "Show a bucket's default encryption",
@@ -881,32 +881,45 @@ func newOSBucketEncryptionCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			alg, err := svc.GetBucketEncryption(ctx, args[0], args[1])
+			encryption, err := svc.GetBucketEncryption(ctx, args[0], args[1])
 			if err != nil {
 				return fmt.Errorf("object-storage bucket encryption status: %w", err)
 			}
-			if alg == "" {
-				alg = "none"
+			if encryption.Algorithm == "" {
+				encryption.Algorithm = "none"
 			}
-			return printer.PrintTable([]string{"BUCKET", "ENCRYPTION"}, [][]string{{args[1], alg}})
+			return printer.PrintTable([]string{"BUCKET", "ENCRYPTION", "KMS KEY ID"}, [][]string{{args[1], encryption.Algorithm, encryption.KMSKeyID}})
 		},
 	})
-	cmd.AddCommand(&cobra.Command{
+	var encryption objectstorage.EncryptionOptions
+	enableCmd := &cobra.Command{
 		Use:   "enable <storage-slug> <bucket-slug>",
-		Short: "Not supported on this platform yet: enabling default SSE-S3 encryption breaks uploads",
-		Long: `Not supported on this platform yet.
-
-The object storage gateway has no encryption key backend configured. Enabling
-default SSE-S3 encryption on a bucket makes every subsequent upload to that
-bucket fail with a 400 InvalidArgument error until encryption is disabled
-again. This command is kept registered for help and scripting purposes, but
-it refuses to run. Use 'status' to check a bucket's current encryption, or
-'disable' to clear a setting that is already causing this problem.`,
+		Short: "Set default SSE-S3 or SSE-KMS encryption for subsequent writes",
+		Long: `Set default encryption on a new or existing bucket. Existing objects and
+versions are unchanged. Requires a configured gateway encryption backend.
+SSE-KMS uses an operator-provisioned service-managed key ID. Ordinary S3
+permissions still apply; this does not configure customer KMS key policies.`,
 		Args: exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("bucket encryption enable is not supported on this platform yet: the object storage gateway has no encryption key backend, and enabling default SSE-S3 makes every upload to the bucket fail with InvalidArgument until it is disabled again. Use 'zcp object-storage bucket encryption status' and 'encryption disable' to check or clear an existing setting. Support will return once the platform adds it")
+			if err := encryption.Validate(); err != nil {
+				return err
+			}
+			_, client, _, err := buildClientAndPrinter(cmd)
+			if err != nil {
+				return err
+			}
+			svc := objectstorage.NewService(client)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
+			defer cancel()
+			if err := svc.SetBucketEncryption(ctx, args[0], args[1], encryption); err != nil {
+				return fmt.Errorf("object-storage bucket encryption enable: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Default encryption set to %s on bucket %q; existing objects and versions unchanged.\n", encryption.Algorithm, args[1])
+			return nil
 		},
-	})
+	}
+	addOSEncryptionFlags(enableCmd, &encryption, "AES256")
+	cmd.AddCommand(enableCmd)
 	cmd.AddCommand(&cobra.Command{
 		Use:   "disable <storage-slug> <bucket-slug>",
 		Short: "Disable default encryption on a bucket",
@@ -1483,6 +1496,7 @@ func newOSObjectGetCmd() *cobra.Command {
 }
 
 func newOSObjectPutCmd() *cobra.Command {
+	var encryption objectstorage.EncryptionOptions
 	var (
 		key         string
 		contentType string
@@ -1498,6 +1512,9 @@ func newOSObjectPutCmd() *cobra.Command {
   zcp object-storage object put my-storage-1 my-bucket ./data.bin --content-type application/octet-stream --metadata owner=alice`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			storageSlug, bucketSlug, localFile := args[0], args[1], args[2]
+			if err := encryption.Validate(); err != nil {
+				return err
+			}
 
 			meta, err := parseKVTags(metadata)
 			if err != nil {
@@ -1512,7 +1529,7 @@ func newOSObjectPutCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
 
-			size, err := svc.PutObject(ctx, storageSlug, bucketSlug, localFile, key, contentType, meta)
+			size, err := svc.PutObject(ctx, storageSlug, bucketSlug, localFile, key, contentType, meta, encryption)
 			if err != nil {
 				return fmt.Errorf("object-storage object put: %w", err)
 			}
@@ -1525,6 +1542,7 @@ func newOSObjectPutCmd() *cobra.Command {
 			return nil
 		},
 	}
+	addOSEncryptionFlags(cmd, &encryption, "")
 	cmd.Flags().StringVar(&key, "key", "", "Remote object key (defaults to the local filename)")
 	cmd.Flags().StringVar(&contentType, "content-type", "", "Content-Type header (auto-detected from extension when omitted)")
 	cmd.Flags().StringArrayVar(&metadata, "metadata", nil, "User metadata as key=value (x-amz-meta-*, repeatable)")
@@ -1739,11 +1757,15 @@ func newOSObjectRestoreCmd() *cobra.Command {
 }
 
 func newOSObjectCopyCmd() *cobra.Command {
-	return &cobra.Command{
+	var encryption objectstorage.EncryptionOptions
+	cmd := &cobra.Command{
 		Use:   "copy <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side copy an object (no download/upload round-trip)",
 		Args:  exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := encryption.Validate(); err != nil {
+				return err
+			}
 			_, client, _, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
@@ -1751,21 +1773,27 @@ func newOSObjectCopyCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			if err := svc.CopyObject(ctx, args[0], args[1], args[2], args[3], args[4]); err != nil {
+			if err := svc.CopyObject(ctx, args[0], args[1], args[2], args[3], args[4], encryption); err != nil {
 				return fmt.Errorf("object-storage object copy: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Copied %s/%s to %s/%s.\n", args[1], args[2], args[3], args[4])
 			return nil
 		},
 	}
+	addOSEncryptionFlags(cmd, &encryption, "")
+	return cmd
 }
 
 func newOSObjectMoveCmd() *cobra.Command {
-	return &cobra.Command{
+	var encryption objectstorage.EncryptionOptions
+	cmd := &cobra.Command{
 		Use:   "move <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side move an object (copy then delete the source)",
 		Args:  exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := encryption.Validate(); err != nil {
+				return err
+			}
 			_, client, _, err := buildClientAndPrinter(cmd)
 			if err != nil {
 				return err
@@ -1773,13 +1801,15 @@ func newOSObjectMoveCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			if err := svc.MoveObject(ctx, args[0], args[1], args[2], args[3], args[4]); err != nil {
+			if err := svc.MoveObject(ctx, args[0], args[1], args[2], args[3], args[4], encryption); err != nil {
 				return fmt.Errorf("object-storage object move: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Moved %s/%s to %s/%s.\n", args[1], args[2], args[3], args[4])
 			return nil
 		},
 	}
+	addOSEncryptionFlags(cmd, &encryption, "")
+	return cmd
 }
 
 func newOSObjectTagCmd() *cobra.Command {
@@ -1902,4 +1932,9 @@ func newOSObjectDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&versionID, "version-id", "", "Delete a specific object version (instead of adding a delete marker)")
 	return cmd
+}
+
+func addOSEncryptionFlags(cmd *cobra.Command, encryption *objectstorage.EncryptionOptions, defaultAlgorithm string) {
+	cmd.Flags().StringVar(&encryption.Algorithm, "sse", defaultAlgorithm, "Server-side encryption: AES256 (SSE-S3) or aws:kms (SSE-KMS)")
+	cmd.Flags().StringVar(&encryption.KMSKeyID, "sse-kms-key-id", "", "Operator-provisioned, slash-free service-managed key ID (requires --sse aws:kms)")
 }
