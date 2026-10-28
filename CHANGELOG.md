@@ -18,6 +18,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Fixed
 
 - Moves preserve the source when a copy fails or returns an incomplete result.
+  HTTP-200 copy errors retain their S3 error code and message.
+- Bucket encryption commands resolve management bucket slugs to S3 names before
+  reading or changing the default.
 
 ## [v1.1.0] - 2026-10-23
 

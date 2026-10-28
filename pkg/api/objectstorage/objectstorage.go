@@ -1327,8 +1327,8 @@ func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 
 func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions) error {
 	info, err := mc.CopyObject(ctx, dst, src)
-	// The SDK can decode an HTTP 200 Error body into an empty UploadInfo.
-	// Require the copy result fields before reporting success or deleting a source.
+	// Require complete result fields even after rejecting embedded S3 errors,
+	// before reporting success or deleting a source.
 	if err == nil && (strings.TrimSpace(info.ETag) == "" || info.LastModified.IsZero()) {
 		err = fmt.Errorf("copy response is missing ETag or LastModified")
 	}

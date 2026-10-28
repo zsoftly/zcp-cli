@@ -85,3 +85,57 @@ func TestCopyObjectRejectsInPlaceReencryption(t *testing.T) {
 		t.Fatalf("requests=%d err=%v", requests, err)
 	}
 }
+
+func TestCopyAndMoveEmbeddedErrorsPreserveS3CauseAndSource(t *testing.T) {
+	for _, selection := range []objectstorage.EncryptionOptions{
+		{}, {Algorithm: "AES256"}, {Algorithm: "aws:kms", KMSKeyID: "service-key"},
+	} {
+		for _, tc := range []struct {
+			code, message string
+			guidance      bool
+		}{
+			{"InternalError", "copy backend unavailable", false},
+			{"NotImplemented", "encryption unavailable", true},
+			{"InternalError", "copy backend EOF", false},
+		} {
+			for _, move := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/%s/move=%t", selection.Algorithm, tc.code, tc.message, move), func(t *testing.T) {
+					source := "original contents"
+					requests := 0
+					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						requests++
+						if r.Method == http.MethodDelete {
+							source = ""
+							w.WriteHeader(http.StatusNoContent)
+							return
+						}
+						if r.Method != http.MethodPut || r.Header.Get("X-Amz-Copy-Source") != "source/key" {
+							t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+						}
+						w.Header().Set("Content-Type", "application/xml")
+						fmt.Fprintf(w, ` <Error xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Code>%s</Code><Message>%s</Message><RequestId>copy-request</RequestId></Error>`, tc.code, tc.message)
+					}))
+					svc := objectstorage.NewService(newTestClient(t, mgmt))
+					operation := svc.CopyObject
+					if move {
+						operation = svc.MoveObject
+					}
+					err := operation(context.Background(), "my-storage-1", "source", "key", "destination", "copy", selection)
+					var cause minio.ErrorResponse
+					if !errors.As(err, &cause) || cause.Code != tc.code || cause.Message != tc.message || cause.StatusCode != http.StatusOK || cause.RequestID != "copy-request" {
+						t.Fatalf("S3 cause lost: cause=%+v error=%v", cause, err)
+					}
+					if !strings.Contains(err.Error(), tc.message) || !strings.Contains(err.Error(), "copying source/key to destination/copy") {
+						t.Fatalf("missing wrapped copy diagnostic: %v", err)
+					}
+					if strings.Contains(err.Error(), "regional encryption support") != (tc.guidance && selection.Algorithm != "") {
+						t.Fatalf("regional guidance mismatch: %v", err)
+					}
+					if source != "original contents" || requests != 1 {
+						t.Fatalf("source=%q requests=%d; failed copy must preserve source without retry", source, requests)
+					}
+				})
+			}
+		}
+	}
+}

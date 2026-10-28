@@ -881,7 +881,11 @@ func newOSBucketEncryptionCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			encryption, err := svc.GetBucketEncryption(ctx, args[0], args[1])
+			bucket, err := svc.GetBucket(ctx, args[0], args[1])
+			if err != nil {
+				return fmt.Errorf("object-storage bucket encryption status: %w", err)
+			}
+			encryption, err := svc.GetBucketEncryption(ctx, args[0], bucket.Name)
 			if err != nil {
 				return fmt.Errorf("object-storage bucket encryption status: %w", err)
 			}
@@ -912,7 +916,11 @@ permissions still apply; this does not configure customer KMS key policies.`,
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			if err := svc.SetBucketEncryption(ctx, args[0], args[1], encryption); err != nil {
+			bucket, err := svc.GetBucket(ctx, args[0], args[1])
+			if err != nil {
+				return fmt.Errorf("object-storage bucket encryption enable: %w", err)
+			}
+			if err := svc.SetBucketEncryption(ctx, args[0], bucket.Name, encryption); err != nil {
 				return fmt.Errorf("object-storage bucket encryption enable: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Default encryption set to %s on bucket %q; existing objects and versions unchanged.\n", encryption.Algorithm, args[1])
@@ -933,7 +941,11 @@ permissions still apply; this does not configure customer KMS key policies.`,
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
-			if err := svc.DisableBucketEncryption(ctx, args[0], args[1]); err != nil {
+			bucket, err := svc.GetBucket(ctx, args[0], args[1])
+			if err != nil {
+				return fmt.Errorf("object-storage bucket encryption disable: %w", err)
+			}
+			if err := svc.DisableBucketEncryption(ctx, args[0], bucket.Name); err != nil {
 				return fmt.Errorf("object-storage bucket encryption disable: %w", err)
 			}
 			fmt.Fprintf(os.Stdout, "Default encryption disabled on bucket %q.\n", args[1])

@@ -40,6 +40,10 @@ func TestObjectStorageEncryptionCommands(t *testing.T) {
 			defer s3.Close()
 			mgmt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/object-storages/store/buckets/bucket" {
+					fmt.Fprint(w, `{"status":"Success","data":{"slug":"bucket","name":"bucket"}}`)
+					return
+				}
 				if r.URL.Path == "/object-storages/store/keys" {
 					fmt.Fprint(w, `{"status":"Success","data":[{"api_key":"test-access","status":"active"}]}`)
 					return
@@ -139,6 +143,69 @@ func TestCopyEncryptionWarningAndHelp(t *testing.T) {
 		stdout, _, err := execCmd(t, NewObjectStorageCmd(), "object", operation, "--help")
 		if err != nil || !strings.Contains(stdout, "destination bucket default") || !strings.Contains(stdout, "--sse") {
 			t.Fatalf("%s help=%q err=%v", operation, stdout, err)
+		}
+	}
+}
+
+func TestBucketEncryptionCommandsResolveSlug(t *testing.T) {
+	for _, operation := range []struct{ command, method string }{
+		{"enable", http.MethodPut}, {"status", http.MethodGet}, {"disable", http.MethodDelete},
+	} {
+		for _, found := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/found=%t", operation.command, found), func(t *testing.T) {
+				t.Setenv("ZCP_BEARER_TOKEN", "test-token")
+				t.Setenv("ZCP_S3_ACCESS_KEY", "test-access")
+				t.Setenv("ZCP_S3_SECRET_KEY", "test-secret")
+				var requests []string
+				s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests = append(requests, r.Method+" "+r.URL.Path)
+					if r.Method != operation.method || strings.TrimSuffix(r.URL.Path, "/") != "/media" || !r.URL.Query().Has("encryption") {
+						t.Errorf("unexpected S3 request: %s %s", r.Method, r.URL)
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					if r.Method == http.MethodGet {
+						fmt.Fprint(w, `<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>AES256</SSEAlgorithm></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>`)
+					} else if r.Method == http.MethodDelete {
+						w.WriteHeader(http.StatusNoContent)
+					}
+				}))
+				defer s3.Close()
+				mgmt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests = append(requests, r.Method+" "+r.URL.Path)
+					w.Header().Set("Content-Type", "application/json")
+					switch r.URL.Path {
+					case "/object-storages/assets-x1/buckets/media-b1":
+						if !found {
+							w.WriteHeader(http.StatusNotFound)
+							fmt.Fprint(w, `{"status":"Error","message":"Bucket not found."}`)
+							return
+						}
+						fmt.Fprint(w, `{"status":"Success","data":{"slug":"media-b1","name":"media"}}`)
+					case "/object-storages/assets-x1":
+						fmt.Fprintf(w, `{"status":"Success","data":{"slug":"assets-x1","region":{"slug":"os-test","cloud_provider_setup":{"config":{"s3_endpoint":%q}}}}}`, s3.URL)
+					case "/object-storages/assets-x1/keys":
+						fmt.Fprint(w, `{"status":"Success","data":[{"api_key":"test-access","status":"active"}]}`)
+					default:
+						t.Errorf("unexpected management request: %s %s", r.Method, r.URL)
+						w.WriteHeader(http.StatusNotFound)
+					}
+				}))
+				defer mgmt.Close()
+				stdout, _, err := execCmd(t, NewObjectStorageCmd(), "bucket", "encryption", operation.command, "assets-x1", "media-b1", "--api-url", mgmt.URL)
+				want := "GET /object-storages/assets-x1/buckets/media-b1"
+				if found {
+					if err != nil || (operation.command == "status" && !strings.Contains(stdout, "media-b1")) {
+						t.Fatalf("output=%q error=%v", stdout, err)
+					}
+					want += ",GET /object-storages/assets-x1,GET /object-storages/assets-x1/keys," + operation.method + " /media/"
+				} else if err == nil || !strings.Contains(err.Error(), "getting bucket media-b1") {
+					t.Fatalf("unresolved bucket error=%v", err)
+				}
+				if got := strings.Join(requests, ","); got != want {
+					t.Fatalf("requests=%q, want %q", got, want)
+				}
+			})
 		}
 	}
 }
