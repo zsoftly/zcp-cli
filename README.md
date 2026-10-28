@@ -108,12 +108,12 @@ Run `zcp <command> --help` for the full flag list of any command, and `zcp --hel
 
 For copy-paste examples covering every resource — compute, storage, networking, VPCs, Kubernetes, object storage, DNS, billing, and more — see **[docs/commands.md](docs/commands.md)**.
 
-> **Object storage is partly CLI-only.** Instance and basic bucket management go through the ZCP REST API and are mirrored in the Web UI, but the advanced S3 operations (versioning, policy, tagging, encryption, lifecycle, CORS, presigned URLs, copy/move, multipart cleanup, and all object uploads/downloads) talk directly to the Ceph RADOS Gateway over the S3 protocol and are available **only through this CLI** — the CMP has not yet exposed them via the REST API or Web UI. See [docs/commands.md](docs/commands.md#two-backends--and-what-is-cli-only).
+> **Object storage is partly CLI-only.** Instance and basic bucket management go through the ZCP REST API and are mirrored in the Web UI, but the advanced S3 operations (versioning, policy, tagging, encryption, lifecycle, CORS, presigned URLs, copy/move, multipart cleanup, and all object uploads/downloads) talk directly to the ZCP object storage service over the S3 protocol and are available **only through this CLI** — the CMP has not yet exposed them via the REST API or Web UI. See [docs/commands.md](docs/commands.md#two-backends--and-what-is-cli-only).
 
 Object uploads, copies and moves accept `--sse AES256` or
 `--sse aws:kms --sse-kms-key-id <service-key-id>`. Bucket defaults use
 `zcp object-storage bucket encryption enable|status|disable`.
-On Ceph RGW 20.2.0, ZCP CLI encrypted copy and move use multipart copy and
+ZCP CLI encrypted copy and move use multipart copy and
 verify destination encryption before success or source deletion. Without
 `--sse`, encrypted sources retain their algorithm and KMS key. AWS CLI and
 other S3 clients must use multipart copy or download and re-upload.

@@ -45,8 +45,8 @@ After cutting a release, add the new version to the **CLI (`zcp`)** section of
 
 1. Add a `### vX.Y.Z - <Month DD, YYYY>` entry at the top of the CLI section, summarizing
    the **user-facing** highlights only. Skip internal struct/JSON-tag/test changes.
-2. **Keep it vendor-neutral.** Public Cloud docs must not name internal backends (Ceph,
-   RGW, etc.). Use "S3-compatible", "the platform API", and the like.
+2. **Keep it vendor-neutral.** Public Cloud docs must not name internal backends, products or versions.
+   Use "S3-compatible", "the platform API", and the like.
 3. In `zcp-docs`, run `pnpm fmt && pnpm build` (the build validates internal links).
 
 > **Future automation (gated).** Auto-generating the docs CLI section from this repo's

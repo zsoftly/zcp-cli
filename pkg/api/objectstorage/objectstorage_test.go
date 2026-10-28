@@ -233,7 +233,7 @@ func TestCreate(t *testing.T) {
 	req := objectstorage.CreateRequest{
 		Name:            "new-storage",
 		Project:         "default-9",
-		CloudProvider:   "ceph",
+		CloudProvider:   "example-objstore",
 		Region:          "yul-1",
 		BillingCycle:    "hourly",
 		StorageCategory: "premium-ssd",
@@ -246,8 +246,8 @@ func TestCreate(t *testing.T) {
 	if store.ID != "os-new" {
 		t.Errorf("store.ID = %q, want %q", store.ID, "os-new")
 	}
-	if gotBody["cloud_provider"] != "ceph" {
-		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "ceph")
+	if gotBody["cloud_provider"] != "example-objstore" {
+		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "example-objstore")
 	}
 	if gotBody["region"] != "yul-1" {
 		t.Errorf("body region = %v, want %q", gotBody["region"], "yul-1")

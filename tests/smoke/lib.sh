@@ -185,12 +185,26 @@ api_delete() {
 # Each detector echoes a value and caches it in a global so repeat calls are free.
 _DET_REGION=""; _DET_CP=""; _DET_PROJECT=""; _DET_REGION_ID=""
 
+# provider_for_service <service-name> — slug of the first active cloud provider
+# whose catalog advertises the given service (e.g. "Virtual Machine", "Object Storage").
+provider_for_service() {
+  api_get "/cloud-providers" | jq -r --arg svc "$1" '.data[] | select(.status==true) | select((.services//[]) | index($svc)) | .slug' | head -1
+}
+
+# region_for_service <service-name> — first active region served by that provider.
+region_for_service() {
+  local cp
+  cp="$(provider_for_service "$1")"
+  [[ -z "$cp" ]] && return 0
+  api_get "/regions" | jq -r --arg cp "$cp" '.data[] | select(.status==true) | select((.cloud_provider.slug//"") == $cp) | .slug' | head -1
+}
+
 det_region() {
   if [[ -n "$_DET_REGION" ]]; then printf '%s' "$_DET_REGION"; return; fi
   if [[ -n "${ZCP_SMOKE_REGION:-}" ]]; then _DET_REGION="$ZCP_SMOKE_REGION"
   else
-    # first active region whose provider is a real compute provider (not Ceph/Dns)
-    _DET_REGION="$(api_get "/regions" | jq -r '.data[] | select(.status==true) | select((.cloud_provider.slug//"")|test("ceph|dns")|not) | .slug' | head -1)"
+    # first active region whose provider offers compute (not the object-storage or DNS providers)
+    _DET_REGION="$(region_for_service "Virtual Machine")"
   fi
   printf '%s' "$_DET_REGION"
 }

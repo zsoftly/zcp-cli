@@ -731,7 +731,7 @@ zcp object-storage bucket tag set <slug> <bucket-slug> --tag env=prod --tag team
 zcp object-storage bucket tag delete <slug> <bucket-slug>
 
 # Default encryption (SSE-S3 or service-managed SSE-KMS)
-# Requires a configured regional encryption backend. Defaults affect future uploads, not copies or existing objects.
+# Requires a configured regional encryption key service. Defaults affect future uploads, not copies or existing objects.
 zcp object-storage bucket encryption status <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug> --sse aws:kms --sse-kms-key-id <service-key-id>
@@ -788,7 +788,7 @@ zcp object-storage object restore <slug> <bucket> <key>                  # undel
 
 ### Encryption requirements and limitations
 
-Encryption requires an enabled regional gateway backend. Confirm availability
+Encryption requires an enabled regional key management service. Confirm availability
 with ZCP support before use. This client support does not announce encryption
 availability in any region. SSE-KMS requires an operator-provisioned,
 slash-free service-managed key ID, not key material or a customer KMS policy.
@@ -798,7 +798,7 @@ and invalid-key errors remain errors; the CLI never retries without encryption.
 Bucket defaults apply to subsequent uploads. Existing objects and versions stay
 unchanged. Headerless copies do not inherit the destination bucket default.
 
-On Ceph RGW 20.2.0, ZCP CLI encrypted copy and move use multipart copy and
+ZCP CLI encrypted copy and move use multipart copy and
 verify the destination algorithm and any requested KMS key ID with HEAD.
 Pass `--sse AES256` or `--sse aws:kms --sse-kms-key-id <service-key-id>` to
 select destination encryption. Without `--sse`, copies of encrypted sources
@@ -806,9 +806,8 @@ preserve the source algorithm and KMS key. Copies of plaintext sources without
 `--sse` keep the existing headerless behavior and print a warning.
 
 AWS CLI and other S3 clients must use multipart copy with destination encryption
-set at multipart initiation, or download and re-upload. Ceph RGW 20.2.0 ignores
-SSE on single-part copies from plaintext and rejects single-part copies from
-encrypted sources. The service refuses single-part copies carrying SSE headers.
+set at multipart initiation, or download and re-upload. The service refuses
+single-part copies carrying SSE headers.
 
 Moves delete the source only after destination encryption verification succeeds.
 On verification failure, the CLI reports an error and retains the source. It
@@ -834,7 +833,7 @@ the CLI:
   management (`bucket create`, `bucket list`, `bucket get`, `bucket delete`).
   `object get` also goes through the REST API (it returns object metadata only).
 
-- **Direct to the Ceph RADOS Gateway over the S3 protocol** (AWS Signature V4,
+- **Direct to the ZCP object storage service over the S3 protocol** (AWS Signature V4,
   via the [minio-go](https://github.com/minio/minio-go) client): **everything
   else.** This covers all remaining `object` operations (`list`, `put`,
   `download`, `url`, `put-url`, `stat`, `versions`, `restore`, `copy`, `move`,
@@ -848,7 +847,7 @@ the CLI:
 > **CLI-only (not yet on the REST API or Web UI):** every S3-direct operation in
 > the second group above is available **only through this CLI**. The CMP has not
 > yet exposed these operations via the ZCP REST API or the Web UI, so they cannot
-> be performed there; the CLI talks straight to Ceph RGW. Only the REST-backed
+> be performed there; the CLI talks straight to the object storage service. Only the REST-backed
 > operations in the first group are mirrored in the Web UI.
 
 `object get` returns metadata only. Use `object download` to fetch the contents,

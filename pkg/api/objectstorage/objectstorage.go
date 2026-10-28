@@ -1,4 +1,4 @@
-// Package objectstorage provides ZCP Ceph object storage API operations.
+// Package objectstorage provides ZCP object storage API operations.
 package objectstorage
 
 import (
@@ -86,7 +86,7 @@ type Offering struct {
 	RenewAt      string        `json:"renew_at" yaml:"renew_at"`
 }
 
-// ObjectStorage represents a Ceph object storage instance.
+// ObjectStorage represents an object storage instance.
 type ObjectStorage struct {
 	ID                   string         `json:"id" yaml:"id"`
 	Slug                 string         `json:"slug" yaml:"slug"`
@@ -409,7 +409,7 @@ func (s *Service) CreateKey(ctx context.Context, slug string) (*Key, error) {
 	return &resp.Data, nil
 }
 
-// DeleteKey revokes an S3 access key in CMP and Ceph.
+// DeleteKey revokes an S3 access key in CMP.
 func (s *Service) DeleteKey(ctx context.Context, slug, keyID string) error {
 	if err := s.client.Delete(ctx, "/object-storages/"+slug+"/keys/"+keyID, nil); err != nil {
 		return fmt.Errorf("deleting key %s for %s: %w", keyID, slug, err)
@@ -725,7 +725,7 @@ func bucketPublicPolicy(bucketName string, write bool) string {
 }
 
 // SetBucketVisibility makes a bucket public or private using an S3 bucket policy
-// (the mechanism Ceph RGW honors for anonymous object access; a bucket canned
+// (the mechanism the service honors for anonymous object access; a bucket canned
 // ACL does not grant s3:GetObject on objects). "private" removes the policy.
 func (s *Service) SetBucketVisibility(ctx context.Context, slug, bucketName, visibility string) error {
 	store, err := s.Get(ctx, slug)
@@ -754,7 +754,7 @@ func (s *Service) SetBucketVisibility(ctx context.Context, slug, bucketName, vis
 }
 
 // SetBucketVersioning enables or suspends object versioning on a bucket (S3
-// protocol). Ceph RGW supports versioning; once enabled, overwritten and deleted
+// protocol). The service supports versioning; once enabled, overwritten and deleted
 // objects retain prior versions.
 func (s *Service) SetBucketVersioning(ctx context.Context, slug, bucketName string, enabled bool) error {
 	store, err := s.Get(ctx, slug)
@@ -1012,7 +1012,7 @@ func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName stri
 
 // SetBucketEncryption sets a default for subsequent uploads on an existing bucket.
 // Existing objects and versions are unchanged.
-// Headerless Ceph copies do not inherit this default.
+// Headerless copies do not inherit this default.
 func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string, encryption EncryptionOptions) error {
 	if err := encryption.Validate(); err != nil {
 		return err
@@ -1047,7 +1047,7 @@ func (s *Service) DisableBucketEncryption(ctx context.Context, slug, bucketName 
 }
 
 // Lifecycle XML types with a guaranteed <Filter><Prefix> element. minio-go omits
-// the <Filter> entirely for an empty prefix, which strict S3 / Ceph RGW rejects
+// the <Filter> entirely for an empty prefix, which strict S3 implementations reject
 // ("not well-formed against schema"), so for the "all objects" case we marshal
 // our own body and PUT it directly (see putBucketSubresourceXML). Optional
 // actions are pointers so they are omitted when unset.
@@ -1109,7 +1109,7 @@ func (s *Service) SetBucketExpiry(ctx context.Context, slug, bucketName, prefix 
 // putBucketSubresourceXML PUTs a raw XML body to a bucket subresource (e.g.
 // ?lifecycle) by way of a short-lived presigned URL, so minio-go handles request
 // signing (and region) while we control the exact body. Used where minio-go's
-// typed marshaling can't produce the body RGW requires.
+// typed marshaling can't produce the body the service requires.
 func (s *Service) putBucketSubresourceXML(ctx context.Context, mc *minio.Client, bucketName, subresource string, body []byte) error {
 	u, err := mc.Presign(ctx, http.MethodPut, bucketName, "", 5*time.Minute, url.Values{subresource: []string{""}})
 	if err != nil {
@@ -1314,7 +1314,7 @@ func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 		return err
 	}
 	if srcBucket == dstBucket && srcKey == dstKey {
-		return fmt.Errorf("ceph RGW does not support in-place re-encryption; choose a different destination key")
+		return fmt.Errorf("in-place re-encryption is not supported; choose a different destination key")
 	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {

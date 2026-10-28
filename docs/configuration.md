@@ -90,7 +90,7 @@ The following environment variables are evaluated at runtime and take precedence
 
 Environment variables are useful for CI/CD pipelines and scripting where you do not want to pass repetitive flags or store credentials in a file on disk.
 
-> **Object storage uses its own provider and regions.** `object-storage` commands default to the `ceph` cloud provider (compute commands default to the auto-detected `nimbo`), so you do not normally set `ZCP_CLOUD_PROVIDER` for them. They also run in object-storage regions (`os-yul`, `os-yow`) rather than compute regions (`yul-1`, `yow-1`). Advanced bucket and object operations additionally connect **directly to the Ceph S3 (RGW) endpoint** read from the instance details — keep that endpoint reachable from any host (or CI runner) behind a proxy or firewall.
+> **Object storage uses its own provider and regions.** `object-storage` commands default to the object storage cloud provider (compute commands default to the auto-detected `nimbo`), so you do not normally set `ZCP_CLOUD_PROVIDER` for them. They also run in object-storage regions (`os-yul`, `os-yow`) rather than compute regions (`yul-1`, `yow-1`). Advanced bucket and object operations additionally connect **directly to the S3 endpoint** read from the instance details — keep that endpoint reachable from any host (or CI runner) behind a proxy or firewall.
 
 > CMP shows an S3 secret only for five minutes after its key is created. Save the complete pair in your own secret manager. The key remains active after the secret is hidden.
 
