@@ -812,12 +812,17 @@ encrypted sources. The service refuses single-part copies carrying SSE headers.
 
 Moves delete the source only after destination encryption verification succeeds.
 On verification failure, the CLI reports an error and retains the source. It
-removes an unverified destination only when the destination did not exist before
-this command, and reports the cleanup result. A destination that existed before
-the command remains in place. Empty encrypted copies use an encrypted PUT with
-the source metadata and the same HEAD verification. Failed multipart copies abort their
-own upload. In-place re-encryption is unsupported. The CLI never re-encrypts
-existing objects automatically.
+deletes only the immutable destination version returned by this command's
+multipart completion or empty PUT, and reports the cleanup result. For
+unversioned buckets or null versions, it leaves the destination in place and
+warns that it might not be encrypted as requested. This does not restore any
+previously overwritten destination bytes. Both encrypted paths preserve Expires,
+Cache-Control, Content-Disposition, Content-Encoding, Content-Language,
+Content-Type, user metadata and tags. Tags are read from the captured source
+version. Empty encrypted copies use an encrypted PUT and the same HEAD
+verification. Failed multipart copies abort their own upload. In-place
+re-encryption is unsupported. The CLI never re-encrypts existing objects
+automatically.
 
 ### Two backends, and what is CLI-only
 

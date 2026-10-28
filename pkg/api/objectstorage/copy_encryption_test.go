@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,6 +31,26 @@ func TestEncryptedCopyAndMove(t *testing.T) {
 								key = "service-key"
 							}
 						}
+						metadata := map[string]string{
+							"Content-Type": "application/example", "Cache-Control": "max-age=3600",
+							"Content-Disposition": `inline; filename="data.bin"`, "Content-Encoding": "gzip",
+							"Content-Language": "en-CA", "Expires": "Wed, 01 Jan 2031 00:00:00 GMT",
+							"X-Amz-Meta-Owner": "alice", "X-Amz-Meta-Purpose": "copy-test",
+						}
+						assertMetadata := func(r *http.Request) {
+							for header, want := range metadata {
+								// The SDK adds its streaming transport encoding to empty PUTs.
+								if header == "Content-Encoding" && size == 0 {
+									want = "aws-chunked," + want
+								}
+								if got := r.Header.Get(header); got != want {
+									t.Errorf("%s=%q want %q", header, got, want)
+								}
+							}
+							if r.Header.Get("X-Amz-Tagging") != "owner=alice" {
+								t.Errorf("tags=%q", r.Header.Get("X-Amz-Tagging"))
+							}
+						}
 						var initiated, complete, verified, deleted bool
 						var ranges []string
 						mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,8 +58,12 @@ func TestEncryptedCopyAndMove(t *testing.T) {
 							switch {
 							case r.Method == http.MethodHead && r.URL.Path == "/source/key":
 								copyHead(w, size, sourceAlgorithm, "service-key")
-								w.Header().Set("Content-Type", "application/octet-stream")
-								w.Header().Set("X-Amz-Meta-Owner", "alice")
+								for header, value := range metadata {
+									w.Header().Set(header, value)
+								}
+								w.Header().Set("X-Amz-Tagging-Count", "1")
+							case r.Method == http.MethodGet && q.Has("tagging"):
+								fmt.Fprint(w, `<Tagging><TagSet><Tag><Key>owner</Key><Value>alice</Value></Tag></TagSet></Tagging>`)
 							case r.Method == http.MethodHead && !complete:
 								w.WriteHeader(http.StatusNotFound)
 							case r.Method == http.MethodHead:
@@ -49,6 +74,7 @@ func TestEncryptedCopyAndMove(t *testing.T) {
 								if (r.ContentLength != 0 && r.Header.Get("X-Amz-Decoded-Content-Length") != "0") || r.Header.Get("X-Amz-Server-Side-Encryption") != algorithm || r.Header.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id") != key || r.Header.Get("X-Amz-Meta-Owner") != "alice" {
 									t.Errorf("empty PUT: %v", r.Header)
 								}
+								assertMetadata(r)
 								complete = true
 								w.Header().Set("ETag", `"copy-etag"`)
 							case r.Method == http.MethodPost && q.Has("uploads"):
@@ -56,9 +82,7 @@ func TestEncryptedCopyAndMove(t *testing.T) {
 								if r.Header.Get("X-Amz-Server-Side-Encryption") != algorithm || r.Header.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id") != key {
 									t.Errorf("init encryption: %v", r.Header)
 								}
-								if r.Header.Get("X-Amz-Meta-Owner") != "alice" || r.Header.Get("Content-Type") != "application/octet-stream" {
-									t.Errorf("lost source metadata: %v", r.Header)
-								}
+								assertMetadata(r)
 								fmt.Fprint(w, `<InitiateMultipartUploadResult><UploadId>ours</UploadId></InitiateMultipartUploadResult>`)
 							case r.Method == http.MethodPut && q.Get("uploadId") == "ours":
 								if !initiated || r.Header.Get("X-Amz-Copy-Source") != "source/key" || r.Header.Get("X-Amz-Copy-Source-If-Match") != "source-etag" {
@@ -119,10 +143,10 @@ func copyHead(w http.ResponseWriter, size int64, algorithm, key string) {
 }
 
 func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
-	for _, fault := range []string{"source-head", "destination-head", "empty-put", "init", "part", "part-embedded", "part-empty", "complete", "algorithm", "key", "verification-head", "cleanup", "abort", "complete-empty", "head-size", "head-etag", "cancel"} {
-		for _, existing := range []bool{false, true} {
+	for _, fault := range []string{"source-head", "empty-put", "init", "part", "part-embedded", "part-empty", "complete", "algorithm", "key", "verification-head", "cleanup", "abort", "complete-empty", "head-size", "head-etag", "cancel"} {
+		for _, version := range []string{"", "null", "our-version"} {
 			for _, move := range []bool{false, true} {
-				t.Run(fmt.Sprintf("%s/existing=%t/move=%t", fault, existing, move), func(t *testing.T) {
+				t.Run(fmt.Sprintf("%s/version=%s/move=%t", fault, version, move), func(t *testing.T) {
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 					var initiated, completed, aborted, removed bool
@@ -143,16 +167,6 @@ func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
 								size = 0
 							}
 							copyHead(w, size, "", "")
-						case r.Method == http.MethodHead && !completed:
-							if fault == "destination-head" {
-								fail()
-								return
-							}
-							if existing {
-								copyHead(w, 10, "", "")
-							} else {
-								w.WriteHeader(http.StatusNotFound)
-							}
 						case r.Method == http.MethodHead:
 							if fault == "verification-head" {
 								fail()
@@ -202,6 +216,7 @@ func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
 								return
 							}
 							completed = true
+							w.Header().Set("X-Amz-Version-Id", version)
 							if fault == "complete-empty" {
 								fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>destination</Bucket></CompleteMultipartUploadResult>`)
 								return
@@ -215,8 +230,8 @@ func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
 							}
 							w.WriteHeader(http.StatusNoContent)
 						case r.Method == http.MethodDelete && r.URL.Path == "/destination/copy":
-							if existing {
-								t.Error("removed pre-existing destination")
+							if q.Get("versionId") != "our-version" {
+								t.Errorf("deleted unowned destination version: %s", r.URL)
 							}
 							removed = true
 							if fault == "cleanup" {
@@ -244,15 +259,16 @@ func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
 					if aborted != (initiated && !completed) {
 						t.Fatalf("initiated=%t completed=%t aborted=%t err=%v", initiated, completed, aborted, err)
 					}
-					if removed != (completed && !existing) {
-						t.Fatalf("completed=%t existing=%t removed=%t err=%v", completed, existing, removed, err)
+					if removed != (completed && version == "our-version") {
+						t.Fatalf("completed=%t version=%s removed=%t err=%v", completed, version, removed, err)
 					}
 					if completed {
-						want := "removed newly created unverified destination"
-						if existing {
-							want = "destination existed before this command"
-						} else if fault == "cleanup" {
-							want = "removing newly created unverified destination failed"
+						want := "destination may not be encrypted as requested and was left in place"
+						if version == "our-version" {
+							want = "removed this operation's unverified destination version"
+							if fault == "cleanup" {
+								want = "removing this operation's unverified destination version failed"
+							}
 						}
 						if !strings.Contains(err.Error(), want) {
 							t.Fatalf("missing cleanup diagnostic: %v", err)
@@ -270,5 +286,134 @@ func TestEncryptedCopyFailuresPreserveSource(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestEncryptedCopyCompetingDestination(t *testing.T) {
+	for _, size := range []int64{0, 10} {
+		for _, version := range []string{"", "null", "our-version"} {
+			for _, move := range []bool{false, true} {
+				t.Run(fmt.Sprintf("size=%d/version=%s/move=%t", size, version, move), func(t *testing.T) {
+					completed, competitorPresent, removedOwnVersion, sourceRemoved := false, false, false, false
+					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						q := r.URL.Query()
+						switch {
+						case r.Method == http.MethodHead && r.URL.Path == "/source/key":
+							copyHead(w, size, "", "")
+						case r.Method == http.MethodHead:
+							// A competing PUT became current after our write and before verification.
+							if !completed || !competitorPresent {
+								t.Error("verification before writes")
+							}
+							if q.Get("versionId") != version {
+								t.Errorf("verification version=%q want %q", q.Get("versionId"), version)
+							}
+							if version == "our-version" {
+								// Pinned HEAD reads our version, whose SSE is incorrect.
+								copyHead(w, size, "", "")
+								w.Header().Set("ETag", `"ours"`)
+							} else {
+								copyHead(w, 77, "", "")
+								w.Header().Set("ETag", `"another-writer"`)
+							}
+						case r.Method == http.MethodPost && q.Has("uploads"):
+							fmt.Fprint(w, `<InitiateMultipartUploadResult><UploadId>ours</UploadId></InitiateMultipartUploadResult>`)
+						case r.Method == http.MethodPut && size == 0:
+							completed = true
+							competitorPresent = true
+							w.Header().Set("ETag", `"ours"`)
+							w.Header().Set("X-Amz-Version-Id", version)
+						case r.Method == http.MethodPut:
+							fmt.Fprint(w, `<CopyPartResult><ETag>"part"</ETag></CopyPartResult>`)
+						case r.Method == http.MethodPost:
+							completed = true
+							competitorPresent = true
+							w.Header().Set("X-Amz-Version-Id", version)
+							fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>destination</Bucket><Key>copy</Key><ETag>"ours"</ETag></CompleteMultipartUploadResult>`)
+						case r.Method == http.MethodDelete && r.URL.Path == "/destination/copy":
+							if q.Get("versionId") != "our-version" {
+								competitorPresent = false
+								t.Error("deleted competing writer")
+							}
+							removedOwnVersion = true
+							w.WriteHeader(http.StatusNoContent)
+						case r.Method == http.MethodDelete:
+							sourceRemoved = true
+							w.WriteHeader(http.StatusNoContent)
+						default:
+							t.Errorf("unexpected %s %s", r.Method, r.URL)
+							w.WriteHeader(http.StatusBadRequest)
+						}
+					}))
+					svc := objectstorage.NewService(newTestClient(t, mgmt))
+					op := svc.CopyObject
+					if move {
+						op = svc.MoveObject
+					}
+					err := op(context.Background(), "my-storage-1", "source", "key", "destination", "copy", objectstorage.EncryptionOptions{Algorithm: "AES256"})
+					if err == nil || sourceRemoved || !competitorPresent || removedOwnVersion != (version == "our-version") {
+						t.Fatalf("err=%v sourceRemoved=%t competitorPresent=%t removedOwnVersion=%t", err, sourceRemoved, competitorPresent, removedOwnVersion)
+					}
+					if version != "our-version" && !strings.Contains(err.Error(), "destination may not be encrypted as requested and was left in place") {
+						t.Fatalf("missing retained-destination diagnostic: %v", err)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestEncryptedCopyPinsSourceTags(t *testing.T) {
+	for _, size := range []int64{0, 10} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			sourceHead, readV1Tags, copiedV1 := false, false, false
+			mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query()
+				switch {
+				case r.Method == http.MethodHead && r.URL.Path == "/source/key":
+					sourceHead = true
+					copyHead(w, size, "", "")
+					w.Header().Set("X-Amz-Version-Id", "v1")
+					w.Header().Set("X-Amz-Tagging-Count", "1")
+				case r.Method == http.MethodGet && q.Has("tagging"):
+					// V2 appears after HEAD. An unpinned read returns its different tags.
+					if !sourceHead {
+						t.Error("tag read before HEAD")
+					}
+					generation := "v2"
+					if q.Get("versionId") == "v1" {
+						generation = "v1"
+						readV1Tags = true
+					}
+					fmt.Fprintf(w, `<Tagging><TagSet><Tag><Key>generation</Key><Value>%s</Value></Tag></TagSet></Tagging>`, generation)
+				case r.Method == http.MethodHead:
+					copyHead(w, size, "AES256", "")
+					w.Header().Set("ETag", `"ours"`)
+				case (r.Method == http.MethodPost && q.Has("uploads")) || (r.Method == http.MethodPut && size == 0):
+					tags, _ := url.ParseQuery(r.Header.Get("X-Amz-Tagging"))
+					if tags.Get("generation") != "v1" {
+						t.Errorf("copied tags=%v", tags)
+					}
+					if size == 0 {
+						copiedV1 = true
+						w.Header().Set("ETag", `"ours"`)
+					} else {
+						fmt.Fprint(w, `<InitiateMultipartUploadResult><UploadId>ours</UploadId></InitiateMultipartUploadResult>`)
+					}
+				case r.Method == http.MethodPut:
+					copiedV1 = strings.Contains(r.Header.Get("X-Amz-Copy-Source"), "versionId=v1")
+					fmt.Fprint(w, `<CopyPartResult><ETag>"part"</ETag></CopyPartResult>`)
+				case r.Method == http.MethodPost:
+					fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>destination</Bucket><Key>copy</Key><ETag>"ours"</ETag></CompleteMultipartUploadResult>`)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL)
+					w.WriteHeader(http.StatusBadRequest)
+				}
+			}))
+			err := objectstorage.NewService(newTestClient(t, mgmt)).CopyObject(context.Background(), "my-storage-1", "source", "key", "destination", "copy", objectstorage.EncryptionOptions{Algorithm: "AES256"})
+			if err != nil || !readV1Tags || !copiedV1 {
+				t.Fatalf("err=%v readV1Tags=%t copiedV1=%t", err, readV1Tags, copiedV1)
+			}
+		})
 	}
 }

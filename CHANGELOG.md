@@ -22,10 +22,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 - Copies and moves preserve source encryption unless `--sse` selects another
   algorithm. Moves retain the source if destination encryption verification fails.
-  Failed multipart copies abort their own upload. Verification failures remove
-  newly created destinations and report cleanup results. Destinations that
-  existed before the command remain in place. Empty encrypted copies use an
-  encrypted PUT with the source metadata and the same HEAD verification.
+  Failed multipart copies abort their own upload. Verification failures delete
+  only the immutable destination version returned by this command's write.
+  Unversioned and null-version destinations are left in place with a warning
+  that encryption might not match the request. This does not restore overwritten
+  destination bytes. Empty encrypted copies use an encrypted PUT and the same
+  HEAD verification. Both encrypted paths preserve Expires, Cache-Control,
+  Content-Disposition, Content-Encoding, Content-Language, Content-Type, user
+  metadata and tags. Versioned source tags are read from
+  the same version as the copied bytes.
 - Moves preserve the source when a copy fails or returns an incomplete result.
   HTTP-200 copy and part-copy errors retain their S3 error code and message.
 - Bucket encryption commands resolve management bucket slugs to S3 names before

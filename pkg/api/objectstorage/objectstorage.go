@@ -1355,16 +1355,11 @@ func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions
 }
 
 func encryptedCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions, source minio.ObjectInfo) error {
-	_, statErr := mc.StatObject(ctx, dst.Bucket, dst.Object, minio.StatObjectOptions{})
-	newDestination := minio.ToErrorResponse(statErr).Code == "NoSuchKey"
-	if statErr != nil && !newDestination {
-		return fmt.Errorf("checking destination before copy: %w", statErr)
-	}
-
 	opts := minio.PutObjectOptions{
 		ServerSideEncryption: dst.Encryption,
 		UserMetadata:         source.UserMetadata,
 		ContentType:          source.ContentType,
+		Expires:              source.Expires,
 		CacheControl:         source.Metadata.Get("Cache-Control"),
 		ContentEncoding:      source.Metadata.Get("Content-Encoding"),
 		ContentDisposition:   source.Metadata.Get("Content-Disposition"),
@@ -1372,7 +1367,7 @@ func encryptedCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDe
 		StorageClass:         source.StorageClass,
 	}
 	if source.Metadata.Get("X-Amz-Tagging-Count") != "" && source.Metadata.Get("X-Amz-Tagging-Count") != "0" {
-		tags, err := mc.GetObjectTagging(ctx, src.Bucket, src.Object, minio.GetObjectTaggingOptions{})
+		tags, err := mc.GetObjectTagging(ctx, src.Bucket, src.Object, minio.GetObjectTaggingOptions{VersionID: source.VersionID})
 		if err != nil {
 			return fmt.Errorf("reading source tags: %w", err)
 		}
@@ -1404,15 +1399,17 @@ func encryptedCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDe
 		}
 	}
 	if err != nil {
-		if !newDestination {
-			return fmt.Errorf("verifying copied destination: %w; destination existed before this command and was left in place; source retained", err)
+		// Only an immutable version returned by our write proves ownership.
+		// An unversioned or suspended bucket's null version can be replaced.
+		if info.VersionID == "" || info.VersionID == "null" {
+			return fmt.Errorf("verifying copied destination: %w; destination may not be encrypted as requested and was left in place because no immutable version ID was returned; source retained", err)
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		if cleanupErr := mc.RemoveObject(cleanupCtx, dst.Bucket, dst.Object, minio.RemoveObjectOptions{VersionID: info.VersionID}); cleanupErr != nil {
-			return fmt.Errorf("verifying copied destination: %w; removing newly created unverified destination failed: %v; source retained", err, cleanupErr)
+			return fmt.Errorf("verifying copied destination: %w; removing this operation's unverified destination version failed: %v; destination may not be encrypted as requested and was left in place; source retained", err, cleanupErr)
 		}
-		return fmt.Errorf("verifying copied destination: %w; removed newly created unverified destination; source retained", err)
+		return fmt.Errorf("verifying copied destination: %w; removed this operation's unverified destination version; source retained", err)
 	}
 	return nil
 }
