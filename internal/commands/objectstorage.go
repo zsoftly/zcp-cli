@@ -894,9 +894,10 @@ func newOSBucketEncryptionCmd() *cobra.Command {
 	var encryption objectstorage.EncryptionOptions
 	enableCmd := &cobra.Command{
 		Use:   "enable <storage-slug> <bucket-slug>",
-		Short: "Set default SSE-S3 or SSE-KMS encryption for subsequent writes",
+		Short: "Set default SSE-S3 or SSE-KMS encryption for subsequent uploads",
 		Long: `Set default encryption on a new or existing bucket. Existing objects and
 versions are unchanged. Requires a configured gateway encryption backend.
+Ceph copies do not inherit bucket defaults; pass --sse on copy and move.
 SSE-KMS uses an operator-provisioned service-managed key ID. Ordinary S3
 permissions still apply; this does not configure customer KMS key policies.`,
 		Args: exactArgs(2),
@@ -1761,7 +1762,11 @@ func newOSObjectCopyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "copy <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side copy an object (no download/upload round-trip)",
-		Args:  exactArgs(5),
+		Long: `Server-side copy an object. Ceph does not apply destination bucket default
+encryption to copies. Pass --sse AES256, or --sse aws:kms with
+--sse-kms-key-id, to request encryption explicitly. In-place re-encryption
+is unsupported; choose a different destination key.`,
+		Args: exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := encryption.Validate(); err != nil {
 				return err
@@ -1773,6 +1778,7 @@ func newOSObjectCopyCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
+			warnOSCopyEncryption(cmd, encryption)
 			if err := svc.CopyObject(ctx, args[0], args[1], args[2], args[3], args[4], encryption); err != nil {
 				return fmt.Errorf("object-storage object copy: %w", err)
 			}
@@ -1789,7 +1795,11 @@ func newOSObjectMoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "move <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side move an object (copy then delete the source)",
-		Args:  exactArgs(5),
+		Long: `Server-side copy an object, then delete the source after a successful copy.
+Ceph does not apply destination bucket default encryption to copies.
+Pass --sse AES256, or --sse aws:kms with --sse-kms-key-id, to request
+encryption explicitly. Existing objects are never automatically re-encrypted.`,
+		Args: exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := encryption.Validate(); err != nil {
 				return err
@@ -1801,6 +1811,7 @@ func newOSObjectMoveCmd() *cobra.Command {
 			svc := objectstorage.NewService(client)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout(cmd))*time.Second)
 			defer cancel()
+			warnOSCopyEncryption(cmd, encryption)
 			if err := svc.MoveObject(ctx, args[0], args[1], args[2], args[3], args[4], encryption); err != nil {
 				return fmt.Errorf("object-storage object move: %w", err)
 			}
@@ -1932,6 +1943,12 @@ func newOSObjectDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&versionID, "version-id", "", "Delete a specific object version (instead of adding a delete marker)")
 	return cmd
+}
+
+func warnOSCopyEncryption(cmd *cobra.Command, encryption objectstorage.EncryptionOptions) {
+	if encryption.Algorithm == "" {
+		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: Ceph copies do not inherit destination bucket default encryption. Use --sse AES256 or --sse aws:kms --sse-kms-key-id <service-key-id> to request encryption.")
+	}
 }
 
 func addOSEncryptionFlags(cmd *cobra.Command, encryption *objectstorage.EncryptionOptions, defaultAlgorithm string) {

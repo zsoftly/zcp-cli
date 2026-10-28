@@ -731,7 +731,7 @@ zcp object-storage bucket tag set <slug> <bucket-slug> --tag env=prod --tag team
 zcp object-storage bucket tag delete <slug> <bucket-slug>
 
 # Default encryption (SSE-S3 or service-managed SSE-KMS)
-# Requires a configured regional encryption backend. Defaults affect future writes.
+# Requires a configured regional encryption backend. Defaults affect future uploads, not copies or existing objects.
 zcp object-storage bucket encryption status <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug> --sse aws:kms --sse-kms-key-id <service-key-id>
@@ -760,6 +760,8 @@ zcp object-storage bucket delete <slug> <bucket-slug> --purge
 zcp object-storage object list <slug> <bucket>
 zcp object-storage object get <slug> <bucket> <key>          # metadata only
 zcp object-storage object put <slug> <bucket> ./photo.jpg
+zcp object-storage object put <slug> <bucket> ./photo.jpg --sse AES256
+zcp object-storage object put <slug> <bucket> ./photo.jpg --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage object put <slug> <bucket> ./report.pdf --key reports/2026/q2.pdf --content-type application/pdf
 zcp object-storage object download <slug> <bucket> <key>                 # writes ./<base-name>
 zcp object-storage object download <slug> <bucket> images/logo.png --dest ./logo.png
@@ -770,6 +772,8 @@ zcp object-storage object url <slug> <bucket> <key> --expires 24h        # share
 zcp object-storage object put-url <slug> <bucket> <key> --expires 30m    # pre-signed UPLOAD url (curl -T)
 zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # server-side copy
 zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # copy then delete source
+zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse AES256
+zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage object tag set <slug> <bucket> <key> --tag env=prod   # object tags
 zcp object-storage object tag get <slug> <bucket> <key>
 zcp object-storage object tag delete <slug> <bucket> <key>
@@ -781,6 +785,24 @@ zcp object-storage object download <slug> <bucket> <key> --version-id <id>
 zcp object-storage object delete <slug> <bucket> <key> --version-id <id> # delete one version
 zcp object-storage object restore <slug> <bucket> <key>                  # undelete (remove latest delete marker)
 ```
+
+### Encryption requirements and limitations
+
+Encryption requires an enabled regional gateway backend. Confirm availability
+with ZCP support before use. This client support does not announce encryption
+availability in any region. SSE-KMS requires an operator-provisioned,
+slash-free service-managed key ID, not key material or a customer KMS policy.
+Unsupported gateway responses include regional setup guidance. Authorization
+and invalid-key errors remain errors; the CLI never retries without encryption.
+
+Bucket defaults apply to subsequent uploads. Existing objects and versions stay
+unchanged. Ceph RGW copies do not inherit destination bucket default encryption,
+so pass `--sse` explicitly on every copy or move requiring encryption. Headerless
+copies and moves print a warning without changing the requested encryption.
+[Ceph correction #72291](https://github.com/ceph/ceph/pull/72291) remains open as
+of October 28, 2026. In-place re-encryption is unsupported. The CLI never
+re-encrypts existing objects automatically. Moves delete the source only after a
+complete successful copy response.
 
 ### Two backends, and what is CLI-only
 

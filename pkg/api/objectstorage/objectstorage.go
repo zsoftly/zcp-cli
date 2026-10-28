@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -599,6 +600,19 @@ func (o EncryptionOptions) serverSide() (encrypt.ServerSide, error) {
 	}
 }
 
+// encryptionError adds regional setup guidance while preserving the S3 error.
+func encryptionError(err error) error {
+	var response minio.ErrorResponse
+	if errors.As(err, &response) {
+		message := strings.ToLower(response.Message)
+		if response.Code == "NotImplemented" ||
+			(response.Code == "InvalidArgument" && strings.Contains(message, "encryption") && strings.Contains(message, "not support")) {
+			return fmt.Errorf("server-side encryption is not available on this region's gateway; ask ZCP support to confirm regional encryption support: %w", err)
+		}
+	}
+	return err
+}
+
 // PutObject uploads a local file to a bucket via the S3 protocol.
 // objectKey defaults to the base name of localPath when empty.
 // contentType is auto-detected from the file extension when empty.
@@ -624,6 +638,9 @@ func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, ob
 	}
 	info, err := mc.FPutObject(ctx, bucketName, objectKey, localPath, opts)
 	if err != nil {
+		if encryption.Algorithm != "" {
+			err = encryptionError(err)
+		}
 		return 0, fmt.Errorf("uploading %q to %s/%s: %w", localPath, bucketName, objectKey, err)
 	}
 	return info.Size, nil
@@ -985,7 +1002,7 @@ func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName stri
 		if s3NotConfigured(err) {
 			return EncryptionOptions{}, nil
 		}
-		return EncryptionOptions{}, fmt.Errorf("getting encryption on bucket %s: %w", bucketName, err)
+		return EncryptionOptions{}, fmt.Errorf("getting encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	if len(cfg.Rules) > 0 {
 		return EncryptionOptions{Algorithm: cfg.Rules[0].Apply.SSEAlgorithm, KMSKeyID: cfg.Rules[0].Apply.KmsMasterKeyID}, nil
@@ -993,8 +1010,9 @@ func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName stri
 	return EncryptionOptions{}, nil
 }
 
-// SetBucketEncryption sets a default for subsequent writes on any existing bucket.
+// SetBucketEncryption sets a default for subsequent uploads on an existing bucket.
 // Existing objects and versions are unchanged.
+// Ceph CopyObject requires explicit encryption instead of inheriting this default.
 func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string, encryption EncryptionOptions) error {
 	if err := encryption.Validate(); err != nil {
 		return err
@@ -1011,7 +1029,7 @@ func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName stri
 		return err
 	}
 	if err := mc.SetBucketEncryption(ctx, bucketName, cfg); err != nil {
-		return fmt.Errorf("enabling encryption on bucket %s: %w", bucketName, err)
+		return fmt.Errorf("enabling encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	return nil
 }
@@ -1023,7 +1041,7 @@ func (s *Service) DisableBucketEncryption(ctx context.Context, slug, bucketName 
 		return err
 	}
 	if err := mc.RemoveBucketEncryption(ctx, bucketName); err != nil {
-		return fmt.Errorf("disabling encryption on bucket %s: %w", bucketName, err)
+		return fmt.Errorf("disabling encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	return nil
 }
@@ -1295,6 +1313,9 @@ func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 	if err != nil {
 		return err
 	}
+	if srcBucket == dstBucket && srcKey == dstKey {
+		return fmt.Errorf("Ceph RGW does not support in-place re-encryption; choose a different destination key")
+	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
 		return err
@@ -1312,6 +1333,9 @@ func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions
 		err = fmt.Errorf("copy response is missing ETag or LastModified")
 	}
 	if err != nil {
+		if dst.Encryption != nil {
+			err = encryptionError(err)
+		}
 		return fmt.Errorf("copying %s/%s to %s/%s: %w", src.Bucket, src.Object, dst.Bucket, dst.Object, err)
 	}
 	return nil

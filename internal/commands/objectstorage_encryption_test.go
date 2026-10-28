@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zsoftly/zcp-cli/pkg/api/objectstorage"
 )
 
 func TestObjectStorageEncryptionCommands(t *testing.T) {
@@ -119,5 +122,23 @@ func TestObjectStorageEncryptionValidationBeforeRequests(t *testing.T) {
 	}
 	if requests != 0 {
 		t.Fatalf("invalid selections made %d requests", requests)
+	}
+}
+
+func TestCopyEncryptionWarningAndHelp(t *testing.T) {
+	for _, operation := range []string{"copy", "move"} {
+		for _, selection := range []objectstorage.EncryptionOptions{{}, {Algorithm: "AES256"}, {Algorithm: "aws:kms", KMSKeyID: "service-key"}} {
+			cmd := NewObjectStorageCmd()
+			var stderr bytes.Buffer
+			cmd.SetErr(&stderr)
+			warnOSCopyEncryption(cmd, selection)
+			if got := strings.Contains(stderr.String(), "do not inherit destination bucket default encryption"); got != (selection.Algorithm == "") {
+				t.Fatalf("selection=%+v warning=%q", selection, stderr.String())
+			}
+		}
+		stdout, _, err := execCmd(t, NewObjectStorageCmd(), "object", operation, "--help")
+		if err != nil || !strings.Contains(stdout, "destination bucket default") || !strings.Contains(stdout, "--sse") {
+			t.Fatalf("%s help=%q err=%v", operation, stdout, err)
+		}
 	}
 }

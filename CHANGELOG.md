@@ -7,6 +7,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Added
+
+- Optional native SSE-S3 and service-managed SSE-KMS for object uploads, copies
+  and moves, plus bucket default encryption get/set/delete. Ceph copies require
+  explicit encryption flags because they do not inherit destination defaults.
+  Existing objects and versions stay unchanged; in-place re-encryption is
+  unsupported. Unsupported gateways report regional encryption setup guidance.
+
+### Fixed
+
+- Moves preserve the source when a copy fails or returns an incomplete result.
+
 ## [v1.1.0] - 2026-10-23
 
 ### Added
