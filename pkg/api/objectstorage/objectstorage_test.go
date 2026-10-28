@@ -1216,6 +1216,11 @@ func TestStatObject(t *testing.T) {
 func TestCopyObject(t *testing.T) {
 	var gotMethod, gotPath, gotCopySrc string
 	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", "10")
+			w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+			return
+		}
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotCopySrc = r.Header.Get("x-amz-copy-source")
 		w.Header().Set("Content-Type", "application/xml")
@@ -1282,7 +1287,7 @@ func TestMoveObjectSelfMoveRejected(t *testing.T) {
 
 func TestCopyAndMoveObjectRequireCompleteCopyResult(t *testing.T) {
 	for _, selection := range []objectstorage.EncryptionOptions{
-		{}, {Algorithm: "AES256"}, {Algorithm: "aws:kms", KMSKeyID: "service-key"},
+		{},
 	} {
 		for _, tc := range []struct {
 			name string
@@ -1307,6 +1312,10 @@ func TestCopyAndMoveObjectRequireCompleteCopyResult(t *testing.T) {
 					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						requests = append(requests, r.Method+" "+r.URL.Path)
 						switch r.Method {
+						case http.MethodHead:
+							w.Header().Set("Content-Length", "10")
+							w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+							return
 						case http.MethodPut:
 							if got := r.Header.Get("X-Amz-Copy-Source"); got != "source/key" {
 								t.Errorf("copy source = %q", got)
@@ -1335,7 +1344,7 @@ func TestCopyAndMoveObjectRequireCompleteCopyResult(t *testing.T) {
 					if (err == nil) != tc.ok {
 						t.Errorf("error = %v, want success=%t", err, tc.ok)
 					}
-					want := "PUT /destination/copy"
+					want := "HEAD /source/key,PUT /destination/copy"
 					if move && tc.ok {
 						want += ",DELETE /source/key"
 					}
@@ -1447,7 +1456,7 @@ func TestBucketEncryptionKMSRoundTrip(t *testing.T) {
 	}
 }
 
-func TestEncryptedMoveDoesNotDeleteSourceAfterCopyFailure(t *testing.T) {
+func TestEncryptedMoveDoesNotDeleteSourceAfterStatFailure(t *testing.T) {
 	var copied, deleted bool
 	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
@@ -1460,7 +1469,7 @@ func TestEncryptedMoveDoesNotDeleteSourceAfterCopyFailure(t *testing.T) {
 		fmt.Fprint(w, `<Error><Code>AccessDenied</Code><Message>denied</Message></Error>`)
 	}))
 	err := objectstorage.NewService(newTestClient(t, mgmt)).MoveObject(context.Background(), "my-storage-1", "source", "key", "destination", "key", objectstorage.EncryptionOptions{Algorithm: "aws:kms", KMSKeyID: "service-key"})
-	if err == nil || !copied || deleted {
+	if err == nil || copied || deleted {
 		t.Fatalf("copied=%t deleted=%t err=%v", copied, deleted, err)
 	}
 }

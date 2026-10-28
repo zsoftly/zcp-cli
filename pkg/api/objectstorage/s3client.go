@@ -57,7 +57,7 @@ func s3Credentials(store *ObjectStorage) (string, string, error) {
 	return "", "", fmt.Errorf("object storage %q is missing S3 credentials", store.Slug)
 }
 
-// MinIO decodes HTTP-200 CopyObject errors as empty success results. Return the
+// MinIO decodes HTTP-200 CopyObject and UploadPartCopy errors as empty results. Return the
 // S3 cause from the body reader so its XML decoder retains it without transport
 // retries or changing the HTTP status.
 type copyErrorTransport struct {
@@ -66,7 +66,7 @@ type copyErrorTransport struct {
 
 func (t copyErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.RoundTripper.RoundTrip(req)
-	if err == nil && resp.StatusCode == http.StatusOK && req.Method == http.MethodPut && req.Header.Get("X-Amz-Copy-Source") != "" && !req.URL.Query().Has("uploadId") {
+	if err == nil && resp.StatusCode == http.StatusOK && req.Method == http.MethodPut && req.Header.Get("X-Amz-Copy-Source") != "" {
 		resp.Body = &copyErrorBody{ReadCloser: resp.Body}
 	}
 	return resp, err

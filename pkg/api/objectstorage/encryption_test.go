@@ -30,6 +30,15 @@ func TestEncryptionRegionalErrorsPreserveS3Cause(t *testing.T) {
 				t.Run(operation, func(t *testing.T) {
 					deleted := false
 					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.Method == http.MethodHead && (operation == "copy" || operation == "move") {
+							if strings.HasPrefix(r.URL.Path, "/destination/") {
+								w.WriteHeader(http.StatusNotFound)
+								return
+							}
+							w.Header().Set("Content-Length", "10")
+							w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+							return
+						}
 						if r.Method == http.MethodDelete && !r.URL.Query().Has("encryption") {
 							deleted = true
 						}
@@ -88,7 +97,7 @@ func TestCopyObjectRejectsInPlaceReencryption(t *testing.T) {
 
 func TestCopyAndMoveEmbeddedErrorsPreserveS3CauseAndSource(t *testing.T) {
 	for _, selection := range []objectstorage.EncryptionOptions{
-		{}, {Algorithm: "AES256"}, {Algorithm: "aws:kms", KMSKeyID: "service-key"},
+		{},
 	} {
 		for _, tc := range []struct {
 			code, message string
@@ -103,6 +112,11 @@ func TestCopyAndMoveEmbeddedErrorsPreserveS3CauseAndSource(t *testing.T) {
 					source := "original contents"
 					requests := 0
 					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.Method == http.MethodHead {
+							w.Header().Set("Content-Length", "10")
+							w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+							return
+						}
 						requests++
 						if r.Method == http.MethodDelete {
 							source = ""

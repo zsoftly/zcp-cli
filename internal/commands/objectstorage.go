@@ -901,9 +901,12 @@ func newOSBucketEncryptionCmd() *cobra.Command {
 		Short: "Set default SSE-S3 or SSE-KMS encryption for subsequent uploads",
 		Long: `Set default encryption on a new or existing bucket. Existing objects and
 versions are unchanged. Requires a configured gateway encryption backend.
-Ceph copies do not inherit bucket defaults; pass --sse on copy and move.
+Headerless copies do not inherit bucket defaults. On Ceph RGW 20.2.0,
+ZCP CLI encrypted copy and move use verified multipart copy. AWS CLI and
+other S3 clients must use multipart copy or download and re-upload.
+The service refuses single-part copies carrying SSE headers.
 SSE-KMS uses an operator-provisioned service-managed key ID. Ordinary S3
-permissions still apply; this does not configure customer KMS key policies.`,
+permissions still apply. This does not configure customer KMS key policies.`,
 		Args: exactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := encryption.Validate(); err != nil {
@@ -1774,10 +1777,15 @@ func newOSObjectCopyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "copy <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side copy an object (no download/upload round-trip)",
-		Long: `Server-side copy an object. Ceph does not apply destination bucket default
-encryption to copies. Pass --sse AES256, or --sse aws:kms with
---sse-kms-key-id, to request encryption explicitly. In-place re-encryption
-is unsupported; choose a different destination key.`,
+		Long: `Server-side copy an object. On Ceph RGW 20.2.0, encrypted CLI copies use
+multipart copy and verify destination encryption with HEAD. Pass --sse AES256,
+or --sse aws:kms with --sse-kms-key-id, to select destination encryption.
+Without --sse, encrypted sources retain their algorithm and KMS key.
+Headerless copies do not inherit destination bucket defaults. AWS CLI and other
+S3 clients must use multipart copy or download and re-upload. The service
+refuses single-part copies carrying SSE headers. In-place re-encryption is
+unsupported. Existing objects stay unchanged. Empty encrypted copies use an
+encrypted PUT and the same HEAD verification.`,
 		Args: exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := encryption.Validate(); err != nil {
@@ -1807,10 +1815,16 @@ func newOSObjectMoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "move <storage-slug> <src-bucket> <src-key> <dst-bucket> <dst-key>",
 		Short: "Server-side move an object (copy then delete the source)",
-		Long: `Server-side copy an object, then delete the source after a successful copy.
-Ceph does not apply destination bucket default encryption to copies.
-Pass --sse AES256, or --sse aws:kms with --sse-kms-key-id, to request
-encryption explicitly. Existing objects are never automatically re-encrypted.`,
+		Long: `Server-side copy an object, then delete the source after verification.
+On Ceph RGW 20.2.0, encrypted CLI moves use multipart copy and verify destination
+encryption with HEAD before deleting the source. Pass --sse AES256, or
+--sse aws:kms with --sse-kms-key-id, to select destination encryption.
+Without --sse, encrypted sources retain their algorithm and KMS key.
+Headerless copies do not inherit destination bucket defaults. AWS CLI and other
+S3 clients must use multipart copy or download and re-upload. The service
+refuses single-part copies carrying SSE headers. Existing objects are never
+automatically re-encrypted. Empty encrypted moves use an encrypted PUT and
+the same HEAD verification.`,
 		Args: exactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := encryption.Validate(); err != nil {
@@ -1959,7 +1973,7 @@ func newOSObjectDeleteCmd() *cobra.Command {
 
 func warnOSCopyEncryption(cmd *cobra.Command, encryption objectstorage.EncryptionOptions) {
 	if encryption.Algorithm == "" {
-		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: Ceph copies do not inherit destination bucket default encryption. Use --sse AES256 or --sse aws:kms --sse-kms-key-id <service-key-id> to request encryption.")
+		fmt.Fprintln(cmd.ErrOrStderr(), "Warning: Headerless copies do not inherit destination bucket default encryption. For plaintext sources, --sse AES256 or --sse aws:kms --sse-kms-key-id <service-key-id> selects verified multipart copy in this CLI. Encrypted sources retain their encryption.")
 	}
 }
 

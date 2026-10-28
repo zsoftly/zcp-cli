@@ -772,7 +772,7 @@ zcp object-storage object url <slug> <bucket> <key> --expires 24h        # share
 zcp object-storage object put-url <slug> <bucket> <key> --expires 30m    # pre-signed UPLOAD url (curl -T)
 zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # server-side copy
 zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # copy then delete source
-zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse AES256
+zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse AES256  # verified multipart copy
 zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage object tag set <slug> <bucket> <key> --tag env=prod   # object tags
 zcp object-storage object tag get <slug> <bucket> <key>
@@ -796,13 +796,28 @@ Unsupported gateway responses include regional setup guidance. Authorization
 and invalid-key errors remain errors; the CLI never retries without encryption.
 
 Bucket defaults apply to subsequent uploads. Existing objects and versions stay
-unchanged. Ceph RGW copies do not inherit destination bucket default encryption,
-so pass `--sse` explicitly on every copy or move requiring encryption. Headerless
-copies and moves print a warning without changing the requested encryption.
-[Ceph correction #72291](https://github.com/ceph/ceph/pull/72291) remains open as
-of October 28, 2026. In-place re-encryption is unsupported. The CLI never
-re-encrypts existing objects automatically. Moves delete the source only after a
-complete successful copy response.
+unchanged. Headerless copies do not inherit the destination bucket default.
+
+On Ceph RGW 20.2.0, ZCP CLI encrypted copy and move use multipart copy and
+verify the destination algorithm and any requested KMS key ID with HEAD.
+Pass `--sse AES256` or `--sse aws:kms --sse-kms-key-id <service-key-id>` to
+select destination encryption. Without `--sse`, copies of encrypted sources
+preserve the source algorithm and KMS key. Copies of plaintext sources without
+`--sse` keep the existing headerless behavior and print a warning.
+
+AWS CLI and other S3 clients must use multipart copy with destination encryption
+set at multipart initiation, or download and re-upload. Ceph RGW 20.2.0 ignores
+SSE on single-part copies from plaintext and rejects single-part copies from
+encrypted sources. The service refuses single-part copies carrying SSE headers.
+
+Moves delete the source only after destination encryption verification succeeds.
+On verification failure, the CLI reports an error and retains the source. It
+removes an unverified destination only when the destination did not exist before
+this command, and reports the cleanup result. A destination that existed before
+the command remains in place. Empty encrypted copies use an encrypted PUT with
+the source metadata and the same HEAD verification. Failed multipart copies abort their
+own upload. In-place re-encryption is unsupported. The CLI never re-encrypts
+existing objects automatically.
 
 ### Two backends, and what is CLI-only
 

@@ -1012,7 +1012,7 @@ func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName stri
 
 // SetBucketEncryption sets a default for subsequent uploads on an existing bucket.
 // Existing objects and versions are unchanged.
-// Ceph CopyObject requires explicit encryption instead of inheriting this default.
+// Headerless Ceph copies do not inherit this default.
 func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string, encryption EncryptionOptions) error {
 	if err := encryption.Validate(); err != nil {
 		return err
@@ -1314,7 +1314,7 @@ func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 		return err
 	}
 	if srcBucket == dstBucket && srcKey == dstKey {
-		return fmt.Errorf("Ceph RGW does not support in-place re-encryption; choose a different destination key")
+		return fmt.Errorf("ceph RGW does not support in-place re-encryption; choose a different destination key")
 	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
@@ -1326,11 +1326,24 @@ func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 }
 
 func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions) error {
-	info, err := mc.CopyObject(ctx, dst, src)
-	// Require complete result fields even after rejecting embedded S3 errors,
-	// before reporting success or deleting a source.
-	if err == nil && (strings.TrimSpace(info.ETag) == "" || info.LastModified.IsZero()) {
-		err = fmt.Errorf("copy response is missing ETag or LastModified")
+	source, err := mc.StatObject(ctx, src.Bucket, src.Object, minio.StatObjectOptions{})
+	if err == nil && dst.Encryption == nil {
+		// Preserve source encryption when the caller does not select a new one.
+		dst.Encryption, err = (EncryptionOptions{
+			Algorithm: source.Metadata.Get("X-Amz-Server-Side-Encryption"),
+			KMSKeyID:  source.Metadata.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"),
+		}).serverSide()
+	}
+	if err == nil {
+		if dst.Encryption != nil {
+			err = encryptedCopyObject(ctx, mc, dst, src, source)
+		} else {
+			var info minio.UploadInfo
+			info, err = mc.CopyObject(ctx, dst, src)
+			if err == nil && (strings.TrimSpace(info.ETag) == "" || info.LastModified.IsZero()) {
+				err = fmt.Errorf("copy response is missing ETag or LastModified")
+			}
+		}
 	}
 	if err != nil {
 		if dst.Encryption != nil {
@@ -1339,6 +1352,126 @@ func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions
 		return fmt.Errorf("copying %s/%s to %s/%s: %w", src.Bucket, src.Object, dst.Bucket, dst.Object, err)
 	}
 	return nil
+}
+
+func encryptedCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions, source minio.ObjectInfo) error {
+	_, statErr := mc.StatObject(ctx, dst.Bucket, dst.Object, minio.StatObjectOptions{})
+	newDestination := minio.ToErrorResponse(statErr).Code == "NoSuchKey"
+	if statErr != nil && !newDestination {
+		return fmt.Errorf("checking destination before copy: %w", statErr)
+	}
+
+	opts := minio.PutObjectOptions{
+		ServerSideEncryption: dst.Encryption,
+		UserMetadata:         source.UserMetadata,
+		ContentType:          source.ContentType,
+		CacheControl:         source.Metadata.Get("Cache-Control"),
+		ContentEncoding:      source.Metadata.Get("Content-Encoding"),
+		ContentDisposition:   source.Metadata.Get("Content-Disposition"),
+		ContentLanguage:      source.Metadata.Get("Content-Language"),
+		StorageClass:         source.StorageClass,
+	}
+	if source.Metadata.Get("X-Amz-Tagging-Count") != "" && source.Metadata.Get("X-Amz-Tagging-Count") != "0" {
+		tags, err := mc.GetObjectTagging(ctx, src.Bucket, src.Object, minio.GetObjectTaggingOptions{})
+		if err != nil {
+			return fmt.Errorf("reading source tags: %w", err)
+		}
+		opts.UserTags = tags.ToMap()
+	}
+	var info minio.UploadInfo
+	var err error
+	if source.Size == 0 {
+		// Empty objects need no data transfer, but still need explicit SSE.
+		info, err = mc.PutObject(ctx, dst.Bucket, dst.Object, bytes.NewReader(nil), 0, opts)
+	} else {
+		info, err = multipartCopyObject(ctx, mc, dst, src, source, opts)
+	}
+	if err != nil {
+		return err
+	}
+	expected := make(http.Header)
+	dst.Encryption.Marshal(expected)
+	actual, err := mc.StatObject(ctx, dst.Bucket, dst.Object, minio.StatObjectOptions{VersionID: info.VersionID})
+	if err == nil && (strings.TrimSpace(info.ETag) == "" || actual.ETag != info.ETag || actual.Size != source.Size) {
+		err = fmt.Errorf("destination verification failed: copy result or HEAD size/ETag does not match")
+	}
+	if err == nil {
+		for _, header := range []string{"X-Amz-Server-Side-Encryption", "X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"} {
+			if want := expected.Get(header); want != "" && actual.Metadata.Get(header) != want {
+				err = fmt.Errorf("destination encryption mismatch: %s = %q, requested %q", header, actual.Metadata.Get(header), want)
+				break
+			}
+		}
+	}
+	if err != nil {
+		if !newDestination {
+			return fmt.Errorf("verifying copied destination: %w; destination existed before this command and was left in place; source retained", err)
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if cleanupErr := mc.RemoveObject(cleanupCtx, dst.Bucket, dst.Object, minio.RemoveObjectOptions{VersionID: info.VersionID}); cleanupErr != nil {
+			return fmt.Errorf("verifying copied destination: %w; removing newly created unverified destination failed: %v; source retained", err, cleanupErr)
+		}
+		return fmt.Errorf("verifying copied destination: %w; removed newly created unverified destination; source retained", err)
+	}
+	return nil
+}
+
+// ComposeObject does not abort failed uploads or expose their IDs. Use the
+// same SDK multipart operations directly to abort only this command's upload.
+func multipartCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions, source minio.ObjectInfo, opts minio.PutObjectOptions) (_ minio.UploadInfo, retErr error) {
+	core := minio.Core{Client: mc}
+	count, partSize, lastSize := 1, source.Size, source.Size
+	if source.Size > 16*1024*1024 {
+		var err error
+		count, partSize, lastSize, err = minio.OptimalPartInfo(source.Size, 0)
+		if err != nil {
+			return minio.UploadInfo{}, err
+		}
+	}
+	uploadID, err := core.NewMultipartUpload(ctx, dst.Bucket, dst.Object, opts)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if err := core.AbortMultipartUpload(cleanupCtx, dst.Bucket, dst.Object, uploadID); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("aborting incomplete copy upload %s: %w", uploadID, err))
+			}
+		}
+	}()
+	src.MatchETag = source.ETag
+	src.VersionID = source.VersionID
+	headers := make(http.Header)
+	src.Marshal(headers)
+	metadata := make(map[string]string)
+	for k := range headers {
+		metadata[k] = headers.Get(k)
+	}
+	parts := make([]minio.CompletePart, 0, count)
+	for n := 1; n <= count; n++ {
+		length := partSize
+		if n == count {
+			length = lastSize
+		}
+		part, err := core.CopyObjectPart(ctx, src.Bucket, src.Object, dst.Bucket, dst.Object, uploadID, n, int64(n-1)*partSize, length, metadata)
+		if err != nil {
+			return minio.UploadInfo{}, err
+		}
+		if strings.TrimSpace(strings.Trim(part.ETag, "\"")) == "" {
+			return minio.UploadInfo{}, fmt.Errorf("copy part %d response is missing ETag", n)
+		}
+		parts = append(parts, part)
+	}
+	info, err := core.CompleteMultipartUpload(ctx, dst.Bucket, dst.Object, uploadID, parts, opts)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	completed = true
+	return info, nil
 }
 
 // MoveObject server-side copies an object then deletes the source.

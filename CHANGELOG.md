@@ -10,15 +10,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 ### Added
 
 - Optional native SSE-S3 and service-managed SSE-KMS for object uploads, copies
-  and moves, plus bucket default encryption get/set/delete. Ceph copies require
-  explicit encryption flags because they do not inherit destination defaults.
-  Existing objects and versions stay unchanged; in-place re-encryption is
-  unsupported. Unsupported gateways report regional encryption setup guidance.
+  and moves, plus bucket default encryption get/set/delete. On Ceph RGW 20.2.0,
+  encrypted CLI copies and moves use multipart copy with destination encryption
+  verification. AWS CLI and other S3 clients must use multipart copy or download
+  and re-upload. The service refuses single-part copies carrying SSE headers.
+  Headerless copies do not inherit bucket defaults. Existing objects and versions
+  stay unchanged. In-place re-encryption is unsupported. Unsupported gateways
+  report regional encryption setup guidance.
 
 ### Fixed
 
+- Copies and moves preserve source encryption unless `--sse` selects another
+  algorithm. Moves retain the source if destination encryption verification fails.
+  Failed multipart copies abort their own upload. Verification failures remove
+  newly created destinations and report cleanup results. Destinations that
+  existed before the command remain in place. Empty encrypted copies use an
+  encrypted PUT with the source metadata and the same HEAD verification.
 - Moves preserve the source when a copy fails or returns an incomplete result.
-  HTTP-200 copy errors retain their S3 error code and message.
+  HTTP-200 copy and part-copy errors retain their S3 error code and message.
 - Bucket encryption commands resolve management bucket slugs to S3 names before
   reading or changing the default.
 

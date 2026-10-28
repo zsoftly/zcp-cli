@@ -21,7 +21,24 @@ func TestObjectStorageEncryptionCommands(t *testing.T) {
 			t.Setenv("ZCP_S3_ACCESS_KEY", "test-access")
 			t.Setenv("ZCP_S3_SECRET_KEY", "test-secret")
 			var gotBody, gotAlgorithm, gotKey string
+			completed := false
 			s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodHead {
+					if r.URL.Path == "/destination/target" && !completed {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					w.Header().Set("Content-Length", "12")
+					w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+					w.Header().Set("ETag", `"abc"`)
+					if r.URL.Path == "/destination/target" {
+						w.Header().Set("X-Amz-Server-Side-Encryption", algorithm)
+						if algorithm == "aws:kms" {
+							w.Header().Set("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id", "service-key")
+						}
+					}
+					return
+				}
 				if r.Method == http.MethodDelete {
 					w.WriteHeader(http.StatusNoContent)
 					return
@@ -31,6 +48,11 @@ func TestObjectStorageEncryptionCommands(t *testing.T) {
 				switch {
 				case r.Method == http.MethodGet && r.URL.Query().Has("encryption"):
 					fmt.Fprintf(w, `<ServerSideEncryptionConfiguration><Rule><ApplyServerSideEncryptionByDefault><SSEAlgorithm>%s</SSEAlgorithm><KMSMasterKeyID>service-key</KMSMasterKeyID></ApplyServerSideEncryptionByDefault></Rule></ServerSideEncryptionConfiguration>`, algorithm)
+				case r.Method == http.MethodPost && r.URL.Query().Has("uploads"):
+					fmt.Fprint(w, `<InitiateMultipartUploadResult><UploadId>copy-upload</UploadId></InitiateMultipartUploadResult>`)
+				case r.Method == http.MethodPost && r.URL.Query().Has("uploadId"):
+					completed = true
+					fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>destination</Bucket><Key>target</Key><ETag>"abc"</ETag></CompleteMultipartUploadResult>`)
 				case r.Header.Get("X-Amz-Copy-Source") != "":
 					fmt.Fprint(w, `<CopyObjectResult><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>"abc"</ETag></CopyObjectResult>`)
 				default:
@@ -66,7 +88,7 @@ func TestObjectStorageEncryptionCommands(t *testing.T) {
 				{"object", "move", "store", "bucket", "source", "destination", "target"},
 			} {
 				gotBody, gotAlgorithm, gotKey = "", "", ""
-				// Move's final DELETE carries no encryption; retain copy observations.
+				// Final HEAD and DELETE requests retain the multipart initiation observations.
 				if args[0] == "bucket" && algorithm == "AES256" {
 					args = append(args, "--api-url", mgmt.URL)
 				} else {
