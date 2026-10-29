@@ -1,75 +1,72 @@
-# zcp v1.1.0 Release Notes
+# zcp v1.2.0 Release Notes
 
-zcp v1.1.0 adds scheduled snapshots for block storage volumes, improves DNS
-record creation and deletion, and includes a certificate-verification security
-fix. The examples use the region and project in your active profile; replace
-each quoted placeholder with a value from your account.
+zcp v1.2.0 adds optional server-side encryption for object storage. You can
+encrypt uploads, copies and moves with the standard S3 settings, set a default
+encryption for a bucket, and confirm that each encrypted copy landed encrypted.
+Moves also keep the source safe when a copy fails. The examples use the region
+and project in your active profile. Replace each quoted placeholder with a value
+from your account.
 
 ## Highlights
 
-**Scheduled block storage snapshots.** `zcp snapshot schedule` supports hourly,
-daily, weekly, and monthly policies.
-Schedules use the selected region and project, an IANA timezone, a whole-hour
-time, and a retention count. `--immediate` requests the first snapshot when the
-policy is created. `run-now` requests another snapshot without waiting for its
-next scheduled time.
-
-Creation first confirms that the volume is in the selected region and project.
-Later actions confirm that the policy is a block-storage snapshot policy in that
-same region and project.
+**Encrypted uploads.** `--sse AES256` encrypts an object with a key the service
+manages for your bucket (SSE-S3). `--sse aws:kms --sse-kms-key-id` encrypts it
+with a service-managed key ID (SSE-KMS). Downloads decrypt automatically for
+anyone allowed to read the object.
 
 ```bash
-zcp snapshot schedule create "<volume-slug>" \
-  --name nightly \
-  --interval dailyAt \
-  --at 01:00 \
-  --timezone America/Toronto \
-  --retention 7 \
-  --immediate
-
-zcp snapshot schedule list
-zcp snapshot schedule update "<schedule-id>" \
-  --interval weeklyOn --day 0 --at 02:00 --timezone UTC --retention 4
-zcp snapshot schedule pause "<schedule-id>"
-zcp snapshot schedule resume "<schedule-id>"
-zcp snapshot schedule run-now "<schedule-id>" --yes
+zcp object-storage object put "<store-slug>" "<bucket>" ./report.pdf --sse AES256
+zcp object-storage object put "<store-slug>" "<bucket>" ./report.pdf \
+  --sse aws:kms --sse-kms-key-id "<service-key-id>"
 ```
 
-For `weeklyOn`, use weekday `0` through `6`. For `monthlyOn`, use day `1`
-through `28`. `--at` accepts whole hours in `HH:00` format. Use `pause` to keep
-existing snapshots while stopping future runs. The platform rejects deletion of
-a schedule while its snapshots remain, so remove those snapshots before running
-`zcp snapshot schedule delete "<schedule-id>" --yes`.
-
-### DNS record operations
-
-By default, `zcp dns record-create` prints only the value it created. If the API
-accepts a create request but the CLI cannot verify the new value, the command
-returns an error and tells you to inspect the zone with `zcp dns show "<domain-slug>"` before
-retrying. It does not retry the create request. Use `--show-zone` on record creation or deletion to
-print the resulting zone. For creation, `--show-zone` prints the zone without this created-value
-check.
-
-`zcp dns record-delete` normally prints a labelled pre-delete snapshot. Table
-output adds a `SOURCE` column. JSON and YAML set `source` to
-`pre_delete_snapshot`. This is a read taken before deletion, not a guarantee of
-which values were removed. A warning explains that concurrent changes can make
-the snapshot differ from the deleted values. It deletes the values from its
-initial snapshot one by one. If a deletion fails, it stops and reports partial
-progress. Values added after the read are left alone. Deleting an already absent
-record is idempotent.
-
-CAA values must quote their value:
+**Bucket default encryption.** A bucket default encrypts every later upload that
+does not ask for its own setting. Existing objects and versions stay as they are.
 
 ```bash
-zcp dns record-create --domain "<domain-slug>" --name @ --type CAA \
-  --content '0 issue "letsencrypt.org"'
+zcp object-storage bucket encryption enable "<store-slug>" "<bucket-slug>"
+zcp object-storage bucket encryption enable "<store-slug>" "<bucket-slug>" \
+  --sse aws:kms --sse-kms-key-id "<service-key-id>"
+zcp object-storage bucket encryption status "<store-slug>" "<bucket-slug>"
+zcp object-storage bucket encryption disable "<store-slug>" "<bucket-slug>"
 ```
 
-### Build security
+**Verified encrypted copies and moves.** With `--sse`, `copy` and `move` use a
+multipart copy and then check the destination's encryption before they finish.
+Without `--sse`, a copy of an encrypted object keeps the source's encryption.
 
-The release build uses Go 1.26.10, which fixes the reachable
-certificate-verification vulnerability reported by `govulncheck`.
+```bash
+zcp object-storage object copy "<store-slug>" "<src-bucket>" "<src-key>" \
+  "<dst-bucket>" "<dst-key>" --sse AES256
+zcp object-storage object move "<store-slug>" "<src-bucket>" "<src-key>" \
+  "<dst-bucket>" "<dst-key>" --sse aws:kms --sse-kms-key-id "<service-key-id>"
+```
+
+### Things to know
+
+- Encryption depends on the region's key management service. Check availability
+  with ZCP support before you rely on it.
+- Other S3 clients, such as the AWS CLI, must use a multipart copy to produce an
+  encrypted copy, or download and re-upload the object. The service refuses a
+  single-request copy that asks for encryption.
+- A copy made without encryption settings does not pick up the destination
+  bucket's default.
+- zcp never re-encrypts existing objects for you, and in-place re-encryption is
+  not supported.
+
+## Fixed
+
+- A move keeps its source when the copy fails, returns an incomplete result, or
+  fails the encryption check.
+- When an encryption check fails, zcp deletes only the destination version this
+  command wrote. For unversioned buckets it leaves the destination in place and
+  warns you instead.
+- Encrypted copies keep Expires, Cache-Control, Content-Disposition,
+  Content-Encoding, Content-Language, Content-Type, user metadata and tags.
+- Copy errors that the service returns inside a successful HTTP response now
+  keep their error code and message.
+- Bucket encryption commands accept the bucket slug shown by
+  `zcp object-storage bucket list`.
 
 ## Installation and upgrade
 
@@ -96,5 +93,5 @@ or macOS, run `chmod +x zcp`, then place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v1.1.0
+zcp version   # zcp version v1.2.0
 ```

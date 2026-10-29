@@ -7,6 +7,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-10-29
+
 ### Added
 
 - Optional native SSE-S3 and service-managed SSE-KMS for object uploads, copies
