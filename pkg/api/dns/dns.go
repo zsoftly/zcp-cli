@@ -52,7 +52,7 @@ func (d *Domain) UnmarshalJSON(data []byte) error {
 
 // Record represents a single DNS record within a domain.
 //
-// The live PowerDNS-backed API returns record SETS (RRsets): no id, and the
+// The live DNS API returns record SETS (RRsets): no id, and the
 // values under a "contents" array rather than a "content" string (verified
 // live 2026-07-05). UnmarshalJSON accepts both shapes; Content carries the
 // joined values for display and Contents the individual values.
@@ -70,7 +70,7 @@ type Record struct {
 }
 
 // UnmarshalJSON tolerates both record shapes: legacy rows with id/content and
-// PowerDNS RRsets with a contents array and no id.
+// record sets with a contents array and no id.
 func (r *Record) UnmarshalJSON(b []byte) error {
 	type recordAlias Record
 	var v recordAlias
@@ -268,7 +268,7 @@ func (s *Service) CreateRecord(ctx context.Context, domainSlug string, req Creat
 
 // DeleteRecord removes a DNS record under the given domain slug by numeric ID.
 //
-// Deprecated: the live PowerDNS-backed API does not expose record IDs, so this
+// Deprecated: the live DNS API does not expose record IDs, so this
 // cannot work there; use DeleteRecordByName instead.
 func (s *Service) DeleteRecord(ctx context.Context, domainSlug string, recordID int) error {
 	path := "/dns/domains/" + domainSlug + "/records"
@@ -281,7 +281,7 @@ func (s *Service) DeleteRecord(ctx context.Context, domainSlug string, recordID 
 }
 
 // DeleteRecordByName removes a DNS record set identified by its fully
-// qualified name and type, the addressing scheme the live PowerDNS-backed
+// qualified name and type, the addressing scheme the live DNS
 // API uses (record sets carry no IDs). name should be the stored FQDN with a
 // trailing dot (e.g. "www.example.com.").
 func (s *Service) DeleteRecordByName(ctx context.Context, domainSlug, name, recordType string) error {
@@ -296,7 +296,7 @@ func (s *Service) DeleteRecordByName(ctx context.Context, domainSlug, name, reco
 
 // DeleteRecordValueByName removes one value from a DNS record set identified
 // by its fully qualified name, type, and backend-returned raw content. The
-// PowerDNS-backed API requires content when deleting a multi-value record set.
+// DNS API requires content when deleting a multi-value record set.
 func (s *Service) DeleteRecordValueByName(ctx context.Context, domainSlug, name, recordType, content string) error {
 	q := url.Values{}
 	q.Set("name", name)

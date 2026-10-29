@@ -1,4 +1,4 @@
-// Package objectstorage provides ZCP Ceph object storage API operations.
+// Package objectstorage provides ZCP object storage API operations.
 package objectstorage
 
 import (
@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/cors"
+	"github.com/minio/minio-go/v7/pkg/encrypt"
 	"github.com/minio/minio-go/v7/pkg/lifecycle"
 	"github.com/minio/minio-go/v7/pkg/sse"
 	"github.com/minio/minio-go/v7/pkg/tags"
@@ -84,7 +86,7 @@ type Offering struct {
 	RenewAt      string        `json:"renew_at" yaml:"renew_at"`
 }
 
-// ObjectStorage represents a Ceph object storage instance.
+// ObjectStorage represents an object storage instance.
 type ObjectStorage struct {
 	ID                   string         `json:"id" yaml:"id"`
 	Slug                 string         `json:"slug" yaml:"slug"`
@@ -407,7 +409,7 @@ func (s *Service) CreateKey(ctx context.Context, slug string) (*Key, error) {
 	return &resp.Data, nil
 }
 
-// DeleteKey revokes an S3 access key in CMP and Ceph.
+// DeleteKey revokes an S3 access key in CMP.
 func (s *Service) DeleteKey(ctx context.Context, slug, keyID string) error {
 	if err := s.client.Delete(ctx, "/object-storages/"+slug+"/keys/"+keyID, nil); err != nil {
 		return fmt.Errorf("deleting key %s for %s: %w", keyID, slug, err)
@@ -560,11 +562,66 @@ func (s *Service) GetObject(ctx context.Context, slug, bucketSlug, objectKey str
 	return nil, fmt.Errorf("object %q not found in bucket %s/%s", objectKey, slug, bucketSlug)
 }
 
+// EncryptionOptions selects optional server-side encryption for new writes.
+// KMSKeyID names an operator-provisioned service-managed key.
+type EncryptionOptions struct {
+	Algorithm string
+	KMSKeyID  string
+}
+
+// Validate rejects unsupported algorithms and inconsistent key selections.
+func (o EncryptionOptions) Validate() error {
+	switch o.Algorithm {
+	case "", "AES256":
+		if o.KMSKeyID != "" {
+			return fmt.Errorf("--sse-kms-key-id requires --sse aws:kms")
+		}
+	case "aws:kms":
+		if strings.TrimSpace(o.KMSKeyID) == "" || strings.Contains(o.KMSKeyID, "/") {
+			return fmt.Errorf("--sse aws:kms requires a nonempty, slash-free service-managed --sse-kms-key-id")
+		}
+	default:
+		return fmt.Errorf("--sse must be AES256 or aws:kms")
+	}
+	return nil
+}
+
+func (o EncryptionOptions) serverSide() (encrypt.ServerSide, error) {
+	if err := o.Validate(); err != nil {
+		return nil, err
+	}
+	switch o.Algorithm {
+	case "AES256":
+		return encrypt.NewSSE(), nil
+	case "aws:kms":
+		return encrypt.NewSSEKMS(o.KMSKeyID, nil)
+	default:
+		return nil, nil
+	}
+}
+
+// encryptionError adds regional setup guidance while preserving the S3 error.
+func encryptionError(err error) error {
+	var response minio.ErrorResponse
+	if errors.As(err, &response) {
+		message := strings.ToLower(response.Message)
+		if response.Code == "NotImplemented" ||
+			(response.Code == "InvalidArgument" && strings.Contains(message, "encryption") && strings.Contains(message, "not support")) {
+			return fmt.Errorf("server-side encryption is not available on this region's gateway; ask ZCP support to confirm regional encryption support: %w", err)
+		}
+	}
+	return err
+}
+
 // PutObject uploads a local file to a bucket via the S3 protocol.
 // objectKey defaults to the base name of localPath when empty.
 // contentType is auto-detected from the file extension when empty.
 // userMetadata (may be nil) sets x-amz-meta-* headers on the object.
-func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, objectKey, contentType string, userMetadata map[string]string) (int64, error) {
+func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, objectKey, contentType string, userMetadata map[string]string, encryption EncryptionOptions) (int64, error) {
+	sse, err := encryption.serverSide()
+	if err != nil {
+		return 0, err
+	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
 		return 0, err
@@ -575,12 +632,15 @@ func (s *Service) PutObject(ctx context.Context, slug, bucketName, localPath, ob
 	if objectKey == "" {
 		objectKey = filepath.Base(localPath)
 	}
-	opts := minio.PutObjectOptions{UserMetadata: userMetadata}
+	opts := minio.PutObjectOptions{UserMetadata: userMetadata, ServerSideEncryption: sse}
 	if contentType != "" {
 		opts.ContentType = contentType
 	}
 	info, err := mc.FPutObject(ctx, bucketName, objectKey, localPath, opts)
 	if err != nil {
+		if encryption.Algorithm != "" {
+			err = encryptionError(err)
+		}
 		return 0, fmt.Errorf("uploading %q to %s/%s: %w", localPath, bucketName, objectKey, err)
 	}
 	return info.Size, nil
@@ -665,7 +725,7 @@ func bucketPublicPolicy(bucketName string, write bool) string {
 }
 
 // SetBucketVisibility makes a bucket public or private using an S3 bucket policy
-// (the mechanism Ceph RGW honors for anonymous object access; a bucket canned
+// (the mechanism the service honors for anonymous object access; a bucket canned
 // ACL does not grant s3:GetObject on objects). "private" removes the policy.
 func (s *Service) SetBucketVisibility(ctx context.Context, slug, bucketName, visibility string) error {
 	store, err := s.Get(ctx, slug)
@@ -694,7 +754,7 @@ func (s *Service) SetBucketVisibility(ctx context.Context, slug, bucketName, vis
 }
 
 // SetBucketVersioning enables or suspends object versioning on a bucket (S3
-// protocol). Ceph RGW supports versioning; once enabled, overwritten and deleted
+// protocol). The service supports versioning; once enabled, overwritten and deleted
 // objects retain prior versions.
 func (s *Service) SetBucketVersioning(ctx context.Context, slug, bucketName string, enabled bool) error {
 	store, err := s.Get(ctx, slug)
@@ -931,42 +991,45 @@ func (s *Service) DeleteObjectTags(ctx context.Context, slug, bucketName, object
 	return nil
 }
 
-// GetBucketEncryption returns the bucket's default-encryption algorithm ("" if
-// none configured, e.g. "AES256" for SSE-S3).
-func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName string) (string, error) {
+// GetBucketEncryption returns the configured default, or empty fields if unset.
+func (s *Service) GetBucketEncryption(ctx context.Context, slug, bucketName string) (EncryptionOptions, error) {
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
-		return "", err
+		return EncryptionOptions{}, err
 	}
 	cfg, err := mc.GetBucketEncryption(ctx, bucketName)
 	if err != nil {
 		if s3NotConfigured(err) {
-			return "", nil
+			return EncryptionOptions{}, nil
 		}
-		return "", fmt.Errorf("getting encryption on bucket %s: %w", bucketName, err)
+		return EncryptionOptions{}, fmt.Errorf("getting encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	if len(cfg.Rules) > 0 {
-		return cfg.Rules[0].Apply.SSEAlgorithm, nil
+		return EncryptionOptions{Algorithm: cfg.Rules[0].Apply.SSEAlgorithm, KMSKeyID: cfg.Rules[0].Apply.KmsMasterKeyID}, nil
 	}
-	return "", nil
+	return EncryptionOptions{}, nil
 }
 
-// SetBucketEncryption enables default SSE-S3 encryption on a bucket.
-//
-// Warning: as of issue #54, the region's Ceph RADOS Gateway has no
-// encryption key backend configured. It accepts this call and then rejects
-// every subsequent PutObject on the bucket with a 400 InvalidArgument error
-// until DisableBucketEncryption is called. The CLI's 'bucket encryption
-// enable' command refuses to call this method until the platform fixes the
-// gateway. This method is left in place because the Terraform provider may
-// still reference it.
-func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string) error {
+// SetBucketEncryption sets a default for subsequent uploads on an existing bucket.
+// Existing objects and versions are unchanged.
+// Headerless copies do not inherit this default.
+func (s *Service) SetBucketEncryption(ctx context.Context, slug, bucketName string, encryption EncryptionOptions) error {
+	if err := encryption.Validate(); err != nil {
+		return err
+	}
+	if encryption.Algorithm == "" {
+		return fmt.Errorf("bucket encryption requires AES256 or aws:kms")
+	}
+	cfg := sse.NewConfigurationSSES3()
+	if encryption.Algorithm == "aws:kms" {
+		cfg = sse.NewConfigurationSSEKMS(encryption.KMSKeyID)
+	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
 		return err
 	}
-	if err := mc.SetBucketEncryption(ctx, bucketName, sse.NewConfigurationSSES3()); err != nil {
-		return fmt.Errorf("enabling encryption on bucket %s: %w", bucketName, err)
+	if err := mc.SetBucketEncryption(ctx, bucketName, cfg); err != nil {
+		return fmt.Errorf("enabling encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	return nil
 }
@@ -978,13 +1041,13 @@ func (s *Service) DisableBucketEncryption(ctx context.Context, slug, bucketName 
 		return err
 	}
 	if err := mc.RemoveBucketEncryption(ctx, bucketName); err != nil {
-		return fmt.Errorf("disabling encryption on bucket %s: %w", bucketName, err)
+		return fmt.Errorf("disabling encryption on bucket %s: %w", bucketName, encryptionError(err))
 	}
 	return nil
 }
 
 // Lifecycle XML types with a guaranteed <Filter><Prefix> element. minio-go omits
-// the <Filter> entirely for an empty prefix, which strict S3 / Ceph RGW rejects
+// the <Filter> entirely for an empty prefix, which strict S3 implementations reject
 // ("not well-formed against schema"), so for the "all objects" case we marshal
 // our own body and PUT it directly (see putBucketSubresourceXML). Optional
 // actions are pointers so they are omitted when unset.
@@ -1046,7 +1109,7 @@ func (s *Service) SetBucketExpiry(ctx context.Context, slug, bucketName, prefix 
 // putBucketSubresourceXML PUTs a raw XML body to a bucket subresource (e.g.
 // ?lifecycle) by way of a short-lived presigned URL, so minio-go handles request
 // signing (and region) while we control the exact body. Used where minio-go's
-// typed marshaling can't produce the body RGW requires.
+// typed marshaling can't produce the body the service requires.
 func (s *Service) putBucketSubresourceXML(ctx context.Context, mc *minio.Client, bucketName, subresource string, body []byte) error {
 	u, err := mc.Presign(ctx, http.MethodPut, bucketName, "", 5*time.Minute, url.Values{subresource: []string{""}})
 	if err != nil {
@@ -1245,21 +1308,175 @@ func (s *Service) RestoreObject(ctx context.Context, slug, bucketName, objectKey
 
 // CopyObject server-side copies an object within the same instance (no
 // download/upload round-trip).
-func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBucket, dstKey string) error {
+func (s *Service) CopyObject(ctx context.Context, slug, srcBucket, srcKey, dstBucket, dstKey string, encryption EncryptionOptions) error {
+	sse, err := encryption.serverSide()
+	if err != nil {
+		return err
+	}
+	if srcBucket == dstBucket && srcKey == dstKey {
+		return fmt.Errorf("in-place re-encryption is not supported; choose a different destination key")
+	}
 	mc, err := s.s3(ctx, slug)
 	if err != nil {
 		return err
 	}
-	if _, err := mc.CopyObject(ctx,
-		minio.CopyDestOptions{Bucket: dstBucket, Object: dstKey},
-		minio.CopySrcOptions{Bucket: srcBucket, Object: srcKey}); err != nil {
-		return fmt.Errorf("copying %s/%s to %s/%s: %w", srcBucket, srcKey, dstBucket, dstKey, err)
+	return copyObject(ctx, mc,
+		minio.CopyDestOptions{Bucket: dstBucket, Object: dstKey, Encryption: sse},
+		minio.CopySrcOptions{Bucket: srcBucket, Object: srcKey})
+}
+
+func copyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions) error {
+	source, err := mc.StatObject(ctx, src.Bucket, src.Object, minio.StatObjectOptions{})
+	if err == nil && dst.Encryption == nil {
+		// Preserve source encryption when the caller does not select a new one.
+		dst.Encryption, err = (EncryptionOptions{
+			Algorithm: source.Metadata.Get("X-Amz-Server-Side-Encryption"),
+			KMSKeyID:  source.Metadata.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"),
+		}).serverSide()
+	}
+	if err == nil {
+		if dst.Encryption != nil {
+			err = encryptedCopyObject(ctx, mc, dst, src, source)
+		} else {
+			var info minio.UploadInfo
+			info, err = mc.CopyObject(ctx, dst, src)
+			if err == nil && (strings.TrimSpace(info.ETag) == "" || info.LastModified.IsZero()) {
+				err = fmt.Errorf("copy response is missing ETag or LastModified")
+			}
+		}
+	}
+	if err != nil {
+		if dst.Encryption != nil {
+			err = encryptionError(err)
+		}
+		return fmt.Errorf("copying %s/%s to %s/%s: %w", src.Bucket, src.Object, dst.Bucket, dst.Object, err)
 	}
 	return nil
 }
 
+func encryptedCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions, source minio.ObjectInfo) error {
+	opts := minio.PutObjectOptions{
+		ServerSideEncryption: dst.Encryption,
+		UserMetadata:         source.UserMetadata,
+		ContentType:          source.ContentType,
+		Expires:              source.Expires,
+		CacheControl:         source.Metadata.Get("Cache-Control"),
+		ContentEncoding:      source.Metadata.Get("Content-Encoding"),
+		ContentDisposition:   source.Metadata.Get("Content-Disposition"),
+		ContentLanguage:      source.Metadata.Get("Content-Language"),
+		StorageClass:         source.StorageClass,
+	}
+	if source.Metadata.Get("X-Amz-Tagging-Count") != "" && source.Metadata.Get("X-Amz-Tagging-Count") != "0" {
+		tags, err := mc.GetObjectTagging(ctx, src.Bucket, src.Object, minio.GetObjectTaggingOptions{VersionID: source.VersionID})
+		if err != nil {
+			return fmt.Errorf("reading source tags: %w", err)
+		}
+		opts.UserTags = tags.ToMap()
+	}
+	var info minio.UploadInfo
+	var err error
+	if source.Size == 0 {
+		// Empty objects need no data transfer, but still need explicit SSE.
+		info, err = mc.PutObject(ctx, dst.Bucket, dst.Object, bytes.NewReader(nil), 0, opts)
+	} else {
+		info, err = multipartCopyObject(ctx, mc, dst, src, source, opts)
+	}
+	if err != nil {
+		return err
+	}
+	expected := make(http.Header)
+	dst.Encryption.Marshal(expected)
+	actual, err := mc.StatObject(ctx, dst.Bucket, dst.Object, minio.StatObjectOptions{VersionID: info.VersionID})
+	if err == nil && (strings.TrimSpace(info.ETag) == "" || actual.ETag != info.ETag || actual.Size != source.Size) {
+		err = fmt.Errorf("destination verification failed: copy result or HEAD size/ETag does not match")
+	}
+	if err == nil {
+		for _, header := range []string{"X-Amz-Server-Side-Encryption", "X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"} {
+			if want := expected.Get(header); want != "" && actual.Metadata.Get(header) != want {
+				err = fmt.Errorf("destination encryption mismatch: %s = %q, requested %q", header, actual.Metadata.Get(header), want)
+				break
+			}
+		}
+	}
+	if err != nil {
+		// Only an immutable version returned by our write proves ownership.
+		// An unversioned or suspended bucket's null version can be replaced.
+		if info.VersionID == "" || info.VersionID == "null" {
+			return fmt.Errorf("verifying copied destination: %w; destination may not be encrypted as requested and was left in place because no immutable version ID was returned; source retained", err)
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if cleanupErr := mc.RemoveObject(cleanupCtx, dst.Bucket, dst.Object, minio.RemoveObjectOptions{VersionID: info.VersionID}); cleanupErr != nil {
+			return fmt.Errorf("verifying copied destination: %w; removing this operation's unverified destination version failed: %v; destination may not be encrypted as requested and was left in place; source retained", err, cleanupErr)
+		}
+		return fmt.Errorf("verifying copied destination: %w; removed this operation's unverified destination version; source retained", err)
+	}
+	return nil
+}
+
+// ComposeObject does not abort failed uploads or expose their IDs. Use the
+// same SDK multipart operations directly to abort only this command's upload.
+func multipartCopyObject(ctx context.Context, mc *minio.Client, dst minio.CopyDestOptions, src minio.CopySrcOptions, source minio.ObjectInfo, opts minio.PutObjectOptions) (_ minio.UploadInfo, retErr error) {
+	core := minio.Core{Client: mc}
+	count, partSize, lastSize := 1, source.Size, source.Size
+	if source.Size > 16*1024*1024 {
+		var err error
+		count, partSize, lastSize, err = minio.OptimalPartInfo(source.Size, 0)
+		if err != nil {
+			return minio.UploadInfo{}, err
+		}
+	}
+	uploadID, err := core.NewMultipartUpload(ctx, dst.Bucket, dst.Object, opts)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if err := core.AbortMultipartUpload(cleanupCtx, dst.Bucket, dst.Object, uploadID); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("aborting incomplete copy upload %s: %w", uploadID, err))
+			}
+		}
+	}()
+	src.MatchETag = source.ETag
+	src.VersionID = source.VersionID
+	headers := make(http.Header)
+	src.Marshal(headers)
+	metadata := make(map[string]string)
+	for k := range headers {
+		metadata[k] = headers.Get(k)
+	}
+	parts := make([]minio.CompletePart, 0, count)
+	for n := 1; n <= count; n++ {
+		length := partSize
+		if n == count {
+			length = lastSize
+		}
+		part, err := core.CopyObjectPart(ctx, src.Bucket, src.Object, dst.Bucket, dst.Object, uploadID, n, int64(n-1)*partSize, length, metadata)
+		if err != nil {
+			return minio.UploadInfo{}, err
+		}
+		if strings.TrimSpace(strings.Trim(part.ETag, "\"")) == "" {
+			return minio.UploadInfo{}, fmt.Errorf("copy part %d response is missing ETag", n)
+		}
+		parts = append(parts, part)
+	}
+	info, err := core.CompleteMultipartUpload(ctx, dst.Bucket, dst.Object, uploadID, parts, opts)
+	if err != nil {
+		return minio.UploadInfo{}, err
+	}
+	completed = true
+	return info, nil
+}
+
 // MoveObject server-side copies an object then deletes the source.
-func (s *Service) MoveObject(ctx context.Context, slug, srcBucket, srcKey, dstBucket, dstKey string) error {
+func (s *Service) MoveObject(ctx context.Context, slug, srcBucket, srcKey, dstBucket, dstKey string, encryption EncryptionOptions) error {
+	sse, err := encryption.serverSide()
+	if err != nil {
+		return err
+	}
 	// Guard against moving an object onto itself: the copy-to-self would be
 	// followed by deleting that same key, destroying the object.
 	if srcBucket == dstBucket && srcKey == dstKey {
@@ -1269,10 +1486,10 @@ func (s *Service) MoveObject(ctx context.Context, slug, srcBucket, srcKey, dstBu
 	if err != nil {
 		return err
 	}
-	if _, err := mc.CopyObject(ctx,
-		minio.CopyDestOptions{Bucket: dstBucket, Object: dstKey},
+	if err := copyObject(ctx, mc,
+		minio.CopyDestOptions{Bucket: dstBucket, Object: dstKey, Encryption: sse},
 		minio.CopySrcOptions{Bucket: srcBucket, Object: srcKey}); err != nil {
-		return fmt.Errorf("copying %s/%s to %s/%s: %w", srcBucket, srcKey, dstBucket, dstKey, err)
+		return err
 	}
 	if err := mc.RemoveObject(ctx, srcBucket, srcKey, minio.RemoveObjectOptions{}); err != nil {
 		return fmt.Errorf("deleting source %s/%s after copy: %w", srcBucket, srcKey, err)

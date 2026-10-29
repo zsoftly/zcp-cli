@@ -730,13 +730,11 @@ zcp object-storage bucket tag get <slug> <bucket-slug>
 zcp object-storage bucket tag set <slug> <bucket-slug> --tag env=prod --tag team=data
 zcp object-storage bucket tag delete <slug> <bucket-slug>
 
-# Default encryption (SSE-S3)
-# `enable` is not currently supported: the region's gateway has no encryption
-# key backend, and enabling SSE-S3 makes every upload to the bucket fail
-# until it is disabled again. `status` and `disable` remain available so you
-# can check or clear an existing setting.
+# Default encryption (SSE-S3 or service-managed SSE-KMS)
+# Requires a configured regional encryption key service. Defaults affect future uploads, not copies or existing objects.
 zcp object-storage bucket encryption status <slug> <bucket-slug>
 zcp object-storage bucket encryption enable <slug> <bucket-slug>
+zcp object-storage bucket encryption enable <slug> <bucket-slug> --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage bucket encryption disable <slug> <bucket-slug>
 
 # Lifecycle (auto-expire objects; current + old versions + incomplete uploads)
@@ -762,6 +760,8 @@ zcp object-storage bucket delete <slug> <bucket-slug> --purge
 zcp object-storage object list <slug> <bucket>
 zcp object-storage object get <slug> <bucket> <key>          # metadata only
 zcp object-storage object put <slug> <bucket> ./photo.jpg
+zcp object-storage object put <slug> <bucket> ./photo.jpg --sse AES256
+zcp object-storage object put <slug> <bucket> ./photo.jpg --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage object put <slug> <bucket> ./report.pdf --key reports/2026/q2.pdf --content-type application/pdf
 zcp object-storage object download <slug> <bucket> <key>                 # writes ./<base-name>
 zcp object-storage object download <slug> <bucket> images/logo.png --dest ./logo.png
@@ -772,6 +772,8 @@ zcp object-storage object url <slug> <bucket> <key> --expires 24h        # share
 zcp object-storage object put-url <slug> <bucket> <key> --expires 30m    # pre-signed UPLOAD url (curl -T)
 zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # server-side copy
 zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key>   # copy then delete source
+zcp object-storage object copy <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse AES256  # verified multipart copy
+zcp object-storage object move <slug> <src-bucket> <src-key> <dst-bucket> <dst-key> --sse aws:kms --sse-kms-key-id <service-key-id>
 zcp object-storage object tag set <slug> <bucket> <key> --tag env=prod   # object tags
 zcp object-storage object tag get <slug> <bucket> <key>
 zcp object-storage object tag delete <slug> <bucket> <key>
@@ -784,6 +786,43 @@ zcp object-storage object delete <slug> <bucket> <key> --version-id <id> # delet
 zcp object-storage object restore <slug> <bucket> <key>                  # undelete (remove latest delete marker)
 ```
 
+### Encryption requirements and limitations
+
+Encryption requires an enabled regional key management service. Confirm availability
+with ZCP support before use. This client support does not announce encryption
+availability in any region. SSE-KMS requires an operator-provisioned,
+slash-free service-managed key ID, not key material or a customer KMS policy.
+Unsupported gateway responses include regional setup guidance. Authorization
+and invalid-key errors remain errors; the CLI never retries without encryption.
+
+Bucket defaults apply to subsequent uploads. Existing objects and versions stay
+unchanged. Headerless copies do not inherit the destination bucket default.
+
+ZCP CLI encrypted copy and move use multipart copy and
+verify the destination algorithm and any requested KMS key ID with HEAD.
+Pass `--sse AES256` or `--sse aws:kms --sse-kms-key-id <service-key-id>` to
+select destination encryption. Without `--sse`, copies of encrypted sources
+preserve the source algorithm and KMS key. Copies of plaintext sources without
+`--sse` keep the existing headerless behavior and print a warning.
+
+AWS CLI and other S3 clients must use multipart copy with destination encryption
+set at multipart initiation, or download and re-upload. The service refuses
+single-part copies carrying SSE headers.
+
+Moves delete the source only after destination encryption verification succeeds.
+On verification failure, the CLI reports an error and retains the source. It
+deletes only the immutable destination version returned by this command's
+multipart completion or empty PUT, and reports the cleanup result. For
+unversioned buckets or null versions, it leaves the destination in place and
+warns that it might not be encrypted as requested. This does not restore any
+previously overwritten destination bytes. Both encrypted paths preserve Expires,
+Cache-Control, Content-Disposition, Content-Encoding, Content-Language,
+Content-Type, user metadata and tags. Tags are read from the captured source
+version. Empty encrypted copies use an encrypted PUT and the same HEAD
+verification. Failed multipart copies abort their own upload. In-place
+re-encryption is unsupported. The CLI never re-encrypts existing objects
+automatically.
+
 ### Two backends, and what is CLI-only
 
 Object storage spans two backends, and this determines what is reachable outside
@@ -794,7 +833,7 @@ the CLI:
   management (`bucket create`, `bucket list`, `bucket get`, `bucket delete`).
   `object get` also goes through the REST API (it returns object metadata only).
 
-- **Direct to the Ceph RADOS Gateway over the S3 protocol** (AWS Signature V4,
+- **Direct to the ZCP object storage service over the S3 protocol** (AWS Signature V4,
   via the [minio-go](https://github.com/minio/minio-go) client): **everything
   else.** This covers all remaining `object` operations (`list`, `put`,
   `download`, `url`, `put-url`, `stat`, `versions`, `restore`, `copy`, `move`,
@@ -808,7 +847,7 @@ the CLI:
 > **CLI-only (not yet on the REST API or Web UI):** every S3-direct operation in
 > the second group above is available **only through this CLI**. The CMP has not
 > yet exposed these operations via the ZCP REST API or the Web UI, so they cannot
-> be performed there; the CLI talks straight to Ceph RGW. Only the REST-backed
+> be performed there; the CLI talks straight to the object storage service. Only the REST-backed
 > operations in the first group are mirrored in the Web UI.
 
 `object get` returns metadata only. Use `object download` to fetch the contents,

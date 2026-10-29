@@ -448,11 +448,12 @@ lc_loadbalancer() {
 }
 
 lc_objectstorage() {
-  local osr out s bkt tmpfile
-  osr="$(api_get '/regions' | jq -r '.data[]|select((.cloud_provider.slug//"")=="ceph")|.slug' | head -1)"
+  local osr osp out s bkt tmpfile
+  osp="$(provider_for_service "Object Storage")"
+  osr="$(region_for_service "Object Storage")"
   [[ -z "$osr" ]] && osr="$(det_region)"
   capture out -- zcp object-storage create --name "$(rname os)" --storage-gb 60 \
-    --cloud-provider ceph --project "$(det_project)" --region "$osr" \
+    ${osp:+--cloud-provider "$osp"} --project "$(det_project)" --region "$osr" \
     --billing-cycle "$(det_billing_cycle)" -o json
   s="$(_jq_slug <<<"$out")"
   [[ -z "$s" ]] && s="$(zcp object-storage list -o json 2>/dev/null | jq -r '(.[]//.data[])|.slug' | head -1)"
@@ -473,8 +474,8 @@ lc_objectstorage() {
     || { _mark_fail "object-storage object put"; rm -f "$tmpfile"; return; }
   _mark_pass "object-storage object put"
 
-  # S3-direct operations (CLI-only — these talk straight to the Ceph RADOS Gateway
-  # over the S3 protocol and are NOT exposed via the ZCP REST API or Web UI).
+  # S3-direct operations (CLI-only — these talk straight to the object storage
+  # endpoint over the S3 protocol and are NOT exposed via the ZCP REST API or Web UI).
   # Non-fatal: a failure is recorded but the round-trip continues so cleanup runs.
   capture out -- zcp object-storage object stat "$s" "$bkt" smoke-test.txt \
     && _mark_pass "object-storage object stat" || _mark_fail "object-storage object stat"

@@ -211,7 +211,7 @@ func newDNSCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&project, "project", "", "Project slug (required, e.g. default-9)")
 	// --dns-provider selects the DNS backend; it is an internal detail with a
 	// working default, so it is hidden from help (still usable as an override).
-	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS backend (internal; optional override)")
+	cmd.Flags().StringVar(&dnsProvider, "dns-provider", "powerdns", "DNS provider (internal; optional override)")
 	_ = cmd.Flags().MarkHidden("dns-provider")
 	cmd.Flags().StringVar(&cloudProvider, "cloud-provider", "", "Cloud provider slug (default: dns)")
 	cmd.Flags().StringVar(&region, "region", "", "Region slug (default: default, the DNS region)")
@@ -336,9 +336,9 @@ func newDNSRecordCreateCmd() *cobra.Command {
 			// other type, so both failures are clear CLI messages rather than
 			// server-side errors. SRV also uses priority/weight/port/target,
 			// but the ZCP CMP DNS API rejects SRV (and LOC) in every request
-			// shape while accepting A/AAAA/CNAME/MX/TXT/CAA. PowerDNS itself
-			// stores and serves SRV fine (verified live 2026-07-18), so the gap
-			// is in the CMP layer; SRV stays unsupported here until CMP adds it.
+			// shape while accepting A/AAAA/CNAME/MX/TXT/CAA. The DNS service
+			// itself stores and serves SRV fine (verified live 2026-07-18), so the
+			// gap is in the CMP layer; SRV stays unsupported here until CMP adds it.
 			prioritySet := cmd.Flags().Changed("priority")
 			isMX := strings.EqualFold(recordType, "MX")
 			if isMX && !prioritySet {
@@ -804,7 +804,7 @@ func normalizeTXTContent(content string) string {
 	return content
 }
 
-// decodeQuotedTXTContent decodes PowerDNS TXT presentation syntax only when
+// decodeQuotedTXTContent decodes DNS TXT presentation syntax only when
 // the entire value is a sequence of quoted chunks. Whitespace outside chunks
 // is ignored; whitespace inside chunks is part of the value. Invalid or
 // unquoted values are left to callers unchanged.

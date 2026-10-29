@@ -41,6 +41,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/zsoftly/zcp-cli/internal/config"
+	"github.com/zsoftly/zcp-cli/pkg/api/cloudprovider"
 	"github.com/zsoftly/zcp-cli/pkg/api/instance"
 	"github.com/zsoftly/zcp-cli/pkg/api/network"
 	"github.com/zsoftly/zcp-cli/pkg/api/plan"
@@ -519,24 +520,30 @@ func detectRegion(t *testing.T, client *httpclient.Client) (regionSlug, cloudPro
 	if err != nil {
 		t.Fatalf("listing regions: %v", err)
 	}
-	// This suite creates compute resources (VMs, volumes), so skip the
-	// single-service providers: ceph (Object Storage) and dns (Dns Domain). Pick
-	// the first active region backed by a real compute provider.
+	// This suite creates compute resources (VMs, volumes), so only consider
+	// providers whose catalog advertises "Virtual Machine" (the object-storage
+	// and DNS providers are single-service). Pick the first active region
+	// backed by such a provider.
+	providers, err := cloudprovider.NewService(client).List(ctx)
+	if err != nil {
+		t.Fatalf("listing cloud providers: %v", err)
+	}
+	compute := map[string]bool{}
+	for _, p := range providers {
+		for _, svcName := range p.Services {
+			if p.Status && svcName == "Virtual Machine" {
+				compute[p.Slug] = true
+			}
+		}
+	}
 	for _, r := range regions {
-		if r.Status && r.CloudProvider != nil && !isNonComputeProvider(r.CloudProvider.Slug) {
+		if r.Status && r.CloudProvider != nil && compute[r.CloudProvider.Slug] {
 			t.Logf("  auto-detected region: %s (%s), cloud_provider: %s", r.Name, r.Slug, r.CloudProvider.Slug)
 			return r.Slug, r.CloudProvider.Slug
 		}
 	}
 	t.Fatal("no compute region available (all regions are object-storage/dns)")
 	return "", ""
-}
-
-// isNonComputeProvider reports whether a cloud-provider slug is one of the
-// single-service providers that cannot host compute resources: "ceph" (Object
-// Storage) and "dns" (Dns Domain). Verified against the live /cloud-providers.
-func isNonComputeProvider(slug string) bool {
-	return slug == "ceph" || slug == "dns"
 }
 
 func detectProject(t *testing.T, client *httpclient.Client) string {

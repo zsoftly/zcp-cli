@@ -323,7 +323,7 @@ func TestDNSDomainCreate(t *testing.T) {
 		ID:          "3",
 		Name:        "new.com",
 		Slug:        "new-com-3",
-		DNSProvider: "powerdns",
+		DNSProvider: "example-dns",
 		Status:      true,
 	}
 
@@ -351,7 +351,7 @@ func TestDNSDomainCreate(t *testing.T) {
 	req := dns.CreateDomainRequest{
 		Name:        "new.com",
 		Project:     "default-60",
-		DNSProvider: "powerdns",
+		DNSProvider: "example-dns",
 	}
 	domain, err := svc.Create(context.Background(), req)
 	if err != nil {
@@ -363,8 +363,8 @@ func TestDNSDomainCreate(t *testing.T) {
 	if gotBody["name"] != "new.com" {
 		t.Errorf("body name = %v, want %q", gotBody["name"], "new.com")
 	}
-	if gotBody["dns_provider"] != "powerdns" {
-		t.Errorf("body dns_provider = %v, want %q", gotBody["dns_provider"], "powerdns")
+	if gotBody["dns_provider"] != "example-dns" {
+		t.Errorf("body dns_provider = %v, want %q", gotBody["dns_provider"], "example-dns")
 	}
 }
 
@@ -580,7 +580,7 @@ func TestDNSDomainListRealShape(t *testing.T) {
 }
 
 func TestDNSRecordDecodeRRset(t *testing.T) {
-	// The live PowerDNS-backed API returns record sets: no id, contents array.
+	// The live DNS API returns record sets: no id, contents array.
 	raw := []byte(`{"name":"www.example.com.","type":"A","ttl":3600,"contents":["192.0.2.10","192.0.2.11"]}`)
 	var rec dns.Record
 	if err := json.Unmarshal(raw, &rec); err != nil {

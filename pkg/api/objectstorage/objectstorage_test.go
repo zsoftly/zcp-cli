@@ -1,6 +1,7 @@
 package objectstorage_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -232,7 +233,7 @@ func TestCreate(t *testing.T) {
 	req := objectstorage.CreateRequest{
 		Name:            "new-storage",
 		Project:         "default-9",
-		CloudProvider:   "ceph",
+		CloudProvider:   "example-objstore",
 		Region:          "yul-1",
 		BillingCycle:    "hourly",
 		StorageCategory: "premium-ssd",
@@ -245,8 +246,8 @@ func TestCreate(t *testing.T) {
 	if store.ID != "os-new" {
 		t.Errorf("store.ID = %q, want %q", store.ID, "os-new")
 	}
-	if gotBody["cloud_provider"] != "ceph" {
-		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "ceph")
+	if gotBody["cloud_provider"] != "example-objstore" {
+		t.Errorf("body cloud_provider = %v, want %q", gotBody["cloud_provider"], "example-objstore")
 	}
 	if gotBody["region"] != "yul-1" {
 		t.Errorf("body region = %v, want %q", gotBody["region"], "yul-1")
@@ -662,7 +663,8 @@ func newS3TestPair(t *testing.T, s3Handler http.Handler) (mgmt *httptest.Server,
 	t.Setenv("ZCP_S3_SECRET_KEY", "tempsecret")
 
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(io.Discard, r.Body) //nolint: errcheck
+		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(bytes.NewReader(body))
 		// minio-go always resolves the bucket region before operating on it.
 		if r.Method == http.MethodGet && r.URL.RawQuery == "location=" {
 			w.Header().Set("Content-Type", "application/xml")
@@ -729,7 +731,7 @@ func TestPutObject(t *testing.T) {
 	f.Close()
 
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	size, err := svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil)
+	size, err := svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil, objectstorage.EncryptionOptions{})
 	if err != nil {
 		t.Fatalf("PutObject() error = %v", err)
 	}
@@ -763,7 +765,7 @@ func TestPutObjectUsesSavedCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil)
+	_, err = objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "hello.txt", "", nil, objectstorage.EncryptionOptions{})
 	if err != nil {
 		t.Fatalf("PutObject() error = %v", err)
 	}
@@ -792,7 +794,7 @@ func TestS3OperationsRequireCompleteActiveSavedCredentials(t *testing.T) {
 	for _, pair := range [][2]string{{"", "tempsecret"}, {"tempkey", ""}, {"", ""}, {"revoked", "secret"}} {
 		t.Setenv("ZCP_S3_ACCESS_KEY", pair[0])
 		t.Setenv("ZCP_S3_SECRET_KEY", pair[1])
-		_, err := objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "bucket", f.Name(), "object", "", nil)
+		_, err := objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "bucket", f.Name(), "object", "", nil, objectstorage.EncryptionOptions{})
 		if err == nil {
 			t.Fatalf("PutObject() succeeded with access=%q secret present=%t", pair[0], pair[1] != "")
 		}
@@ -818,7 +820,7 @@ func TestPutObject_DefaultKey(t *testing.T) {
 	f.Close()
 
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	_, err = svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "", "", nil)
+	_, err = svc.PutObject(context.Background(), "my-storage-1", "my-bucket", f.Name(), "", "", nil, objectstorage.EncryptionOptions{})
 	if err != nil {
 		t.Fatalf("PutObject() error = %v", err)
 	}
@@ -1094,7 +1096,7 @@ func TestSetBucketEncryption(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	if err := svc.SetBucketEncryption(context.Background(), "my-storage-1", "my-bucket"); err != nil {
+	if err := svc.SetBucketEncryption(context.Background(), "my-storage-1", "my-bucket", objectstorage.EncryptionOptions{Algorithm: "AES256"}); err != nil {
 		t.Fatalf("SetBucketEncryption error = %v", err)
 	}
 	if gotMethod != http.MethodPut || !strings.Contains(gotQuery, "encryption") {
@@ -1116,8 +1118,8 @@ func TestGetBucketEncryption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBucketEncryption error = %v", err)
 	}
-	if alg != "AES256" {
-		t.Errorf("algorithm = %q, want AES256", alg)
+	if alg.Algorithm != "AES256" {
+		t.Errorf("algorithm = %q, want AES256", alg.Algorithm)
 	}
 }
 
@@ -1214,13 +1216,18 @@ func TestStatObject(t *testing.T) {
 func TestCopyObject(t *testing.T) {
 	var gotMethod, gotPath, gotCopySrc string
 	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", "10")
+			w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+			return
+		}
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotCopySrc = r.Header.Get("x-amz-copy-source")
 		w.Header().Set("Content-Type", "application/xml")
 		fmt.Fprint(w, `<CopyObjectResult><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>"abc"</ETag></CopyObjectResult>`)
 	}))
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	if err := svc.CopyObject(context.Background(), "my-storage-1", "src", "a.txt", "dst", "b.txt"); err != nil {
+	if err := svc.CopyObject(context.Background(), "my-storage-1", "src", "a.txt", "dst", "b.txt", objectstorage.EncryptionOptions{}); err != nil {
 		t.Fatalf("CopyObject error = %v", err)
 	}
 	if gotMethod != http.MethodPut {
@@ -1272,8 +1279,197 @@ func TestMoveObjectSelfMoveRejected(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	svc := objectstorage.NewService(newTestClient(t, mgmt))
-	err := svc.MoveObject(context.Background(), "my-storage-1", "b", "k.txt", "b", "k.txt")
+	err := svc.MoveObject(context.Background(), "my-storage-1", "b", "k.txt", "b", "k.txt", objectstorage.EncryptionOptions{})
 	if err == nil || !strings.Contains(err.Error(), "same object") {
 		t.Fatalf("expected same-object error, got %v", err)
+	}
+}
+
+func TestCopyAndMoveObjectRequireCompleteCopyResult(t *testing.T) {
+	for _, selection := range []objectstorage.EncryptionOptions{
+		{},
+	} {
+		for _, tc := range []struct {
+			name string
+			body string
+			ok   bool
+		}{
+			{"embedded error", `<Error><Code>InternalError</Code><Message>copy failed</Message></Error>`, false},
+			{"empty body", ``, false},
+			{"malformed XML", `<CopyObjectResult><ETag>"abc"</ETag>`, false},
+			{"unexpected result", `<UnexpectedResult/>`, false},
+			{"empty result", `<CopyObjectResult/>`, false},
+			{"missing ETag", `<CopyObjectResult><LastModified>2026-01-01T00:00:00.000Z</LastModified></CopyObjectResult>`, false},
+			{"blank ETag", `<CopyObjectResult><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>" "</ETag></CopyObjectResult>`, false},
+			{"missing LastModified", `<CopyObjectResult><ETag>"abc"</ETag></CopyObjectResult>`, false},
+			{"invalid LastModified", `<CopyObjectResult><LastModified>invalid</LastModified><ETag>"abc"</ETag></CopyObjectResult>`, false},
+			{"zero LastModified", `<CopyObjectResult><LastModified>0001-01-01T00:00:00Z</LastModified><ETag>"abc"</ETag></CopyObjectResult>`, false},
+			{"complete result", `<CopyObjectResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><LastModified>2026-01-01T00:00:00.000Z</LastModified><ETag>"opaque-etag-2"</ETag></CopyObjectResult>`, true},
+		} {
+			for _, move := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/move=%t", selection.Algorithm, tc.name, move), func(t *testing.T) {
+					var requests []string
+					mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						requests = append(requests, r.Method+" "+r.URL.Path)
+						switch r.Method {
+						case http.MethodHead:
+							w.Header().Set("Content-Length", "10")
+							w.Header().Set("Last-Modified", "Thu, 01 Jan 2026 00:00:00 GMT")
+							return
+						case http.MethodPut:
+							if got := r.Header.Get("X-Amz-Copy-Source"); got != "source/key" {
+								t.Errorf("copy source = %q", got)
+							}
+							if got := r.Header.Get("X-Amz-Server-Side-Encryption"); got != selection.Algorithm {
+								t.Errorf("copy algorithm = %q", got)
+							}
+							if got := r.Header.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"); got != selection.KMSKeyID {
+								t.Errorf("copy KMS key = %q", got)
+							}
+							w.Header().Set("Content-Type", "application/xml")
+							fmt.Fprint(w, tc.body)
+						case http.MethodDelete:
+							w.WriteHeader(http.StatusNoContent)
+						default:
+							t.Errorf("unexpected request %s %s", r.Method, r.URL)
+							w.WriteHeader(http.StatusBadRequest)
+						}
+					}))
+					svc := objectstorage.NewService(newTestClient(t, mgmt))
+					operation := svc.CopyObject
+					if move {
+						operation = svc.MoveObject
+					}
+					err := operation(context.Background(), "my-storage-1", "source", "key", "destination", "copy", selection)
+					if (err == nil) != tc.ok {
+						t.Errorf("error = %v, want success=%t", err, tc.ok)
+					}
+					want := "HEAD /source/key,PUT /destination/copy"
+					if move && tc.ok {
+						want += ",DELETE /source/key"
+					}
+					if got := strings.Join(requests, ","); got != want {
+						t.Fatalf("requests = %q, want %q", got, want)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestPutObjectEncryptionSingleAndMultipart(t *testing.T) {
+	for _, selection := range []objectstorage.EncryptionOptions{
+		{}, {Algorithm: "AES256"}, {Algorithm: "aws:kms", KMSKeyID: "service-key"},
+	} {
+		for _, multipart := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/multipart=%t", selection.Algorithm, multipart), func(t *testing.T) {
+				var selected, completed bool
+				mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch {
+					case r.Method == http.MethodPost && r.URL.Query().Has("uploads"):
+						selected = true
+						if got := r.Header.Get("X-Amz-Server-Side-Encryption"); got != selection.Algorithm {
+							t.Errorf("init algorithm = %q", got)
+						}
+						if got := r.Header.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"); got != selection.KMSKeyID {
+							t.Errorf("init KMS key = %q", got)
+						}
+						fmt.Fprint(w, `<InitiateMultipartUploadResult><Bucket>my-bucket</Bucket><Key>upload</Key><UploadId>upload-1</UploadId></InitiateMultipartUploadResult>`)
+					case r.Method == http.MethodPut && r.URL.Query().Has("partNumber"):
+						w.Header().Set("ETag", `"abc"`)
+					case r.Method == http.MethodPost && r.URL.Query().Has("uploadId"):
+						completed = true
+						fmt.Fprint(w, `<CompleteMultipartUploadResult><Bucket>my-bucket</Bucket><Key>upload</Key><ETag>"abc"</ETag></CompleteMultipartUploadResult>`)
+					case r.Method == http.MethodPut:
+						selected = true
+						if got := r.Header.Get("X-Amz-Server-Side-Encryption"); got != selection.Algorithm {
+							t.Errorf("PUT algorithm = %q", got)
+						}
+						if got := r.Header.Get("X-Amz-Server-Side-Encryption-Aws-Kms-Key-Id"); got != selection.KMSKeyID {
+							t.Errorf("PUT KMS key = %q", got)
+						}
+						w.Header().Set("ETag", `"abc"`)
+					default:
+						t.Errorf("unexpected S3 request %s %s", r.Method, r.URL)
+						w.WriteHeader(http.StatusBadRequest)
+					}
+				}))
+				file, err := os.CreateTemp(t.TempDir(), "upload")
+				if err != nil {
+					t.Fatal(err)
+				}
+				size := int64(12)
+				if multipart {
+					size = 17 * 1024 * 1024
+				}
+				if err := file.Truncate(size); err != nil {
+					t.Fatal(err)
+				}
+				file.Close()
+				got, err := objectstorage.NewService(newTestClient(t, mgmt)).PutObject(context.Background(), "my-storage-1", "my-bucket", file.Name(), "upload", "", nil, selection)
+				if err != nil || got != size || !selected || completed != multipart {
+					t.Fatalf("size=%d selected=%t completed=%t err=%v", got, selected, completed, err)
+				}
+			})
+		}
+	}
+}
+
+func TestBucketEncryptionKMSRoundTrip(t *testing.T) {
+	var body string
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.Query().Has("encryption") {
+			t.Errorf("unexpected subresource %s", r.URL)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch r.Method {
+		case http.MethodPut:
+			b, _ := io.ReadAll(r.Body)
+			body = string(b)
+		case http.MethodGet:
+			fmt.Fprint(w, body)
+		case http.MethodDelete:
+			body = ""
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected method %s", r.Method)
+		}
+	}))
+	svc := objectstorage.NewService(newTestClient(t, mgmt))
+	expected := objectstorage.EncryptionOptions{Algorithm: "aws:kms", KMSKeyID: "service-key"}
+	if err := svc.SetBucketEncryption(context.Background(), "my-storage-1", "my-bucket", expected); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, "<SSEAlgorithm>aws:kms</SSEAlgorithm>") || !strings.Contains(body, "<KMSMasterKeyID>service-key</KMSMasterKeyID>") {
+		t.Fatalf("XML = %q", body)
+	}
+	got, err := svc.GetBucketEncryption(context.Background(), "my-storage-1", "my-bucket")
+	if err != nil || got != expected {
+		t.Fatalf("default = %+v, err=%v", got, err)
+	}
+	if err := svc.DisableBucketEncryption(context.Background(), "my-storage-1", "my-bucket"); err != nil {
+		t.Fatal(err)
+	}
+	if body != "" {
+		t.Fatal("default not removed")
+	}
+}
+
+func TestEncryptedMoveDoesNotDeleteSourceAfterStatFailure(t *testing.T) {
+	var copied, deleted bool
+	mgmt, _ := newS3TestPair(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleted = true
+		}
+		if r.Header.Get("X-Amz-Copy-Source") != "" {
+			copied = true
+		}
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `<Error><Code>AccessDenied</Code><Message>denied</Message></Error>`)
+	}))
+	err := objectstorage.NewService(newTestClient(t, mgmt)).MoveObject(context.Background(), "my-storage-1", "source", "key", "destination", "key", objectstorage.EncryptionOptions{Algorithm: "aws:kms", KMSKeyID: "service-key"})
+	if err == nil || copied || deleted {
+		t.Fatalf("copied=%t deleted=%t err=%v", copied, deleted, err)
 	}
 }

@@ -142,7 +142,7 @@ func requireRegion(cmd *cobra.Command, flagRegion string) (string, error) {
 // cloudProviderFlagOrEnv returns flagCloudProvider if set, otherwise the
 // ZCP_CLOUD_PROVIDER env var. It does NOT consult the stored profile default —
 // used by commands that supply their own service-specific default (e.g. object
-// storage defaults to "ceph").
+// storage defaults to its own provider).
 func cloudProviderFlagOrEnv(flagCloudProvider string) string {
 	if flagCloudProvider != "" {
 		return flagCloudProvider
@@ -177,8 +177,8 @@ func resolveCloudProvider(cmd *cobra.Command, flagCloudProvider string) string {
 //     Block Storage, Network, VPC, Kubernetes, Load Balancer, IP Address,
 //     snapshots, ISO, autoscale, monitoring, storage tiers. This is the slug
 //     used by every create command except the two below.
-//   - "ceph" (display "Object Storage"): serves only "Object Storage" — the object-storage
-//     command defaults to it directly.
+//   - the object storage provider (display "Object Storage"): serves only
+//     "Object Storage" — the object-storage command defaults to it directly.
 //   - "dns" (display "DNS"): serves only "Dns Domain" — the dns command defaults
 //     to it directly.
 //

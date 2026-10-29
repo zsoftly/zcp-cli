@@ -1593,7 +1593,7 @@ func TestDetectCloudProviderSingleActivePersists(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	// One active provider, one inactive — only the active one counts.
-	srv := providersServer(t, `[{"slug":"nimbo","status":true},{"slug":"ceph","status":false}]`)
+	srv := providersServer(t, `[{"slug":"nimbo","status":true},{"slug":"objstore","status":false}]`)
 	client := httpclient.New(httpclient.Options{BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second})
 
 	slug, err := detectCloudProvider(context.Background(), client, cfg, "default")
@@ -1612,7 +1612,7 @@ func TestDetectCloudProviderSingleActivePersists(t *testing.T) {
 	}
 }
 
-// Mirrors the real production catalog: ceph (Object Storage), dns (Dns Domain),
+// Mirrors the real production catalog: an object storage provider (Object Storage), dns (Dns Domain),
 // nimbo (Virtual Machine + infra). The compute provider must be picked by the
 // "Virtual Machine" service regardless of catalog order.
 func TestDetectCloudProviderPicksComputeProvider(t *testing.T) {
@@ -1625,7 +1625,7 @@ func TestDetectCloudProviderPicksComputeProvider(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	srv := providersServer(t, `[
-		{"slug":"ceph","status":true,"services":["Object Storage"]},
+		{"slug":"objstore","status":true,"services":["Object Storage"]},
 		{"slug":"dns","status":true,"services":["Dns Domain"]},
 		{"slug":"nimbo","status":true,"services":["Block Storage","Virtual Machine","VPC"]}
 	]`)
@@ -1655,7 +1655,7 @@ func TestDetectCloudProviderAmbiguousNoComputeDoesNotPersist(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 	srv := providersServer(t, `[
-		{"slug":"ceph","status":true,"services":["Object Storage"]},
+		{"slug":"objstore","status":true,"services":["Object Storage"]},
 		{"slug":"dns","status":true,"services":["Dns Domain"]}
 	]`)
 	client := httpclient.New(httpclient.Options{BaseURL: srv.URL, BearerToken: "t", Timeout: 5 * time.Second})
