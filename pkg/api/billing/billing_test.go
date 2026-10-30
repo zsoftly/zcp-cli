@@ -370,13 +370,36 @@ func TestListActiveSubscriptionsDecodeNumber(t *testing.T) {
 }
 
 func TestListInactiveSubscriptions(t *testing.T) {
+
+	data := json.RawMessage(`[
+		{
+			"id": "sub-1",
+			"name": "demo-vm-1",
+			"product": "Virtual Machine",
+			"product_display_name": "Instances",
+			"price": "9.40",
+			"total_usage": 554.54,
+			"billing_cycle": {},
+			"project": {}
+		},
+		{
+			"id": "sub-2",
+			"name": "demo-vm-2",
+			"product": "Virtual Machine",
+			"product_display_name": "Instances",
+			"price": 12.50,
+			"total_usage": "20.25",
+			"billing_cycle": {},
+			"project": {}
+		}
+	]`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/billing/subscriptions/inactive" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(paginatedEnvelope([]billing.Subscription{}, 0))
+		w.Write(paginatedEnvelope(data, 2))
 	}))
 	defer srv.Close()
 
@@ -385,11 +408,34 @@ func TestListInactiveSubscriptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListInactiveSubscriptions() error = %v", err)
 	}
-	if total != 0 {
-		t.Errorf("total = %d, want 0", total)
+	if total != 2 {
+		t.Errorf("total = %d, want 2", total)
 	}
-	if len(result) != 0 {
-		t.Fatalf("ListInactiveSubscriptions() returned %d items, want 0", len(result))
+	if len(result) != 2 {
+		t.Fatalf("ListInactiveSubscriptions() returned %d items, want 2", len(result))
+	}
+	want := []struct {
+		id, name, price string
+		totalUsage      billing.FlexFloat
+	}{
+		{"sub-1", "demo-vm-1", "9.40", 554.54},
+		{"sub-2", "demo-vm-2", "12.50", 20.25},
+	}
+
+	for i, w := range want {
+		got := result[i]
+		if got.ID != w.id {
+			t.Errorf("result[%d].ID = %q, want %q", i, got.ID, w.id)
+		}
+		if got.Name != w.name {
+			t.Errorf("result[%d].Name = %q, want %q", i, got.Name, w.name)
+		}
+		if got.Price != w.price {
+			t.Errorf("result[%d].Price = %q, want %q", i, got.Price, w.price)
+		}
+		if got.TotalUsage != w.totalUsage {
+			t.Errorf("result[%d].TotalUsage = %v, want %v", i, got.TotalUsage, w.totalUsage)
+		}
 	}
 }
 
