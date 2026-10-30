@@ -34,6 +34,26 @@ func (f FlexFloat) String() string {
 	return strconv.FormatFloat(float64(f), 'f', -1, 64)
 }
 
+// UnmarshalJSON accepts `price` as either a JSON number or a JSON string,
+func (s *Subscription) UnmarshalJSON(b []byte) error {
+	type subscriptionAlias Subscription
+
+	aux := struct {
+		Price json.RawMessage `json:"price"`
+		*subscriptionAlias
+	}{subscriptionAlias: (*subscriptionAlias)(s)}
+
+	if err := json.Unmarshal(b, &aux); err != nil {
+		return err
+	}
+	p := strings.TrimSpace(string(aux.Price))
+	if p == "null" {
+		p = ""
+	}
+	s.Price = strings.Trim(p, `"`)
+	return nil
+}
+
 // Balance represents account balance information.
 type Balance struct {
 	AvailableBalance     FlexFloat         `json:"available_balance"`
