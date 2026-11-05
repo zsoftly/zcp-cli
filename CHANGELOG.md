@@ -7,6 +7,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-11-05
+
 ### Changed
 
 - **Credential selection is stricter.** `ZCP_BEARER_TOKEN` remains the

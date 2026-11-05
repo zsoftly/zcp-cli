@@ -123,6 +123,7 @@ func TestResolveProfile(t *testing.T) {
 
 func TestResolveProfileEnvToken(t *testing.T) {
 	t.Setenv("ZCP_BEARER_TOKEN", "env-token")
+	t.Setenv("ZCP_PROFILE", "")
 	cfg := &config.Config{
 		Profiles: map[string]config.Profile{},
 	}

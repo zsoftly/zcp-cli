@@ -76,7 +76,7 @@ For each command, the CLI chooses one bearer token in this order:
 
 1. `ZCP_BEARER_TOKEN`, when it is set.
 2. The profile selected with `--profile` or `ZCP_PROFILE`.
-3. The active profile.
+3. The active profile, only when neither profile selector is set.
 
 If `--profile` or `ZCP_PROFILE` names a profile that does not exist, the command
 fails even when `ZCP_BEARER_TOKEN` is set. This catches misspelled profile names

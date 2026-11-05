@@ -1,72 +1,48 @@
-# zcp v1.2.0 Release Notes
+# zcp v1.3.0 Release Notes
 
-zcp v1.2.0 adds optional server-side encryption for object storage. You can
-encrypt uploads, copies and moves with the standard S3 settings, set a default
-encryption for a bucket, and confirm that each encrypted copy landed encrypted.
-Moves also keep the source safe when a copy fails. The examples use the region
-and project in your active profile. Replace each quoted placeholder with a value
-from your account.
+zcp v1.3.0 makes credential selection predictable and fixes subscription
+listing when the API returns a numeric price.
 
 ## Highlights
 
-**Encrypted uploads.** `--sse AES256` encrypts an object with a key the service
-manages for your bucket (SSE-S3). `--sse aws:kms --sse-kms-key-id` encrypts it
-with a service-managed key ID (SSE-KMS). Downloads decrypt automatically for
-anyone allowed to read the object.
+**Clear credential selection.** `ZCP_BEARER_TOKEN` remains the preferred
+credential for CI and scripted use. A named profile must exist when you select
+it with `--profile` or `ZCP_PROFILE`, even if `ZCP_BEARER_TOKEN` is set. This
+catches a misspelled profile before a command runs with the environment token.
+If the API rejects the selected credential, zcp reports that failure and does
+not try another profile.
 
 ```bash
-zcp object-storage object put "<store-slug>" "<bucket>" ./report.pdf --sse AES256
-zcp object-storage object put "<store-slug>" "<bucket>" ./report.pdf \
-  --sse aws:kms --sse-kms-key-id "<service-key-id>"
+# Use the active profile.
+zcp auth validate
+
+# Select one configured profile for this command.
+zcp auth validate --profile staging
+
+# Use a token supplied by the environment for automation.
+export ZCP_BEARER_TOKEN='<token>'
+zcp auth validate
 ```
 
-**Bucket default encryption.** A bucket default encrypts every later upload that
-does not ask for its own setting. Existing objects and versions stay as they are.
+`zcp auth validate` states whether it used `ZCP_BEARER_TOKEN` or a profile. It
+never prints the token.
+
+**Reliable subscription listings.** `zcp billing subscriptions inactive` now
+accepts a subscription price returned by the API as either a JSON number or a
+JSON string. Numeric prices keep their reported precision in CLI output.
 
 ```bash
-zcp object-storage bucket encryption enable "<store-slug>" "<bucket-slug>"
-zcp object-storage bucket encryption enable "<store-slug>" "<bucket-slug>" \
-  --sse aws:kms --sse-kms-key-id "<service-key-id>"
-zcp object-storage bucket encryption status "<store-slug>" "<bucket-slug>"
-zcp object-storage bucket encryption disable "<store-slug>" "<bucket-slug>"
+zcp billing subscriptions inactive
 ```
-
-**Verified encrypted copies and moves.** With `--sse`, `copy` and `move` use a
-multipart copy and then check the destination's encryption before they finish.
-Without `--sse`, a copy of an encrypted object keeps the source's encryption.
-
-```bash
-zcp object-storage object copy "<store-slug>" "<src-bucket>" "<src-key>" \
-  "<dst-bucket>" "<dst-key>" --sse AES256
-zcp object-storage object move "<store-slug>" "<src-bucket>" "<src-key>" \
-  "<dst-bucket>" "<dst-key>" --sse aws:kms --sse-kms-key-id "<service-key-id>"
-```
-
-### Things to know
-
-- Encryption depends on the region's key management service. Check availability
-  with ZCP support before you rely on it.
-- Other S3 clients, such as the AWS CLI, must use a multipart copy to produce an
-  encrypted copy, or download and re-upload the object. The service refuses a
-  single-request copy that asks for encryption.
-- A copy made without encryption settings does not pick up the destination
-  bucket's default.
-- zcp never re-encrypts existing objects for you, and in-place re-encryption is
-  not supported.
 
 ## Fixed
 
-- A move keeps its source when the copy fails, returns an incomplete result, or
-  fails the encryption check.
-- When an encryption check fails, zcp deletes only the destination version this
-  command wrote. For unversioned buckets it leaves the destination in place and
-  warns you instead.
-- Encrypted copies keep Expires, Cache-Control, Content-Disposition,
-  Content-Encoding, Content-Language, Content-Type, user metadata and tags.
-- Copy errors that the service returns inside a successful HTTP response now
-  keep their error code and message.
-- Bucket encryption commands accept the bucket slug shown by
-  `zcp object-storage bucket list`.
+- A missing profile selected by `--profile` or `ZCP_PROFILE` no longer falls
+  back to `ZCP_BEARER_TOKEN`.
+- Subscription prices encoded as JSON numbers no longer cause inactive
+  subscription listings to fail.
+- Escaped JSON price strings decode correctly. Invalid JSON types for a price
+  return a clear error.
 
 ## Installation and upgrade
 
@@ -93,5 +69,5 @@ or macOS, run `chmod +x zcp`, then place it on your `PATH`.
 **Verify:**
 
 ```bash
-zcp version   # zcp version v1.2.0
+zcp version   # zcp version v1.3.0
 ```
