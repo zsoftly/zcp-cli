@@ -7,6 +7,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-11-05
+
+### Changed
+
+- **Credential selection is stricter.** `ZCP_BEARER_TOKEN` remains the
+  highest-precedence credential for local automation and CI. Commands now fail
+  when `--profile` or `ZCP_PROFILE` names no configured profile, rather than
+  continuing with the environment token. Authentication failures never cause a
+  retry with another profile. `zcp auth validate` identifies the credential
+  source without displaying the token.
+
+- **`zcp billing subscriptions inactive` displays subscriptions whose `price`
+  is a JSON number or string.** Price strings decode JSON escapes correctly,
+  numeric prices retain their JSON text, and unsupported JSON types report a
+  clear error.
+
 ## [v1.2.0] - 2026-10-29
 
 ### Added
