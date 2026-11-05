@@ -124,12 +124,15 @@ func Save(cfg *Config) error {
 
 // ResolveProfile returns the Profile to use for a request.
 // It prefers profileName if provided, else ZCP_PROFILE env var, else cfg.ActiveProfile.
-// It also applies ZCP_BEARER_TOKEN and ZCP_API_URL environment variable overrides.
-// Returns an error if no profile is configured or credentials are missing (unless overridden by env).
+// ZCP_BEARER_TOKEN takes precedence over a profile token. An explicitly selected
+// profile must exist even when ZCP_BEARER_TOKEN is set, so a typo cannot silently
+// run a command with a different account's credentials.
 func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 	name := profileName
+	explicitProfile := name != ""
 	if name == "" {
 		name = os.Getenv("ZCP_PROFILE")
+		explicitProfile = name != ""
 	}
 	if name == "" {
 		name = cfg.ActiveProfile
@@ -144,6 +147,9 @@ func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 			profileFound = true
 		}
 	}
+	if explicitProfile && !profileFound {
+		return nil, fmt.Errorf("profile %q not found — run: zcp profile list", name)
+	}
 
 	// Override with environment variables
 	if envToken := os.Getenv("ZCP_BEARER_TOKEN"); envToken != "" {
@@ -153,7 +159,9 @@ func ResolveProfile(cfg *Config, profileName string) (*Profile, error) {
 		p.APIURL = envURL
 	}
 
-	// Validate: profile not found (and no env override to save us)
+	// An active profile can be absent or stale without blocking an explicit
+	// environment credential. This keeps zero-config CI usable while preserving
+	// the stricter behaviour for --profile and ZCP_PROFILE above.
 	if name != "" && !profileFound && p.BearerToken == "" {
 		return nil, fmt.Errorf("profile %q not found — run: zcp profile list", name)
 	}

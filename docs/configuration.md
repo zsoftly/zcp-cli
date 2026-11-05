@@ -70,18 +70,35 @@ https://api.zcp.zsoftly.ca/api
 
 ---
 
+## Credential Precedence
+
+For each command, the CLI chooses one bearer token in this order:
+
+1. `ZCP_BEARER_TOKEN`, when it is set.
+2. The profile selected with `--profile` or `ZCP_PROFILE`.
+3. The active profile.
+
+If `--profile` or `ZCP_PROFILE` names a profile that does not exist, the command
+fails even when `ZCP_BEARER_TOKEN` is set. This catches misspelled profile names
+before a command runs with an unintended account. When the selected token is
+rejected by the API, the CLI returns that error and does not try another profile.
+`zcp auth validate` reports whether it validated `ZCP_BEARER_TOKEN` or a profile,
+without displaying the token.
+
 ## Environment Variable Overrides
 
-The following environment variables are evaluated at runtime and take precedence over the corresponding config file values and global flags.
+The following environment variables are evaluated at runtime. Each row states
+which configuration value it overrides. Command flags take precedence unless the
+row says otherwise.
 
 | Variable             | Overrides                           | Description                                                                                                                                         |
 | -------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ZCP_PROFILE`        | `--profile` flag / active profile   | Profile name to use for the current invocation.                                                                                                     |
+| `ZCP_PROFILE`        | Active profile                      | Profile name to use when `--profile` is not set. The named profile must exist.                                                                      |
 | `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token, bypassing the config file entirely.                                                                                                   |
 | `ZCP_API_URL`        | Profile `api_url` / default URL     | API base URL override.                                                                                                                              |
-| `ZCP_PROJECT`        | `--project` flag                    | Default project slug for all resource commands.                                                                                                     |
-| `ZCP_REGION`         | `--region` flag                     | Default region slug for all resource commands.                                                                                                      |
-| `ZCP_CLOUD_PROVIDER` | `--cloud-provider` flag / profile   | Cloud provider slug. Optional — auto-detected by `auth validate`; set only to override (multi-provider accounts, or CI that skips `auth validate`). |
+| `ZCP_PROJECT`        | Profile project default             | Default project slug for all resource commands.                                                                                                     |
+| `ZCP_REGION`         | Profile region default              | Default region slug for all resource commands.                                                                                                      |
+| `ZCP_CLOUD_PROVIDER` | Profile cloud provider              | Cloud provider slug. Optional — auto-detected by `auth validate`; set only to override (multi-provider accounts, or CI that skips `auth validate`). |
 | `ZCP_OUTPUT`         | `--output` / `-o` flag              | Default output format (`table`, `json`, `yaml`).                                                                                                    |
 | `ZCP_DEBUG`          | `--debug` flag                      | Set to `true` to enable debug output (stderr).                                                                                                      |
 | `ZCP_S3_ACCESS_KEY`  | Object-storage S3 operations        | Saved S3 access key. Set together with `ZCP_S3_SECRET_KEY`; the CLI checks it is active for the requested object-storage instance.                  |

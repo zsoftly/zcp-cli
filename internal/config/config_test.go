@@ -157,6 +157,45 @@ func TestResolveProfileEnvTokenOverridesProfile(t *testing.T) {
 	}
 }
 
+func TestResolveProfileEnvTokenDoesNotBypassExplicitMissingProfile(t *testing.T) {
+	t.Setenv("ZCP_BEARER_TOKEN", "env-token")
+	t.Setenv("ZCP_PROFILE", "")
+	cfg := &config.Config{Profiles: map[string]config.Profile{}}
+
+	_, err := config.ResolveProfile(cfg, "does-not-exist")
+	if err == nil || !strings.Contains(err.Error(), `profile "does-not-exist" not found`) {
+		t.Fatalf("ResolveProfile() error = %v, want missing profile error", err)
+	}
+}
+
+func TestResolveProfileEnvTokenDoesNotBypassMissingEnvProfile(t *testing.T) {
+	t.Setenv("ZCP_BEARER_TOKEN", "env-token")
+	t.Setenv("ZCP_PROFILE", "does-not-exist")
+	cfg := &config.Config{Profiles: map[string]config.Profile{}}
+
+	_, err := config.ResolveProfile(cfg, "")
+	if err == nil || !strings.Contains(err.Error(), `profile "does-not-exist" not found`) {
+		t.Fatalf("ResolveProfile() error = %v, want missing profile error", err)
+	}
+}
+
+func TestResolveProfileEnvTokenAllowsStaleActiveProfile(t *testing.T) {
+	t.Setenv("ZCP_BEARER_TOKEN", "env-token")
+	t.Setenv("ZCP_PROFILE", "")
+	cfg := &config.Config{
+		ActiveProfile: "does-not-exist",
+		Profiles:      map[string]config.Profile{},
+	}
+
+	p, err := config.ResolveProfile(cfg, "")
+	if err != nil {
+		t.Fatalf("ResolveProfile() error = %v, want nil", err)
+	}
+	if p.BearerToken != "env-token" {
+		t.Errorf("BearerToken = %q, want env-token", p.BearerToken)
+	}
+}
+
 func TestResolveProfileEnvProfile(t *testing.T) {
 	t.Setenv("ZCP_PROFILE", "staging")
 	t.Setenv("ZCP_BEARER_TOKEN", "") // clear so profile token is used
