@@ -16,8 +16,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
   retry with another profile. `zcp auth validate` identifies the credential
   source without displaying the token.
 
-### Fixed
-
 - **`zcp billing subscriptions inactive` displays subscriptions whose `price`
   is a JSON number or string.** Price strings decode JSON escapes correctly,
   numeric prices retain their JSON text, and unsupported JSON types report a

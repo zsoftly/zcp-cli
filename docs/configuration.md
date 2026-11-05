@@ -94,7 +94,7 @@ row says otherwise.
 | Variable             | Overrides                           | Description                                                                                                                                         |
 | -------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ZCP_PROFILE`        | Active profile                      | Profile name to use when `--profile` is not set. The named profile must exist.                                                                      |
-| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token, bypassing the config file entirely.                                                                                                   |
+| `ZCP_BEARER_TOKEN`   | Profile `bearer_token`              | Bearer token override. The CLI still loads the config file and validates explicitly selected profiles; malformed config can block authentication.   |
 | `ZCP_API_URL`        | Profile `api_url` / default URL     | API base URL override.                                                                                                                              |
 | `ZCP_PROJECT`        | Profile project default             | Default project slug for all resource commands.                                                                                                     |
 | `ZCP_REGION`         | Profile region default              | Default region slug for all resource commands.                                                                                                      |
