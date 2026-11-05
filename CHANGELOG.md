@@ -16,6 +16,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
   retry with another profile. `zcp auth validate` identifies the credential
   source without displaying the token.
 
+### Fixed
+
+- **`zcp billing subscriptions inactive` displays subscriptions whose `price`
+  is a JSON number or string.** Price strings decode JSON escapes correctly,
+  numeric prices retain their JSON text, and unsupported JSON types report a
+  clear error.
+
 ## [v1.2.0] - 2026-10-29
 
 ### Added
@@ -63,10 +70,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 - **DNS record deletion handles values individually.** `dns record-delete` now deletes each value in the finite pre-delete snapshot with the raw content required by the DNS API, fixing multi-value record-set deletion. Values added after the read are left alone. A failure after partial deletion returns an error and identifies the partial progress instead of reporting a successful snapshot. An already absent DNS record is handled idempotently when the DNS API returns its verified `DNS record not found.` response.
 - **CAA values must be quoted.** `dns record-create` now rejects unquoted CAA values before sending a request; use `--content '0 issue "letsencrypt.org"'`.
 - **DNS output identifies its source.** By default, `dns record-create` prints one row for the value it created. `dns record-delete` prints a pre-delete snapshot of the selected record set in table, JSON, and YAML output, marked by a `SOURCE` column in tables and `source: pre_delete_snapshot` in structured output. Both commands support `--show-zone` to print the resulting zone. MX output includes its preference, including `0`. `dns show` remains the full-zone read command.
-
-### Fixed
-
-- **`zcp billing subscriptions inactive` now displays inactive subscriptions correctly.** which previously aborted with an unmarshal error on `price` value.
 
 ## [v1.0.1] - 2026-10-11
 

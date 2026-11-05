@@ -2,6 +2,7 @@
 package billing
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -34,7 +35,7 @@ func (f FlexFloat) String() string {
 	return strconv.FormatFloat(float64(f), 'f', -1, 64)
 }
 
-// UnmarshalJSON accepts `price` as either a JSON number or a JSON string,
+// UnmarshalJSON accepts price as either a JSON number or a JSON string.
 func (s *Subscription) UnmarshalJSON(b []byte) error {
 	type subscriptionAlias Subscription
 
@@ -46,11 +47,31 @@ func (s *Subscription) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &aux); err != nil {
 		return err
 	}
-	p := strings.TrimSpace(string(aux.Price))
-	if p == "null" {
-		p = ""
+	price := bytes.TrimSpace(aux.Price)
+	if len(price) == 0 || bytes.Equal(price, []byte("null")) {
+		return nil
 	}
-	s.Price = strings.Trim(p, `"`)
+
+	if price[0] == '"' {
+		var value string
+		if err := json.Unmarshal(price, &value); err != nil {
+			return fmt.Errorf("decoding subscription price string: %w", err)
+		}
+		s.Price = value
+		return nil
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(price))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return fmt.Errorf("decoding subscription price: %w", err)
+	}
+	number, ok := value.(json.Number)
+	if !ok {
+		return fmt.Errorf("subscription price must be a JSON string or number, got %T", value)
+	}
+	s.Price = number.String()
 	return nil
 }
 

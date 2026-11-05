@@ -369,6 +369,44 @@ func TestListActiveSubscriptionsDecodeNumber(t *testing.T) {
 	}
 }
 
+func TestSubscriptionUnmarshalJSONPrice(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		initial   string
+		want      string
+		wantError string
+	}{
+		{name: "string", input: `{"price":"9.40"}`, want: "9.40"},
+		{name: "escaped string", input: `{"price":"9.\u0034\u0030"}`, want: "9.40"},
+		{name: "number preserves text", input: `{"price":12.500}`, want: "12.500"},
+		{name: "null preserves existing value", input: `{"price":null}`, initial: "9.40", want: "9.40"},
+		{name: "absent preserves existing value", input: `{}`, initial: "9.40", want: "9.40"},
+		{name: "boolean rejected", input: `{"price":true}`, wantError: "must be a JSON string or number"},
+		{name: "object rejected", input: `{"price":{}}`, wantError: "must be a JSON string or number"},
+		{name: "array rejected", input: `{"price":[]}`, wantError: "must be a JSON string or number"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			subscription := billing.Subscription{Price: tt.initial}
+			err := json.Unmarshal([]byte(tt.input), &subscription)
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("json.Unmarshal() error = %v, want containing %q", err, tt.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			if subscription.Price != tt.want {
+				t.Errorf("Price = %q, want %q", subscription.Price, tt.want)
+			}
+		})
+	}
+}
+
 func TestListInactiveSubscriptions(t *testing.T) {
 
 	data := json.RawMessage(`[
