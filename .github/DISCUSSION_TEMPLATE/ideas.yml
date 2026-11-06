@@ -1,0 +1,32 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an improvement to any part of the ZSoftly Cloud Platform: the console, the CLI, the API or a service. Search the [public roadmap](https://github.com/zsoftly/zcp-cli/issues?q=label%3Aroadmap) and existing ideas first, and upvote a matching request instead of opening a duplicate.
+        This is public: do not include credentials, account IDs, IP addresses or other private details.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you are trying to do and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What outcome do you need?
+      description: Explain the result you want. A proposed solution is welcome but optional.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Who would benefit, and how?
+      description: Describe the use case, how often it occurs, and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What do you do today?
+      description: Share your current workaround, if any.
