@@ -13,6 +13,11 @@ ZCP CLI (`zcp`) is a full-featured command-line tool for managing resources on t
 
 ---
 
+## Roadmap and ideas
+
+- **Public roadmap:** see what's in progress, planned and under consideration for the ZSoftly Cloud Platform in the [roadmap issues](https://github.com/zsoftly/zcp-cli/issues?q=label%3Aroadmap). Add a 👍 reaction to the ones you care about.
+- **Ideas:** suggest an improvement or vote on others' ideas in [Discussions › Ideas](https://github.com/zsoftly/zcp-cli/discussions/categories/ideas).
+
 ## Installation
 
 ### Quick Install — Linux / macOS
