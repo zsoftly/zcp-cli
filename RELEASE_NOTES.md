@@ -1,73 +1,32 @@
-# zcp v1.3.0 Release Notes
+# zcp v1.3.1 Release Notes
 
-zcp v1.3.0 makes credential selection predictable and fixes subscription
-listing when the API returns a numeric price.
+zcp v1.3.1 fixes network ACL listing for VPCs with more than one page of ACLs.
 
 ## Highlights
 
-**Clear credential selection.** `ZCP_BEARER_TOKEN` remains the preferred
-credential for CI and scripted use. A named profile must exist when you select
-it with `--profile` or `ZCP_PROFILE`, even if `ZCP_BEARER_TOKEN` is set. This
-catches a misspelled profile before a command runs with the environment token.
-If the API rejects the selected credential, zcp reports that failure and does
-not try another profile.
+**Every network ACL in a VPC is visible.** The ACL list API returns ACLs in
+pages, 10 by default. zcp read only the first page, so once a VPC had more ACLs
+than that, its oldest ACLs disappeared from `zcp acl list` and could not be
+found by name or ID, although they still existed and still applied to their
+networks. zcp now reads every page.
 
 ```bash
-# Use the active profile.
-zcp auth validate
+# Lists all ACLs in the VPC, including the oldest.
+zcp acl list <vpc-slug>
 
-# Select one configured profile for this command.
-zcp auth validate --profile staging
-
-# Use a token supplied by the environment for automation.
-export ZCP_BEARER_TOKEN='<token>'
-zcp auth validate
-```
-
-`zcp auth validate` states whether it used `ZCP_BEARER_TOKEN` or a profile. It
-never prints the token.
-
-**Reliable subscription listings.** `zcp billing subscriptions inactive` now
-accepts a subscription price returned by the API as either a JSON number or a
-JSON string. Numeric prices keep their reported precision in CLI output.
-
-```bash
-zcp billing subscriptions inactive
+# Works for any ACL in the VPC, not only those on the first page.
+zcp acl rules <vpc-slug> <acl-name-or-id>
 ```
 
 ## Fixed
 
-- A missing profile selected by `--profile` or `ZCP_PROFILE` no longer falls
-  back to `ZCP_BEARER_TOKEN`.
-- Subscription prices encoded as JSON numbers no longer cause inactive
-  subscription listings to fail.
-- Escaped JSON price strings decode correctly. Invalid JSON types for a price
-  return a clear error.
+- `zcp acl list` shows every ACL in the VPC, not only the first page.
+- `zcp acl rules`, `zcp acl delete` and `zcp acl replace --vpc` find ACLs that
+  are not on the first page, instead of failing with
+  "ACL ... not found in VPC".
+- Go callers of `acl.Service.List`, `acl.Service.Resolve` and
+  `vpc.Service.ListACLs` receive the complete ACL list. Tools built on the zcp
+  module, such as the ZCP Terraform provider, need a release that picks up this
+  version to benefit.
 
-## Installation and upgrade
-
-The install scripts install the latest release and upgrade an existing
-installation in place.
-
-**Linux / macOS**
-
-```bash
-curl -fsSL https://github.com/zsoftly/zcp-cli/releases/latest/download/install.sh | bash
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://github.com/zsoftly/zcp-cli/releases/latest/download/install.ps1 | iex
-```
-
-**Manual download:** download the binary or archive for your platform from the
-[Releases](https://github.com/zsoftly/zcp-cli/releases) page. Extract an archive
-first. Rename the platform binary to `zcp` (or `zcp.exe` on Windows). On Linux
-or macOS, run `chmod +x zcp`, then place it on your `PATH`.
-
-**Verify:**
-
-```bash
-zcp version   # zcp version v1.3.0
-```
+Reported in [#131](https://github.com/zsoftly/zcp-cli/issues/131).

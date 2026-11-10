@@ -7,10 +7,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+## [v1.3.1] - 2026-11-10
+
 ### Fixed
 
-- ACL listing and lookup fetch every page, so ACLs beyond the first page remain
-  available to list, rules, delete, and replace commands and library callers.
+- **Network ACLs beyond the first page are no longer missing.** `zcp acl list`
+  and every ACL lookup by name or ID now fetch all pages of a VPC's ACL list.
+  Before, a VPC with more than one page of ACLs (10 by default) hid its oldest
+  ACLs: `zcp acl list` omitted them, and `zcp acl rules`, `zcp acl delete` and
+  `zcp acl replace --vpc` failed with "ACL ... not found in VPC". Library
+  callers of `acl.Service.List`, `acl.Service.Resolve` and
+  `vpc.Service.ListACLs` get the complete list too
+  ([#131](https://github.com/zsoftly/zcp-cli/issues/131)).
 
 ## [v1.3.0] - 2026-11-05
 
