@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/zsoftly/zcp-cli/pkg/api/acl"
 	"github.com/zsoftly/zcp-cli/pkg/httpclient"
 )
 
@@ -235,13 +236,19 @@ func (s *Service) Restart(ctx context.Context, slug string) (*VPC, error) {
 
 // ListACLs returns the network ACLs for a VPC.
 func (s *Service) ListACLs(ctx context.Context, vpcSlug string) ([]NetworkACL, error) {
-	var env apiResponse
-	if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", nil, &env); err != nil {
-		return nil, fmt.Errorf("listing ACLs for VPC %s: %w", vpcSlug, err)
+	listed, err := acl.NewService(s.client).List(ctx, vpcSlug)
+	if err != nil {
+		return nil, err
 	}
 	var acls []NetworkACL
-	if err := json.Unmarshal(env.Data, &acls); err != nil {
-		return nil, fmt.Errorf("decoding ACL list: %w", err)
+	if listed != nil {
+		acls = make([]NetworkACL, 0, len(listed))
+	}
+	for _, a := range listed {
+		acls = append(acls, NetworkACL{
+			ID: a.ID, Slug: a.Slug, Name: a.Name,
+			Description: a.Description, Status: a.Status,
+		})
 	}
 	return acls, nil
 }

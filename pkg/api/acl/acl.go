@@ -123,21 +123,75 @@ func NewService(client *httpclient.Client) *Service {
 	return &Service{client: client}
 }
 
-// maxListPages bounds paginated ListRules loops so a server that reports an
+// maxListPages bounds paginated ACL and rule list loops so a server that reports an
 // invalid total cannot cause an unbounded request loop.
 const maxListPages = 1000
 
-// List returns network ACLs for a VPC by slug.
+// aclListResponse follows the same pagination envelope as ACL rule lists.
+type aclListResponse struct {
+	Status      string       `json:"status"`
+	CurrentPage int          `json:"current_page"`
+	LastPage    int          `json:"last_page"`
+	Data        []NetworkACL `json:"data"`
+	Total       *int         `json:"total"`
+	Meta        struct {
+		Page  int  `json:"page"`
+		Total *int `json:"total"`
+	} `json:"meta"`
+}
+
+// List returns all network ACLs for a VPC by slug.
 func (s *Service) List(ctx context.Context, vpcSlug string) ([]NetworkACL, error) {
-	var env apiResponse
-	if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", nil, &env); err != nil {
-		return nil, fmt.Errorf("listing network ACLs for VPC %s: %w", vpcSlug, err)
-	}
 	var acls []NetworkACL
-	if err := json.Unmarshal(env.Data, &acls); err != nil {
-		return nil, fmt.Errorf("decoding network ACL list: %w", err)
+	seen := make(map[string]bool)
+	for page := 1; page <= maxListPages; page++ {
+		q := url.Values{"page": {strconv.Itoa(page)}, "per_page": {"100"}}
+		var resp aclListResponse
+		if err := s.client.Get(ctx, "/vpcs/"+vpcSlug+"/network-acl-list", q, &resp); err != nil {
+			return nil, fmt.Errorf("listing network ACLs for VPC %s: %w", vpcSlug, err)
+		}
+		if resp.CurrentPage == 0 {
+			resp.CurrentPage = resp.Meta.Page
+		}
+		if resp.Total == nil {
+			resp.Total = resp.Meta.Total
+		}
+		if resp.CurrentPage < 0 || (resp.CurrentPage > 0 && resp.CurrentPage != page) {
+			return nil, fmt.Errorf("listing network ACLs for VPC %s: requested page %d but the API returned page %d", vpcSlug, page, resp.CurrentPage)
+		}
+		if resp.LastPage < 0 || (resp.Total != nil && *resp.Total < 0) {
+			return nil, fmt.Errorf("listing network ACLs for VPC %s: invalid pagination metadata", vpcSlug)
+		}
+		if len(resp.Data) == 0 {
+			if page == 1 {
+				return resp.Data, nil
+			}
+			return acls, nil
+		}
+		first := resp.Data[0]
+		key := first.ID
+		if key == "" {
+			key = first.Slug
+		}
+		if key == "" {
+			key = first.Name
+		}
+		if key != "" {
+			if seen[key] {
+				return nil, fmt.Errorf("listing network ACLs for VPC %s: API repeated the first ACL on page %d", vpcSlug, page)
+			}
+			seen[key] = true
+		}
+		acls = append(acls, resp.Data...)
+		if (resp.Total != nil && len(acls) >= *resp.Total) || (resp.LastPage > 0 && resp.CurrentPage >= resp.LastPage) {
+			return acls, nil
+		}
+		// Older deployments return an unpaginated envelope without metadata.
+		if resp.Total == nil && resp.CurrentPage == 0 && resp.LastPage == 0 {
+			return acls, nil
+		}
 	}
-	return acls, nil
+	return nil, fmt.Errorf("listing network ACLs for VPC %s: exceeded %d pages", vpcSlug, maxListPages)
 }
 
 // Create creates a new ACL list in a VPC.

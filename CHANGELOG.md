@@ -7,6 +7,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Fixed
+
+- ACL listing and lookup fetch every page, so ACLs beyond the first page remain
+  available to list, rules, delete, and replace commands and library callers.
+
 ## [v1.3.0] - 2026-11-05
 
 ### Changed
