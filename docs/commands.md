@@ -935,6 +935,13 @@ zcp auth validate
 
 ---
 
+## ACL list pagination
+
+`zcp acl list <vpc-slug>` reads every page of the VPC's ACL list, so it shows
+all ACLs however many the VPC has. ACL lookups by name or ID, used by
+`zcp acl rules`, `zcp acl delete` and `zcp acl replace --vpc`, search the
+complete list as well.
+
 ## ACL rule pagination
 
 `zcp acl rules <vpc-slug> <acl-name-or-id>` fetches every API page by default.
