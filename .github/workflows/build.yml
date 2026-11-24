@@ -270,12 +270,14 @@ jobs:
         if: matrix.os == 'linux' && matrix.arch == 'amd64'
         run: ./bin/zcp-linux-amd64 version
 
-      - name: Upload artifact
+      - name: Hand binaries to the release job
+        # Only tag runs have a release job that downloads these.
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: zcp-${{ matrix.os }}-${{ matrix.arch }}
           path: bin/zcp-${{ matrix.os }}-${{ matrix.arch }}*
-          retention-days: 30
+          retention-days: 1
 
   release:
     name: 5. GitHub Release
