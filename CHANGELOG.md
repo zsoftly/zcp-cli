@@ -7,6 +7,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), using
 
 ## [Unreleased]
 
+### Security
+
+- **Go toolchain `1.26.10` -> `1.26.11`.** Fixes GO-2026-6859, a reachable `net/http`
+  vulnerability reported by `govulncheck`.
+
 ## [v1.3.1] - 2026-11-10
 
 ### Fixed
